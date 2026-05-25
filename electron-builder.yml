@@ -19,10 +19,6 @@ asarUnpack:
   - resources/**
 win:
   executableName: Ghostly
-  # Fix #20: sign with env var if available, skip gracefully if not set
-  certificateSubjectName: ${env.WIN_CERT_SUBJECT_NAME}
-  signingHashAlgorithms:
-    - sha256
   target:
     - target: nsis
       arch:
