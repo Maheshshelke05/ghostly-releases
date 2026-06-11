@@ -49,8 +49,6 @@ contextBridge.exposeInMainWorld("ghostly", {
   getUser: (): Promise<any> => ipcRenderer.invoke("get-user"),
   saveUser: (user: any): Promise<void> => ipcRenderer.invoke("save-user", user),
   logoutUser: (): Promise<void> => ipcRenderer.invoke("logout-user"),
-  getSubscription: (): Promise<any> => ipcRenderer.invoke("get-subscription"),
-  saveSubscription: (sub: any): Promise<void> => ipcRenderer.invoke("save-subscription", sub),
   getAds: (): Promise<any[]> => ipcRenderer.invoke("get-ads"),
   saveAds: (ads: any[]): Promise<void> => ipcRenderer.invoke("save-ads", ads),
   onAuthToken: (cb: (data: { token: string; user: any }) => void): (() => void) => {

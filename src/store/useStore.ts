@@ -24,9 +24,9 @@ export interface Ad {
 }
 
 export interface Subscription {
-  plan: "free" | "pro";
+  plan: "free";
   status: string;
-  expires_at: string | null;
+  expires_at: null;
 }
 
 export interface AppUser {

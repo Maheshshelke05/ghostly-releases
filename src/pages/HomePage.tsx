@@ -52,16 +52,14 @@ const AdNetworkPlacement: React.FC<{ ad: Ad }> = ({ ad }) => {
 };
 
 export const HomePage: React.FC = () => {
-  const { setAppScreen, user, ads, setUser, setSubscription, setAds } = useStore();
+  const { setAppScreen, user, ads, setUser, setAds } = useStore();
   const [checkStatus, setCheckStatus] = useState<"idle" | "checking" | "latest">("idle");
   const [startStatus, setStartStatus] = useState<"idle" | "syncing">("idle");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyCount, setHistoryCount] = useState(0);
   const version = window.ghostly.getVersion();
 
-  const isPro = false;
-
-  const activeAd = !isPro && ads.find((a) => a.is_active) || null;
+  const activeAd = ads.find((a) => a.is_active) || null;
   const [gateAd, setGateAd] = useState<Ad | null>(null);
   const displayAd = gateAd || activeAd;
   const [adGate, setAdGate] = useState(false);
@@ -75,56 +73,27 @@ export const HomePage: React.FC = () => {
   };
 
   const refreshAccount = async () => {
-    if (!user?.idToken) {
-      throw new Error("Please login again.");
-    }
-
+    if (!user?.idToken) throw new Error("Please login again.");
     try {
       const res = await fetch(`${import.meta.env.VITE_API_URL}/subscription`, {
         headers: { Authorization: `Bearer ${user.idToken}` },
       });
-
-      if (res.status === 401) {
+      if (res.status === 401 || res.status === 403) {
         await window.ghostly.logoutUser();
         setUser(null);
-        setSubscription({ plan: "free", status: "active", expires_at: null });
         setAds([]);
         setAppScreen("login");
-        throw new Error("Please login again.");
+        throw new Error(res.status === 403 ? "Your account has been blocked. Contact support." : "Please login again.");
       }
-
-      if (res.status === 403) {
-        await window.ghostly.logoutUser();
-        setUser(null);
-        setSubscription({ plan: "free", status: "active", expires_at: null });
-        setAds([]);
-        setAppScreen("login");
-        throw new Error("Your Ghotly AI account has been blocked. Please contact support if this is a mistake.");
-      }
-
-      if (!res.ok) {
-        return {
-          latestSubscription: useStore.getState().subscription,
-          latestAds: await getCachedAds(),
-        };
-      }
-
+      if (!res.ok) return { latestAds: await getCachedAds() };
       const data = await res.json();
-      const latestSubscription = data.subscription || { plan: "free", status: "active", expires_at: null };
       const latestAds = Array.isArray(data.ads) ? data.ads : await getCachedAds();
-      setSubscription(latestSubscription);
       setAds(latestAds);
-      await window.ghostly.saveSubscription(latestSubscription);
       await window.ghostly.saveAds(latestAds);
-      return { latestSubscription, latestAds };
+      return { latestAds };
     } catch (error: any) {
-      if (error?.message === "Please login again." || error?.message?.includes("blocked")) {
-        throw error;
-      }
-      return {
-        latestSubscription: useStore.getState().subscription,
-        latestAds: await getCachedAds(),
-      };
+      if (error?.message?.includes("login") || error?.message?.includes("blocked")) throw error;
+      return { latestAds: await getCachedAds() };
     }
   };
 
@@ -133,15 +102,13 @@ export const HomePage: React.FC = () => {
     setStartStatus("syncing");
     try {
       const { latestAds } = await refreshAccount();
-      const latestIsPro = false;
-      const latestActiveAd = !latestIsPro && latestAds.find((a: any) => a.is_active) || null;
-
-      if (latestIsPro || !latestActiveAd) {
+      const latestActiveAd = latestAds.find((a: any) => a.is_active) || null;
+      if (!latestActiveAd) {
         setGateAd(null);
         setAppScreen("interview-setup");
         return;
       }
-
+      // All users see ad gate (app is free, ads are the model)
       setGateAd(latestActiveAd);
       setAdGate(true);
       setAdClicked(false);
@@ -153,10 +120,6 @@ export const HomePage: React.FC = () => {
   };
 
   const handleContinueAfterAd = () => {
-    if (isPro || !displayAd) {
-      setAppScreen("interview-setup");
-      return;
-    }
     setAdGate(false);
     setGateAd(null);
     setAppScreen("interview-setup");
@@ -194,7 +157,6 @@ export const HomePage: React.FC = () => {
   const handleLogout = async () => {
     await window.ghostly.logoutUser();
     setUser(null);
-    setSubscription({ plan: "free", status: "active", expires_at: null });
     setAds([]);
     setAppScreen("login");
   };
@@ -388,7 +350,7 @@ export const HomePage: React.FC = () => {
               <div>
                 <p className="text-[9px] font-bold text-white/70 leading-none">{user?.name || "Guest"}</p>
                 <p className="text-[8px] mt-0.5" style={{ color: "rgba(255,255,255,0.3)" }}>
-                  Free Plan
+                  Free · Sponsor supported
                 </p>
               </div>
             </div>

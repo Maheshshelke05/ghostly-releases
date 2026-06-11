@@ -34,13 +34,10 @@ export function registerIpcHandlers(): void {
   ipcMain.handle("save-user", (_event, user: any) => { store.set("user", user); });
   ipcMain.handle("logout-user", () => {
     store.set("user", null);
-    store.set("subscription", { plan: "free", status: "active", expires_at: null });
     store.set("ads", []);
   });
 
-  // Subscription & Ads
-  ipcMain.handle("get-subscription", () => store.get("subscription") || { plan: "free", status: "active", expires_at: null });
-  ipcMain.handle("save-subscription", (_event, sub: any) => { store.set("subscription", sub); });
+  // Ads
   ipcMain.handle("get-ads", () => store.get("ads") || []);
   ipcMain.handle("save-ads", (_event, ads: any[]) => { store.set("ads", ads); });
 
