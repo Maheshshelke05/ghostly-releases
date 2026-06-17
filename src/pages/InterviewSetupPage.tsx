@@ -3,14 +3,20 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useStore } from "../store/useStore";
 import type { CandidateProfile } from "../store/useStore";
 
+const BASE = "#1b1b26";
+const nm = (raised = true) =>
+  raised
+    ? "6px 6px 14px rgba(0,0,0,0.55), -3px -3px 8px rgba(255,255,255,0.04)"
+    : "inset 4px 4px 10px rgba(0,0,0,0.5), inset -2px -2px 6px rgba(255,255,255,0.04)";
+
 const LANGUAGES = [
   { id: "english", flag: "🇺🇸", name: "English" },
-  { id: "hindi",   flag: "🇮🇳", name: "Hindi" },
+  { id: "hindi",   flag: "🇮🇳", name: "Hindi"   },
   { id: "marathi", flag: "🇮🇳", name: "Marathi" },
   { id: "spanish", flag: "🇪🇸", name: "Spanish" },
-  { id: "french",  flag: "🇫🇷", name: "French" },
-  { id: "german",  flag: "🇩🇪", name: "German" },
-  { id: "japanese",flag: "🇯🇵", name: "Japanese" },
+  { id: "french",  flag: "🇫🇷", name: "French"  },
+  { id: "german",  flag: "🇩🇪", name: "German"  },
+  { id: "japanese",flag: "🇯🇵", name: "Japanese"},
   { id: "chinese", flag: "🇨🇳", name: "Chinese" },
 ];
 
@@ -19,16 +25,6 @@ const EMPTY_PROFILE: CandidateProfile = {
   summary: "", skills: "", experience: "", projects: "",
   education: "", certifications: "", linkedin: "", github: "",
 };
-
-const inputStyle = (focused: boolean, filled: boolean): React.CSSProperties => ({
-  background: focused ? "#f0fdf4" : "#f8fafc",
-  border: `1.5px solid ${focused ? "#10b981" : filled ? "#a7f3d0" : "#e2e8f0"}`,
-  color: "#0f172a", borderRadius: "9px", padding: "7px 10px",
-  fontSize: "11px", fontWeight: 600, width: "100%", outline: "none", transition: "all 0.15s",
-});
-const taStyle = (focused: boolean, filled: boolean): React.CSSProperties => ({
-  ...inputStyle(focused, filled), resize: "none" as const, lineHeight: "1.5",
-});
 
 export const InterviewSetupPage: React.FC = () => {
   const { setAppScreen, setInterviewSession, settings, updateSettings, savedProfile, setSavedProfile } = useStore();
@@ -53,132 +49,178 @@ export const InterviewSetupPage: React.FC = () => {
   const setField   = (key: keyof CandidateProfile) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
       setProfile(p => ({ ...p, [key]: e.target.value }));
-
   const selLang = LANGUAGES.find(l => l.id === language) || LANGUAGES[0];
 
   const handleContinue = async () => {
     if (!isReady) return;
     updateSettings({ autoAI, customInstructions });
-    if (hasProfile) {
-      setSavedProfile(profile);
-      await window.ghostly.saveProfile(profile).catch(() => {});
-    }
+    if (hasProfile) { setSavedProfile(profile); await window.ghostly.saveProfile(profile).catch(() => {}); }
     setInterviewSession({
       companyName: companyName.trim(), position: position.trim(),
       language, description: customInstructions.trim(),
       profile: hasProfile ? profile : null,
     });
-    // Fix: persist settings to disk so autoAI loads correctly on next session
     setTimeout(() => window.ghostly.saveSettings(useStore.getState().settings), 50);
     setAppScreen("api-setup");
   };
 
+  const nmInput = (focused: boolean): React.CSSProperties => ({
+    background: BASE,
+    boxShadow: focused
+      ? `${nm(false)}, 0 0 0 1.5px rgba(235,146,69,0.4)`
+      : nm(false),
+    border: "none",
+    color: "rgba(255,255,255,0.8)",
+    borderRadius: "9px",
+    padding: "7px 10px",
+    fontSize: "11px",
+    fontWeight: 600,
+    width: "100%",
+    outline: "none",
+    transition: "box-shadow 0.15s",
+  });
+
+  const nmTextarea = (focused: boolean): React.CSSProperties => ({
+    ...nmInput(focused), resize: "none" as const, lineHeight: "1.5",
+  });
+
+  const LABEL = "text-[7px] font-black uppercase tracking-[0.1em]";
+  const LC: React.CSSProperties = { color: "rgba(255,255,255,0.28)" };
+
   return (
     <div
       className="h-screen w-full flex items-center justify-center px-3 py-2 overflow-y-auto"
-      style={{ background: "transparent", pointerEvents: "auto", userSelect: "none", fontFamily: "'Inter', -apple-system, sans-serif" }}
-      onMouseEnter={() => window.ghostly.enableMouse()}
+      style={{ background: "transparent", pointerEvents: "none", userSelect: "none", fontFamily: "'Inter', -apple-system, sans-serif" }}
     >
       <motion.div
-        initial={{ opacity: 0, scale: 0.97, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+        initial={{ opacity: 0, scale: 0.97, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
         className="w-full max-w-[310px] flex flex-col gap-2"
         style={{ pointerEvents: "auto" }}
+        onMouseEnter={() => window.ghostly.enableMouse()}
+        onMouseLeave={() => window.ghostly.disableMouse()}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-0.5">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-[10px] flex items-center justify-center text-[16px] shrink-0"
-              style={{ background: "linear-gradient(135deg, #10b981, #047857)", boxShadow: "0 3px 10px rgba(16,185,129,0.38)" }}>🎯</div>
+            <div
+              className="w-8 h-8 rounded-[11px] flex items-center justify-center text-[15px] shrink-0"
+              style={{
+                background: "linear-gradient(135deg, #eb9245, #d97706)",
+                boxShadow: "4px 4px 12px rgba(0,0,0,0.5), -2px -2px 6px rgba(255,255,255,0.04), 0 0 16px rgba(235,146,69,0.25)",
+              }}
+            >🎯</div>
             <div>
               <p className="text-[12px] font-extrabold text-white leading-tight">Interview Setup</p>
-              <p className="text-[8px] font-bold uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.4)" }}>Step 1 of 3</p>
+              <p className="text-[8px] font-bold uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.28)" }}>Step 1 of 3</p>
             </div>
           </div>
           <button
             onClick={() => setAppScreen("home")}
-            className="flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-[8px] transition-all"
-            style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.7)" }}
-            onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.18)"; e.currentTarget.style.color = "#fff"; }}
-            onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "rgba(255,255,255,0.7)"; }}
+            className="flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-[9px] transition-all"
+            style={{ background: BASE, boxShadow: nm(), color: "rgba(255,255,255,0.45)", border: "none" }}
+            onMouseEnter={e => { e.currentTarget.style.boxShadow = nm(false); e.currentTarget.style.color = "#fff"; }}
+            onMouseLeave={e => { e.currentTarget.style.boxShadow = nm(); e.currentTarget.style.color = "rgba(255,255,255,0.45)"; }}
           >
             <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
             Back
           </button>
         </div>
 
-        {/* Card — overflow-visible so language dropdown is not clipped */}
-        <div className="w-full rounded-[16px]"
-          style={{ background: "#fff", boxShadow: "0 12px 40px rgba(0,0,0,0.18), 0 1px 0 #fff inset", border: "1px solid rgba(255,255,255,0.9)", overflow: "visible" }}>
-
+        {/* Card */}
+        <div
+          className="w-full rounded-[18px]"
+          style={{ background: BASE, boxShadow: nm(), overflow: "visible" }}
+        >
           {/* Tabs */}
-          <div className="flex gap-1.5 px-3 pt-3">
+          <div className="flex gap-2 px-3 pt-3">
             {([
-              { id: "session" as const, label: "🎯 Session" },
-              { id: "profile" as const, label: `👤 Profile${hasProfile ? " ✓" : ""}` },
+              { id: "session" as const, icon: "🎯", label: "Session" },
+              { id: "profile" as const, icon: "👤", label: `Profile${hasProfile ? " ✓" : ""}` },
             ]).map(tab => (
-              <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                className="flex-1 py-1.5 rounded-[8px] text-[10px] font-extrabold transition-all"
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className="flex-1 py-1.5 rounded-[10px] text-[10px] font-extrabold transition-all flex items-center justify-center gap-1.5"
                 style={{
-                  background: activeTab === tab.id ? "#ecfdf5" : "#f8fafc",
-                  border: `1.5px solid ${activeTab === tab.id ? "#10b981" : "#e2e8f0"}`,
-                  color: activeTab === tab.id ? "#059669" : "#94a3b8",
-                }}>
-                {tab.label}
+                  background: BASE,
+                  boxShadow: activeTab === tab.id ? nm(false) : nm(),
+                  color: activeTab === tab.id ? "#eb9245" : "rgba(255,255,255,0.3)",
+                  border: "none",
+                }}
+              >
+                <span>{tab.icon}</span>{tab.label}
               </button>
             ))}
           </div>
 
           <AnimatePresence mode="wait">
             {activeTab === "session" ? (
-              <motion.div key="session"
+              <motion.div
+                key="session"
                 initial={{ opacity: 0, x: -5 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -5 }}
                 transition={{ duration: 0.12 }}
-                className="px-3 pt-2.5 pb-3 flex flex-col gap-2 max-h-[50vh] overflow-y-auto"
+                className="px-3 pt-3 pb-3 flex flex-col gap-2.5 max-h-[52vh] overflow-y-auto"
                 style={{ scrollbarWidth: "none" }}
               >
                 {/* Company + Position */}
                 <div className="grid grid-cols-2 gap-2">
                   {[
                     { key: "company",  label: "Company *",  val: companyName, set: setCompanyName, ph: "Google, TCS…" },
-                    { key: "position", label: "Position *", val: position,    set: setPosition,    ph: "SWE, PM…" },
+                    { key: "position", label: "Position *", val: position,    set: setPosition,    ph: "SWE, PM…"   },
                   ].map(({ key, label, val, set, ph }) => (
-                    <div key={key} className="flex flex-col gap-1">
-                      <label className="text-[7px] font-black uppercase tracking-widest text-slate-400">{label}</label>
-                      <input type="text" value={val} onChange={e => set(e.target.value)}
+                    <div key={key} className="flex flex-col gap-1.5">
+                      <label className={LABEL} style={LC}>{label}</label>
+                      <input
+                        type="text" value={val} onChange={e => set(e.target.value)}
                         onFocus={() => setFocused(key)} onBlur={() => setFocused(null)}
-                        placeholder={ph} className="placeholder:text-slate-300"
-                        style={inputStyle(focused === key, !!val)} />
+                        placeholder={ph} className="placeholder:text-white/15"
+                        style={nmInput(focused === key)}
+                      />
                     </div>
                   ))}
                 </div>
 
                 {/* Language */}
-                <div className="flex flex-col gap-1 relative z-50">
-                  <label className="text-[7px] font-black uppercase tracking-widest text-slate-400">🌐 Language</label>
-                  <button onClick={() => setLangOpen(!langOpen)}
-                    className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-[9px] transition-all"
-                    style={{ background: "#f8fafc", border: `1.5px solid ${langOpen ? "#10b981" : "#e2e8f0"}`, color: "#0f172a" }}>
-                    <span className="flex items-center gap-1.5 text-[11px] font-bold">
-                      {selLang.flag} {selLang.name}
-                    </span>
-                    <span className={`text-[8px] text-slate-400 transition-transform duration-200 ${langOpen ? "rotate-180" : ""}`}>▼</span>
+                <div className="flex flex-col gap-1.5 relative z-50">
+                  <label className={LABEL} style={LC}>🌐 Language</label>
+                  <button
+                    onClick={() => setLangOpen(!langOpen)}
+                    className="w-full flex items-center justify-between px-2.5 py-2 rounded-[9px] transition-all"
+                    style={{
+                      background: BASE,
+                      boxShadow: langOpen ? `${nm(false)}, 0 0 0 1.5px rgba(235,146,69,0.4)` : nm(false),
+                      color: "rgba(255,255,255,0.75)",
+                      border: "none",
+                    }}
+                  >
+                    <span className="flex items-center gap-1.5 text-[11px] font-bold">{selLang.flag} {selLang.name}</span>
+                    <span className={`text-[8px] transition-transform duration-200 ${langOpen ? "rotate-180" : ""}`} style={{ color: "rgba(255,255,255,0.3)" }}>▼</span>
                   </button>
                   <AnimatePresence>
                     {langOpen && (
                       <motion.div
                         initial={{ opacity: 0, y: -4, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: -4, scale: 0.98 }} transition={{ duration: 0.1 }}
-                        className="absolute top-[calc(100%+3px)] left-0 right-0 rounded-[11px] z-50 p-1.5"
-                        style={{ background: "#fff", border: "1.5px solid #e2e8f0", boxShadow: "0 10px 28px rgba(0,0,0,0.1)" }}
+                        className="absolute top-[calc(100%+4px)] left-0 right-0 rounded-[13px] z-50 p-2"
+                        style={{ background: BASE, boxShadow: "8px 8px 20px rgba(0,0,0,0.6), -3px -3px 8px rgba(255,255,255,0.04)" }}
                       >
-                        <div className="grid grid-cols-2 gap-0.5">
+                        <div className="grid grid-cols-2 gap-1">
                           {LANGUAGES.map(l => (
-                            <button key={l.id} onClick={() => { setLanguage(l.id); setLangOpen(false); }}
-                              className="flex items-center gap-1.5 px-2 py-1.5 rounded-[7px] text-[10px] font-bold text-left transition-all"
-                              style={{ background: language === l.id ? "#ecfdf5" : "transparent", color: language === l.id ? "#059669" : "#475569" }}>
+                            <button
+                              key={l.id}
+                              onClick={() => { setLanguage(l.id); setLangOpen(false); }}
+                              className="flex items-center gap-1.5 px-2 py-1.5 rounded-[8px] text-[10px] font-bold text-left transition-all"
+                              style={{
+                                background: BASE,
+                                boxShadow: language === l.id ? nm(false) : "none",
+                                color: language === l.id ? "#eb9245" : "rgba(255,255,255,0.5)",
+                                border: "none",
+                              }}
+                            >
                               {l.flag} {l.name}
-                              {language === l.id && <span className="ml-auto text-emerald-500 text-[9px]">✓</span>}
+                              {language === l.id && <span className="ml-auto text-[9px]">✓</span>}
                             </button>
                           ))}
                         </div>
@@ -188,125 +230,157 @@ export const InterviewSetupPage: React.FC = () => {
                 </div>
 
                 {/* Auto AI toggle */}
-                <div className="flex items-center justify-between px-2.5 py-2 rounded-[10px]"
-                  style={{ background: autoAI ? "#ecfdf5" : "#f8fafc", border: `1.5px solid ${autoAI ? "#6ee7b7" : "#e2e8f0"}` }}>
+                <div
+                  className="flex items-center justify-between px-2.5 py-2.5 rounded-[11px]"
+                  style={{ background: BASE, boxShadow: nm(false) }}
+                >
                   <div>
-                    <p className="text-[10px] font-extrabold text-slate-700">Auto AI Answer</p>
-                    <p className="text-[8px] text-slate-400 font-medium">Responds on silence</p>
+                    <p className="text-[10px] font-extrabold" style={{ color: autoAI ? "#eb9245" : "rgba(255,255,255,0.6)" }}>
+                      Auto AI Answer
+                    </p>
+                    <p className="text-[8px] font-medium mt-0.5" style={{ color: "rgba(255,255,255,0.28)" }}>
+                      Responds after silence
+                    </p>
                   </div>
-                  <button onClick={() => setAutoAI(!autoAI)} className="relative shrink-0"
-                    style={{ width: "32px", height: "18px", background: autoAI ? "linear-gradient(135deg, #10b981, #059669)" : "#e2e8f0", borderRadius: "999px", border: "none", cursor: "pointer" }}>
-                    <motion.div animate={{ x: autoAI ? 15 : 2 }} transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                      className="absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white"
-                      style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
+                  <button
+                    onClick={() => setAutoAI(!autoAI)}
+                    style={{
+                      width: "34px", height: "19px",
+                      background: autoAI ? "linear-gradient(135deg, #eb9245, #d97706)" : BASE,
+                      boxShadow: autoAI ? "0 0 14px rgba(235,146,69,0.35)" : nm(false),
+                      borderRadius: "999px", border: "none", cursor: "pointer", position: "relative",
+                    }}
+                  >
+                    <motion.div
+                      animate={{ x: autoAI ? 16 : 2 }}
+                      transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                      style={{
+                        position: "absolute", top: "2.5px",
+                        width: "14px", height: "14px",
+                        borderRadius: "50%", background: "#fff",
+                        boxShadow: "1px 1px 4px rgba(0,0,0,0.4)",
+                      }}
+                    />
                   </button>
                 </div>
 
                 {/* Custom Instructions */}
-                <div className="flex flex-col gap-1">
-                  <label className="text-[7px] font-black uppercase tracking-widest text-slate-400">✏️ Custom Instructions</label>
-                  <textarea value={customInstructions} onChange={e => setCustomInstructions(e.target.value)}
+                <div className="flex flex-col gap-1.5">
+                  <label className={LABEL} style={LC}>✏️ Custom Instructions</label>
+                  <textarea
+                    value={customInstructions} onChange={e => setCustomInstructions(e.target.value)}
                     onFocus={() => setFocused("instr")} onBlur={() => setFocused(null)}
-                    placeholder="Always write code in Python. Be concise…" rows={2}
-                    className="placeholder:text-slate-300"
-                    style={taStyle(focused === "instr", !!customInstructions)} />
+                    placeholder="Always write code in Python…" rows={2}
+                    className="placeholder:text-white/15"
+                    style={nmTextarea(focused === "instr")}
+                  />
                 </div>
               </motion.div>
             ) : (
-              <motion.div key="profile"
+              <motion.div
+                key="profile"
                 initial={{ opacity: 0, x: 5 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 5 }}
                 transition={{ duration: 0.12 }}
-                className="px-3 pt-2.5 pb-3 flex flex-col gap-2 max-h-[50vh] overflow-y-auto"
+                className="px-3 pt-3 pb-3 flex flex-col gap-2 max-h-[52vh] overflow-y-auto"
                 style={{ scrollbarWidth: "none" }}
               >
-                <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[8px]"
-                  style={{ background: "#eff6ff", border: "1px solid #bfdbfe" }}>
-                  <span className="text-[11px]">💡</span>
-                  <p className="text-[8px] font-medium text-blue-700">AI speaks <b>as you</b> using your real profile.</p>
+                {/* Banner */}
+                <div
+                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-[9px]"
+                  style={{ background: BASE, boxShadow: nm(false) }}
+                >
+                  <span className="text-[11px]">{hasProfile ? "✓" : "💡"}</span>
+                  <p className="text-[8px] font-semibold" style={{ color: hasProfile ? "#eb9245" : "rgba(255,255,255,0.38)" }}>
+                    {hasProfile ? "Profile saved — AI speaks as you" : "AI speaks as you using your profile."}
+                  </p>
                 </div>
 
+                {/* Name/Location/Email/Phone */}
                 <div className="grid grid-cols-2 gap-1.5">
                   {[
-                    { key: "fullName", label: "👤 Name",     ph: "Rahul Sharma" },
-                    { key: "location", label: "📍 Location", ph: "Pune, India" },
-                    { key: "email",    label: "📧 Email",    ph: "you@email.com" },
-                    { key: "phone",    label: "📱 Phone",    ph: "+91 98765…" },
+                    { key: "fullName", label: "👤 Name",     ph: "Rahul Sharma"   },
+                    { key: "location", label: "📍 Location", ph: "Pune, India"    },
+                    { key: "email",    label: "📧 Email",    ph: "you@email.com"  },
+                    { key: "phone",    label: "📱 Phone",    ph: "+91 98765…"     },
                   ].map(({ key, label, ph }) => (
                     <div key={key} className="flex flex-col gap-1">
-                      <label className="text-[7px] font-black uppercase tracking-widest text-slate-400">{label}</label>
-                      <input type="text" value={profile[key as keyof CandidateProfile]}
+                      <label className={LABEL} style={LC}>{label}</label>
+                      <input
+                        type="text" value={profile[key as keyof CandidateProfile]}
                         onChange={setField(key as keyof CandidateProfile)}
                         onFocus={() => setFocused(key)} onBlur={() => setFocused(null)}
-                        placeholder={ph} className="placeholder:text-slate-300"
-                        style={inputStyle(focused === key, !!profile[key as keyof CandidateProfile])} />
+                        placeholder={ph} className="placeholder:text-white/15"
+                        style={nmInput(focused === key)}
+                      />
                     </div>
                   ))}
                 </div>
 
+                {/* Textareas */}
                 {[
-                  { key: "summary",        label: "📝 Summary",        ph: "3+ years full-stack developer…",          rows: 2 },
-                  { key: "skills",         label: "⚡ Skills",          ph: "React, Node.js, Python, AWS…",            rows: 2 },
-                  { key: "experience",     label: "💼 Experience",      ph: "SWE @ Infosys (2022–Now)\n- Built APIs…", rows: 3 },
-                  { key: "projects",       label: "🚀 Projects",        ph: "E-Commerce (React+Node)\n- 40% faster…",  rows: 3 },
-                  { key: "education",      label: "🎓 Education",       ph: "B.E. CS — SPPU, Pune (2022)",             rows: 1 },
-                  { key: "certifications", label: "🏆 Certifications",  ph: "AWS Developer, GCP…",                     rows: 1 },
+                  { key: "summary",        label: "📝 Summary",       ph: "3+ years full-stack developer…",          rows: 2 },
+                  { key: "skills",         label: "⚡ Skills",         ph: "React, Node.js, Python, AWS…",            rows: 2 },
+                  { key: "experience",     label: "💼 Experience",     ph: "SWE @ Infosys (2022–Now)…",              rows: 3 },
+                  { key: "projects",       label: "🚀 Projects",       ph: "E-Commerce (React+Node)…",               rows: 3 },
+                  { key: "education",      label: "🎓 Education",      ph: "B.E. CS — SPPU, Pune (2022)",             rows: 1 },
+                  { key: "certifications", label: "🏆 Certifications", ph: "AWS Developer, GCP…",                     rows: 1 },
                 ].map(({ key, label, ph, rows }) => (
                   <div key={key} className="flex flex-col gap-1">
-                    <label className="text-[7px] font-black uppercase tracking-widest text-slate-400">{label}</label>
-                    <textarea value={profile[key as keyof CandidateProfile]}
+                    <label className={LABEL} style={LC}>{label}</label>
+                    <textarea
+                      value={profile[key as keyof CandidateProfile]}
                       onChange={setField(key as keyof CandidateProfile)}
                       onFocus={() => setFocused(key)} onBlur={() => setFocused(null)}
-                      placeholder={ph} rows={rows} className="placeholder:text-slate-300"
-                      style={taStyle(focused === key, !!profile[key as keyof CandidateProfile])} />
+                      placeholder={ph} rows={rows} className="placeholder:text-white/15"
+                      style={nmTextarea(focused === key)}
+                    />
                   </div>
                 ))}
 
+                {/* GitHub + LinkedIn */}
                 <div className="grid grid-cols-2 gap-1.5">
                   {[
-                    { key: "github",   label: "🐙 GitHub",   ph: "github.com/you" },
-                    { key: "linkedin", label: "💼 LinkedIn", ph: "linkedin.com/in/you" },
+                    { key: "github",   label: "🐙 GitHub",   ph: "github.com/you"      },
+                    { key: "linkedin", label: "💼 LinkedIn",  ph: "linkedin.com/in/you" },
                   ].map(({ key, label, ph }) => (
                     <div key={key} className="flex flex-col gap-1">
-                      <label className="text-[7px] font-black uppercase tracking-widest text-slate-400">{label}</label>
-                      <input type="text" value={profile[key as keyof CandidateProfile]}
+                      <label className={LABEL} style={LC}>{label}</label>
+                      <input
+                        type="text" value={profile[key as keyof CandidateProfile]}
                         onChange={setField(key as keyof CandidateProfile)}
                         onFocus={() => setFocused(key)} onBlur={() => setFocused(null)}
-                        placeholder={ph} className="placeholder:text-slate-300"
-                        style={inputStyle(focused === key, !!profile[key as keyof CandidateProfile])} />
+                        placeholder={ph} className="placeholder:text-white/15"
+                        style={nmInput(focused === key)}
+                      />
                     </div>
                   ))}
                 </div>
-
-                {hasProfile && (
-                  <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[8px]"
-                    style={{ background: "#ecfdf5", border: "1px solid #a7f3d0" }}>
-                    <span className="text-emerald-500 font-black text-[10px]">✓</span>
-                    <span className="text-[8px] font-semibold text-emerald-700">Profile saved — AI will use your info</span>
-                  </div>
-                )}
               </motion.div>
             )}
           </AnimatePresence>
 
           {/* Footer */}
-          <div className="px-3 pb-3 pt-2" style={{ borderTop: "1px solid #f1f5f9" }}>
+          <div className="px-3 pb-3 pt-2" style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
             {!isReady && activeTab === "profile" && (
-              <p className="text-[8px] text-amber-500 font-semibold text-center mb-1.5">⚠ Fill Company & Position in Session tab first</p>
+              <p className="text-[8px] font-semibold text-center mb-1.5 flex items-center justify-center gap-1" style={{ color: "rgba(235,146,69,0.6)" }}>
+                ⚠ Fill Company & Position in Session tab first
+              </p>
             )}
             <motion.button
-              whileHover={isReady ? { scale: 1.02, y: -1 } : {}}
-              whileTap={isReady ? { scale: 0.98 } : {}}
-              onClick={handleContinue}
-              disabled={!isReady}
-              className="w-full py-2.5 rounded-[11px] text-[12px] font-extrabold flex items-center justify-center gap-2 relative overflow-hidden group transition-all"
+              whileHover={isReady ? { scale: 1.02 } : {}}
+              whileTap={isReady ? { scale: 0.97 } : {}}
+              onClick={handleContinue} disabled={!isReady}
+              className="w-full py-2.5 rounded-[12px] text-[12px] font-extrabold flex items-center justify-center gap-2 transition-all"
               style={{
-                background: isReady ? "linear-gradient(135deg, #10b981, #059669)" : "#f1f5f9",
-                color: isReady ? "#fff" : "#94a3b8",
-                boxShadow: isReady ? "0 5px 18px rgba(16,185,129,0.32)" : "none",
-                cursor: isReady ? "pointer" : "not-allowed", border: "none",
+                background: isReady ? "linear-gradient(135deg, #eb9245 0%, #d97706 100%)" : BASE,
+                color: isReady ? "#fff" : "rgba(255,255,255,0.2)",
+                boxShadow: isReady
+                  ? "4px 4px 12px rgba(0,0,0,0.5), -2px -2px 6px rgba(255,255,255,0.04), 0 0 18px rgba(235,146,69,0.28)"
+                  : nm(false),
+                border: "none",
+                cursor: isReady ? "pointer" : "not-allowed",
               }}
             >
-              {isReady && <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-[200%] skew-x-[25deg] group-hover:translate-x-[200%] transition-transform duration-600" />}
               <span className="text-[14px]">{isReady ? "🔑" : "🔒"}</span>
               {isReady ? "Continue to API Setup →" : "Fill Company & Position first"}
             </motion.button>

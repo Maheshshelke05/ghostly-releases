@@ -44,6 +44,7 @@ function handleDeepLink(url: string) {
 }
 
 function enforceStealthOnWindow(win: BrowserWindow): void {
+  if (!app.isPackaged) return;
   win.on("show", () => applyStealthMode(win));
   win.on("focus", () => applyStealthMode(win));
   win.on("restore", () => applyStealthMode(win));
@@ -52,18 +53,19 @@ function enforceStealthOnWindow(win: BrowserWindow): void {
 function createMainWindow(): BrowserWindow {
   const primary = screen.getPrimaryDisplay().workAreaSize;
 
+  const isDev = !app.isPackaged;
   const win = new BrowserWindow({
     width: 700,
     height: 600,
     minWidth: 400,
     minHeight: 300,
     x: Math.floor((primary.width - 700) / 2),
-    y: 0,
-    transparent: true,
-    frame: false,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    hasShadow: false,
+    y: isDev ? 100 : 0,
+    transparent: !isDev,
+    frame: isDev,
+    alwaysOnTop: !isDev,
+    skipTaskbar: false,
+    hasShadow: isDev,
     resizable: true,
     show: false,
     webPreferences: {
@@ -74,8 +76,10 @@ function createMainWindow(): BrowserWindow {
     },
   });
 
-  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  win.setAlwaysOnTop(true, "screen-saver");
+  if (!isDev) {
+    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    win.setAlwaysOnTop(true, "screen-saver");
+  }
   win.setIgnoreMouseEvents(false);
 
   enforceStealthOnWindow(win);
@@ -87,8 +91,10 @@ function createMainWindow(): BrowserWindow {
   }
 
   win.once("ready-to-show", () => {
+    win.setOpacity(1);
     win.show();
-    applyStealthMode(win);
+    win.focus();
+    if (app.isPackaged) applyStealthMode(win);
   });
 
   return win;

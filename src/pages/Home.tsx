@@ -12,6 +12,33 @@ import { useInterviewAudio } from "../hooks/useInterviewAudio";
 const escapeHtml = (value: string) =>
   value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char] || char));
 
+const BASE = "#1b1b26";
+const nm = (raised = true) =>
+  raised
+    ? "6px 6px 14px rgba(0,0,0,0.55), -3px -3px 8px rgba(255,255,255,0.04)"
+    : "inset 4px 4px 10px rgba(0,0,0,0.5), inset -2px -2px 6px rgba(255,255,255,0.04)";
+
+const NavButton: React.FC<{ onClick: () => void; disabled?: boolean; children: React.ReactNode; title?: string }> = ({ onClick, disabled = false, children, title }) => {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className="w-7 h-7 flex items-center justify-center rounded-lg transition-all text-sm font-bold select-none outline-none"
+      style={{
+        background: BASE,
+        boxShadow: disabled ? "none" : hovered ? nm(false) : nm(true),
+        color: disabled ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.5)",
+      }}
+    >
+      {children}
+    </button>
+  );
+};
+
 const SupportAdPlacement: React.FC<{ scriptUrl?: string; containerId?: string }> = ({ scriptUrl, containerId }) => {
   const safeContainerId = (containerId || "").replace(/[^\w-]/g, "");
   const safeScriptUrl = scriptUrl?.startsWith("https://") || scriptUrl?.startsWith("http://") ? scriptUrl : "";
@@ -173,6 +200,8 @@ export const Home: React.FC = () => {
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [followUpText, setFollowUpText] = useState("");
+  const [followUpFocused, setFollowUpFocused] = useState(false);
+  const [chatFocused, setChatFocused] = useState(false);
   const [activeTab, setActiveTab] = useState<"ai" | "screen" | "chat" | "support">("ai");
   const [liveActive, setLiveActive] = useState(false);
   // Fix: load autoAI from saved settings instead of hardcoded true
