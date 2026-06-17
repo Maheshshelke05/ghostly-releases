@@ -64,7 +64,7 @@ function createMainWindow(): BrowserWindow {
     transparent: !isDev,
     frame: isDev,
     alwaysOnTop: !isDev,
-    skipTaskbar: false,
+    skipTaskbar: true,
     hasShadow: isDev,
     resizable: true,
     show: false,
