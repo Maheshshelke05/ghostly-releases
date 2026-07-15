@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Ad, useStore } from "../store/useStore";
 import { InterviewHistoryModal } from "../components/InterviewHistoryModal";
 
-const BASE = "#1c1917";
+const BASE = "#1b1b26";
 const nm = (raised = true) =>
   raised
     ? "6px 6px 14px rgba(0,0,0,0.55), -3px -3px 8px rgba(255,255,255,0.04)"
@@ -140,7 +140,7 @@ export const HomePage: React.FC = () => {
                 className="w-9 h-9 rounded-[12px] flex items-center justify-center text-[19px]"
                 style={{
                   background: BASE,
-                  boxShadow: `${nm()}, 0 0 0 1.5px rgba(200,137,74,0.2)`,
+                  boxShadow: `${nm()}, 0 0 0 1.5px rgba(235,146,69,0.2)`,
                 }}
               >
                 👻
@@ -149,7 +149,7 @@ export const HomePage: React.FC = () => {
                 animate={{ scale: [1, 1.35, 1], opacity: [1, 0.6, 1] }}
                 transition={{ duration: 2, repeat: Infinity }}
                 className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full"
-                style={{ background: "#22c55e", border: "2px solid #0c0a09", boxShadow: "0 0 6px rgba(34,197,94,0.7)" }}
+                style={{ background: "#22c55e", border: "2px solid #0d0d14", boxShadow: "0 0 6px rgba(34,197,94,0.7)" }}
               />
             </div>
             <div>
@@ -160,7 +160,7 @@ export const HomePage: React.FC = () => {
                   style={{
                     background: BASE,
                     boxShadow: nm(false),
-                    color: "#c8894a",
+                    color: "#eb9245",
                     border: "none",
                   }}
                 >
@@ -202,11 +202,11 @@ export const HomePage: React.FC = () => {
               disabled={startStatus === "syncing"}
               className="w-full py-3 rounded-[14px] text-[13px] font-extrabold flex items-center justify-center gap-2 relative overflow-hidden"
               style={{
-                background: "linear-gradient(135deg, #c8894a 0%, #b27838 100%)",
+                background: "linear-gradient(135deg, #eb9245 0%, #d97706 100%)",
                 color: "#fff",
                 boxShadow: startStatus === "syncing"
                   ? nm(false)
-                  : "4px 4px 12px rgba(0,0,0,0.5), -2px -2px 6px rgba(255,255,255,0.04), 0 0 20px rgba(200,137,74,0.3)",
+                  : "4px 4px 12px rgba(0,0,0,0.5), -2px -2px 6px rgba(255,255,255,0.04), 0 0 20px rgba(235,146,69,0.3)",
                 border: "none",
               }}
             >
@@ -256,7 +256,7 @@ export const HomePage: React.FC = () => {
                 {historyCount > 0 && (
                   <span
                     className="px-1 py-0.5 rounded-full text-[7px] font-black"
-                    style={{ background: BASE, boxShadow: nm(false), color: "#c8894a" }}
+                    style={{ background: BASE, boxShadow: nm(false), color: "#eb9245" }}
                   >{historyCount}</span>
                 )}
               </motion.button>
@@ -286,7 +286,7 @@ export const HomePage: React.FC = () => {
                     style={{
                       background: BASE,
                       boxShadow: nm(),
-                      color: "#c8894a",
+                      color: "#eb9245",
                       border: "none",
                       letterSpacing: "0.02em",
                     }}
@@ -320,7 +320,7 @@ export const HomePage: React.FC = () => {
                 <p className="text-[9px] font-bold leading-none" style={{ color: "rgba(255,255,255,0.7)" }}>
                   {user?.name || "Guest"}
                 </p>
-                <p className="text-[7.5px] mt-0.5 font-medium" style={{ color: "#c8894a", opacity: 0.65 }}>
+                <p className="text-[7.5px] mt-0.5 font-medium" style={{ color: "#eb9245", opacity: 0.65 }}>
                   Ad-supported · Free
                 </p>
               </div>
@@ -365,7 +365,7 @@ export const HomePage: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <div
                     className="px-2.5 py-1 rounded-full text-[7.5px] font-black uppercase tracking-[0.1em]"
-                    style={{ background: BASE, boxShadow: nm(false), color: "#c8894a" }}
+                    style={{ background: BASE, boxShadow: nm(false), color: "#eb9245" }}
                   >
                     📢 Sponsor
                   </div>
@@ -377,7 +377,7 @@ export const HomePage: React.FC = () => {
                   style={{
                     background: BASE,
                     boxShadow: nm(false),
-                    color: adClicked ? "#22c55e" : "#c8894a",
+                    color: adClicked ? "#22c55e" : "#eb9245",
                   }}
                 >
                   {adClicked ? <>✓ Unlocked</> : <>🔒 Locked</>}
@@ -425,11 +425,11 @@ export const HomePage: React.FC = () => {
                   onClick={!adClicked ? handleAdClick : undefined}
                   className="w-full py-2.5 rounded-[12px] text-[11px] font-extrabold flex items-center justify-center gap-2 transition-all"
                   style={{
-                    background: adClicked ? BASE : "linear-gradient(135deg, #c8894a 0%, #b27838 100%)",
+                    background: adClicked ? BASE : "linear-gradient(135deg, #eb9245 0%, #d97706 100%)",
                     color: adClicked ? "#22c55e" : "#fff",
                     boxShadow: adClicked
                       ? nm(false)
-                      : "4px 4px 12px rgba(0,0,0,0.5), -2px -2px 6px rgba(255,255,255,0.04), 0 0 18px rgba(200,137,74,0.28)",
+                      : "4px 4px 12px rgba(0,0,0,0.5), -2px -2px 6px rgba(255,255,255,0.04), 0 0 18px rgba(235,146,69,0.28)",
                     border: "none",
                     cursor: adClicked ? "default" : "pointer",
                   }}

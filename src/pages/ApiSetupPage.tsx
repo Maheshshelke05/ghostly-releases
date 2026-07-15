@@ -4,7 +4,7 @@ import { useStore } from "../store/useStore";
 import { NVIDIA_MODELS } from "../lib/ai/nvidia";
 import { OPENROUTER_FREE_MODELS } from "../lib/ai/openrouter";
 
-const BASE = "#1c1917";
+const BASE = "#1b1b26";
 const nm = (raised = true) =>
   raised
     ? "6px 6px 14px rgba(0,0,0,0.55), -3px -3px 8px rgba(255,255,255,0.04)"
@@ -157,9 +157,9 @@ export const ApiSetupPage: React.FC = () => {
                 <button
                   onClick={() => window.ghostly.openExternal("https://console.deepgram.com/signup")}
                   className="text-[8px] font-bold transition-all"
-                  style={{ color: "rgba(200,137,74,0.6)", background: "none", border: "none" }}
-                  onMouseEnter={e => { e.currentTarget.style.color = "#c8894a"; }}
-                  onMouseLeave={e => { e.currentTarget.style.color = "rgba(200,137,74,0.6)"; }}
+                  style={{ color: "rgba(235,146,69,0.6)", background: "none", border: "none" }}
+                  onMouseEnter={e => { e.currentTarget.style.color = "#eb9245"; }}
+                  onMouseLeave={e => { e.currentTarget.style.color = "rgba(235,146,69,0.6)"; }}
                 >Get Free Key ↗</button>
               </div>
               <div className="relative">
@@ -205,13 +205,13 @@ export const ApiSetupPage: React.FC = () => {
                       style={{
                         background: BASE,
                         boxShadow: isActive && hasKey
-                          ? `${nm()}, 0 0 0 1.5px rgba(200,137,74,0.35)`
+                          ? `${nm()}, 0 0 0 1.5px rgba(235,146,69,0.35)`
                           : nm(),
                       }}
                     >
                       <div className="flex items-center gap-2 px-2.5 py-2">
                         <span className="text-[13px] shrink-0">{p.icon}</span>
-                        <span className="text-[10px] font-extrabold flex-1" style={{ color: isActive && hasKey ? "#c8894a" : "rgba(255,255,255,0.65)" }}>
+                        <span className="text-[10px] font-extrabold flex-1" style={{ color: isActive && hasKey ? "#eb9245" : "rgba(255,255,255,0.65)" }}>
                           {p.label}
                         </span>
                         <span
@@ -230,8 +230,8 @@ export const ApiSetupPage: React.FC = () => {
                             className="text-[7px] font-black px-1.5 py-0.5 rounded-full uppercase transition-all"
                             style={{
                               background: BASE,
-                              boxShadow: isActive ? `${nm(false)}, 0 0 8px rgba(200,137,74,0.3)` : nm(),
-                              color: isActive ? "#c8894a" : "rgba(255,255,255,0.35)",
+                              boxShadow: isActive ? `${nm(false)}, 0 0 8px rgba(235,146,69,0.3)` : nm(),
+                              color: isActive ? "#eb9245" : "rgba(255,255,255,0.35)",
                               border: "none",
                             }}
                           >{isActive ? "Active" : "Use"}</button>
@@ -239,7 +239,7 @@ export const ApiSetupPage: React.FC = () => {
                         <button
                           onClick={() => window.ghostly.openExternal(p.url)}
                           className="text-[8px] font-bold transition-all opacity-30 hover:opacity-80"
-                          style={{ background: "none", border: "none", color: "#c8894a" }}
+                          style={{ background: "none", border: "none", color: "#eb9245" }}
                         >↗</button>
                         <button
                           onClick={() => setExpanded(isOpen ? null : p.id)}
@@ -310,10 +310,10 @@ export const ApiSetupPage: React.FC = () => {
               onClick={handleSave} disabled={!canProceed}
               className="w-full py-2.5 rounded-[12px] text-[12px] font-extrabold flex items-center justify-center gap-2 transition-all"
               style={{
-                background: canProceed ? "linear-gradient(135deg, #c8894a 0%, #b27838 100%)" : BASE,
+                background: canProceed ? "linear-gradient(135deg, #eb9245 0%, #d97706 100%)" : BASE,
                 color: canProceed ? "#fff" : "rgba(255,255,255,0.2)",
                 boxShadow: canProceed
-                  ? "4px 4px 12px rgba(0,0,0,0.5), -2px -2px 6px rgba(255,255,255,0.04), 0 0 18px rgba(200,137,74,0.28)"
+                  ? "4px 4px 12px rgba(0,0,0,0.5), -2px -2px 6px rgba(255,255,255,0.04), 0 0 18px rgba(235,146,69,0.28)"
                   : nm(false),
                 border: "none", cursor: canProceed ? "pointer" : "not-allowed",
               }}

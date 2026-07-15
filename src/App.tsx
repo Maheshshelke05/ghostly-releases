@@ -190,8 +190,8 @@ const App: React.FC = () => {
                 <div
                   className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black transition-all"
                   style={{
-                    background: isDone ? "#10b981" : isActive ? "rgba(200,137,74,0.9)" : "rgba(255,255,255,0.08)",
-                    border: `1px solid ${isDone ? "#059669" : isActive ? "#c8894a" : "rgba(255,255,255,0.12)"}`,
+                    background: isDone ? "#10b981" : isActive ? "rgba(235,146,69,0.9)" : "rgba(255,255,255,0.08)",
+                    border: `1px solid ${isDone ? "#059669" : isActive ? "#eb9245" : "rgba(255,255,255,0.12)"}`,
                     color: isDone || isActive ? "#fff" : "rgba(255,255,255,0.3)",
                   }}
                 >
@@ -216,20 +216,20 @@ const App: React.FC = () => {
   const updateBanner = updateState !== "idle" ? (
     <div
       className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-3 px-4 py-3 rounded-2xl shadow-2xl"
-      style={{ background: "linear-gradient(135deg, rgba(18,18,22,0.98), rgba(24,24,30,0.98))", border: "1px solid rgba(200,137,74,0.3)", backdropFilter: "blur(24px)", boxShadow: "0 8px 32px rgba(0,0,0,0.4)", pointerEvents: "auto", minWidth: "280px" }}
+      style={{ background: "linear-gradient(135deg, rgba(18,18,22,0.98), rgba(24,24,30,0.98))", border: "1px solid rgba(235,146,69,0.3)", backdropFilter: "blur(24px)", boxShadow: "0 8px 32px rgba(0,0,0,0.4)", pointerEvents: "auto", minWidth: "280px" }}
       onMouseEnter={() => window.ghostly.enableMouse()}
     >
-      <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 text-[16px]" style={{ background: "linear-gradient(135deg, #c8894a, #b27838)", boxShadow: "0 2px 8px rgba(200,137,74,0.4)" }}>
+      <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 text-[16px]" style={{ background: "linear-gradient(135deg, #eb9245, #c97320)", boxShadow: "0 2px 8px rgba(235,146,69,0.4)" }}>
         {updateState === "ready" ? "✅" : "🔄"}
       </div>
       <div className="flex-1 min-w-0">
         {updateState === "available" && (<><p className="text-[12px] font-bold text-white leading-tight">Update Available — v{updateVersion}</p><p className="text-[10px] text-white/40 font-sans">New features & improvements ready</p></>)}
-        {updateState === "downloading" && (<><p className="text-[12px] font-bold text-white leading-tight">Downloading... {updatePercent}%</p><div className="mt-1 h-1 rounded-full bg-white/10 overflow-hidden"><div className="h-full rounded-full transition-all duration-300" style={{ width: `${updatePercent}%`, background: "linear-gradient(90deg, #c8894a, #b27838)" }} /></div></>)}
+        {updateState === "downloading" && (<><p className="text-[12px] font-bold text-white leading-tight">Downloading... {updatePercent}%</p><div className="mt-1 h-1 rounded-full bg-white/10 overflow-hidden"><div className="h-full rounded-full transition-all duration-300" style={{ width: `${updatePercent}%`, background: "linear-gradient(90deg, #eb9245, #c97320)" }} /></div></>)}
         {updateState === "ready" && (<><p className="text-[12px] font-bold text-white leading-tight">Update Ready to Install</p><p className="text-[10px] text-white/40 font-sans">Restart app to apply update</p></>)}
       </div>
       <div className="flex items-center gap-1.5 shrink-0">
         {updateState === "available" && (
-          <button onClick={() => { window.ghostly.downloadUpdate(); setUpdateState("downloading"); setShowFullScreenAnimation(true); }} className="px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all" style={{ background: "linear-gradient(135deg, #c8894a, #b27838)", color: "#000", boxShadow: "0 2px 8px rgba(200,137,74,0.3)" }}>Download</button>
+          <button onClick={() => { window.ghostly.downloadUpdate(); setUpdateState("downloading"); setShowFullScreenAnimation(true); }} className="px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all" style={{ background: "linear-gradient(135deg, #eb9245, #c97320)", color: "#000", boxShadow: "0 2px 8px rgba(235,146,69,0.3)" }}>Download</button>
         )}
         {updateState === "ready" && (
           <button onClick={() => window.ghostly.installUpdate()} className="px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all" style={{ background: "linear-gradient(135deg, #22c55e, #16a34a)", color: "#fff", boxShadow: "0 2px 8px rgba(34,197,94,0.3)" }}>Restart & Install</button>

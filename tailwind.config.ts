@@ -6,37 +6,37 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        accent: "#c8894a",
+        accent: "#00FF88",
         ghostly: {
-          50: "#fdf8f3",
-          100: "#f7ebdc",
-          200: "#f0e6da",
-          300: "#e3c9a6",
-          400: "#d9a877",
-          500: "#c8894a",
-          600: "#b27838",
-          700: "#96602c",
-          800: "#794c24",
-          900: "#5f3c1e",
-          950: "#2e1c0e",
+          50: "#f0f4ff",
+          100: "#dbe4ff",
+          200: "#bac8ff",
+          300: "#91a7ff",
+          400: "#748ffc",
+          500: "#5c7cfa",
+          600: "#4c6ef5",
+          700: "#4263eb",
+          800: "#3b5bdb",
+          900: "#364fc7",
+          950: "#1e3a8a",
         },
         dark: {
-          50: "#fafaf9",
-          100: "#f5f5f4",
-          200: "#e7e5e4",
-          300: "#d6d3d1",
-          400: "#a8a29e",
-          500: "#78716c",
-          600: "#57534e",
-          700: "#44403c",
-          800: "#292524",
-          850: "#231f1c",
-          900: "#1c1917",
-          950: "#0c0a09",
+          50: "#f8fafc",
+          100: "#f1f5f9",
+          200: "#e2e8f0",
+          300: "#cbd5e1",
+          400: "#94a3b8",
+          500: "#64748b",
+          600: "#475569",
+          700: "#334155",
+          800: "#1e293b",
+          850: "#172033",
+          900: "#0f172a",
+          950: "#020617",
         },
       },
       fontFamily: {
-        sans: ["Inter", "system-ui", "-apple-system", "sans-serif"],
+        sans: ["JetBrains Mono", "Inter", "system-ui", "sans-serif"],
         mono: ["JetBrains Mono", "Fira Code", "monospace"],
       },
       backdropBlur: {
@@ -52,11 +52,11 @@ const config: Config = {
         glow: {
           "0%": {
             boxShadow:
-              "0 0 5px rgba(200, 137, 74, 0.3), 0 0 10px rgba(200, 137, 74, 0.1)",
+              "0 0 5px rgba(0, 255, 136, 0.3), 0 0 10px rgba(0, 255, 136, 0.1)",
           },
           "100%": {
             boxShadow:
-              "0 0 20px rgba(200, 137, 74, 0.5), 0 0 40px rgba(200, 137, 74, 0.2)",
+              "0 0 20px rgba(0, 255, 136, 0.5), 0 0 40px rgba(0, 255, 136, 0.2)",
           },
         },
         slideUp: {

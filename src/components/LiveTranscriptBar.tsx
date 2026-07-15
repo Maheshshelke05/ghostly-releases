@@ -54,7 +54,7 @@ export const LiveTranscriptBar: React.FC<LiveTranscriptBarProps> = ({ text }) =>
             key={i}
             className="text-[12px] font-sans whitespace-nowrap"
             style={{
-              color: isLast ? "#d9a877" : "rgba(255,255,255,0.7)",
+              color: isLast ? "#fbbf24" : "rgba(255,255,255,0.7)",
               transition: "color 0.5s ease",
             }}
           >

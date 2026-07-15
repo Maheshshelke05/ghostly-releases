@@ -38,7 +38,7 @@ export const SplashScreen: React.FC<{ onComplete: () => void }> = ({ onComplete 
         exit={{ opacity: 0 }}
         className="fixed inset-0 z-[10000] flex items-center justify-center"
         style={{
-          background: "linear-gradient(135deg, #0c0a09 0%, #1c1917 100%)",
+          background: "linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 100%)",
           pointerEvents: "auto",
         }}
       >
@@ -52,7 +52,7 @@ export const SplashScreen: React.FC<{ onComplete: () => void }> = ({ onComplete 
               transition={{ duration: 0.1 }}
               className="absolute inset-0"
               style={{
-                background: "radial-gradient(circle at 50% 50%, rgba(200,137,74,0.3), transparent 60%)",
+                background: "radial-gradient(circle at 50% 50%, rgba(235,146,69,0.3), transparent 60%)",
                 mixBlendMode: "screen",
               }}
             />
@@ -78,8 +78,8 @@ export const SplashScreen: React.FC<{ onComplete: () => void }> = ({ onComplete 
             }}
             className="absolute w-1 h-1 rounded-full"
             style={{
-              background: "#c8894a",
-              boxShadow: "0 0 10px rgba(200,137,74,0.8)",
+              background: "#eb9245",
+              boxShadow: "0 0 10px rgba(235,146,69,0.8)",
               left: "50%",
               top: "50%",
             }}
@@ -96,7 +96,7 @@ export const SplashScreen: React.FC<{ onComplete: () => void }> = ({ onComplete 
               transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
               className="absolute inset-0 w-56 h-56 rounded-full"
               style={{
-                background: "conic-gradient(from 0deg, transparent, rgba(200,137,74,0.4), transparent)",
+                background: "conic-gradient(from 0deg, transparent, rgba(235,146,69,0.4), transparent)",
                 filter: "blur(30px)",
               }}
             />
@@ -110,8 +110,8 @@ export const SplashScreen: React.FC<{ onComplete: () => void }> = ({ onComplete 
               transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
               className="absolute inset-0 w-56 h-56 rounded-full"
               style={{
-                border: "3px solid #c8894a",
-                boxShadow: "0 0 60px rgba(200,137,74,0.6), inset 0 0 40px rgba(200,137,74,0.4)",
+                border: "3px solid #eb9245",
+                boxShadow: "0 0 60px rgba(235,146,69,0.6), inset 0 0 40px rgba(235,146,69,0.4)",
               }}
             />
 
@@ -122,9 +122,9 @@ export const SplashScreen: React.FC<{ onComplete: () => void }> = ({ onComplete 
               transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
               className="relative w-56 h-56 rounded-full flex items-center justify-center"
               style={{
-                background: "radial-gradient(circle, rgba(200,137,74,0.15), transparent)",
-                border: "4px solid #c8894a",
-                boxShadow: "0 0 80px rgba(200,137,74,0.6), inset 0 0 40px rgba(200,137,74,0.3)",
+                background: "radial-gradient(circle, rgba(235,146,69,0.15), transparent)",
+                border: "4px solid #eb9245",
+                boxShadow: "0 0 80px rgba(235,146,69,0.6), inset 0 0 40px rgba(235,146,69,0.3)",
               }}
             >
               {/* Ghost Emoji */}
@@ -177,15 +177,15 @@ export const SplashScreen: React.FC<{ onComplete: () => void }> = ({ onComplete 
             <motion.h1
               animate={{
                 textShadow: [
-                  "0 0 20px rgba(200,137,74,0.6)",
-                  "0 0 40px rgba(200,137,74,0.8)",
-                  "0 0 20px rgba(200,137,74,0.6)",
+                  "0 0 20px rgba(235,146,69,0.6)",
+                  "0 0 40px rgba(235,146,69,0.8)",
+                  "0 0 20px rgba(235,146,69,0.6)",
                 ],
               }}
               transition={{ duration: 2, repeat: Infinity }}
               className="text-6xl font-black mb-3"
               style={{
-                background: "linear-gradient(135deg, #c8894a, #d9a877)",
+                background: "linear-gradient(135deg, #eb9245, #f5a55a)",
                 WebkitBackgroundClip: "text",
                 WebkitTextFillColor: "transparent",
                 backgroundClip: "text",
@@ -224,8 +224,8 @@ export const SplashScreen: React.FC<{ onComplete: () => void }> = ({ onComplete 
                 transition={{ duration: 0.1 }}
                 className="h-full relative"
                 style={{
-                  background: "linear-gradient(90deg, #c8894a, #d9a877)",
-                  boxShadow: "0 0 20px rgba(200,137,74,0.6)",
+                  background: "linear-gradient(90deg, #eb9245, #f5a55a)",
+                  boxShadow: "0 0 20px rgba(235,146,69,0.6)",
                 }}
               >
                 {/* Shine effect */}
@@ -283,8 +283,8 @@ export const SplashScreen: React.FC<{ onComplete: () => void }> = ({ onComplete 
             transition={{ delay: 0.6 }}
             className="absolute bottom-12 flex items-center gap-2 px-4 py-2 rounded-full"
             style={{
-              background: "rgba(200,137,74,0.1)",
-              border: "1px solid rgba(200,137,74,0.3)",
+              background: "rgba(235,146,69,0.1)",
+              border: "1px solid rgba(235,146,69,0.3)",
             }}
           >
             <span className="text-xs font-bold text-white/40">v1.1.5</span>

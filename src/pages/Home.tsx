@@ -12,7 +12,7 @@ import { useInterviewAudio } from "../hooks/useInterviewAudio";
 const escapeHtml = (value: string) =>
   value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char] || char));
 
-const BASE = "#1c1917";
+const BASE = "#1b1b26";
 const nm = (raised = true) =>
   raised
     ? "6px 6px 14px rgba(0,0,0,0.55), -3px -3px 8px rgba(255,255,255,0.04)"
@@ -166,14 +166,14 @@ const SupportPanel: React.FC<SupportPanelProps> = ({
 
       <button type="submit" disabled={supportStatus === "sending" || !supportSubject.trim() || supportMessage.trim().length < 10}
         className="mt-4 w-full py-2.5 rounded-xl text-[12px] font-black transition-all disabled:opacity-40"
-        style={{ background: "linear-gradient(135deg, #c8894a, #b27838)", color: "#111" }}>
+        style={{ background: "linear-gradient(135deg, #eb9245, #d97706)", color: "#111" }}>
         {supportStatus === "sending" ? "Sending..." : "Send Report"}
       </button>
     </form>
 
     <div className="space-y-3">
       <div className="rounded-2xl border border-orange-400/20 p-3"
-        style={{ background: "linear-gradient(160deg, rgba(200,137,74,0.12), rgba(255,255,255,0.04))" }}>
+        style={{ background: "linear-gradient(160deg, rgba(235,146,69,0.12), rgba(255,255,255,0.04))" }}>
         <p className="text-[10px] font-black uppercase tracking-widest text-orange-300/80">Support Ads</p>
         <p className="mt-1 text-[11px] text-white/45 leading-relaxed">
           Sponsored content may appear here while you send feedback. No ads are shown in the interview answer area.
@@ -827,7 +827,7 @@ export const Home: React.FC = () => {
                       {Array.from({ length: Math.min(totalPages, 10) }).map((_, i) => (
                         <button key={i} onClick={() => { setUserNavigated(true); setPageIndex(i); }}
                           className={`rounded-full transition-all ${
-                            i === pageIndex ? "w-5 h-1.5 bg-[#c8894a]" :
+                            i === pageIndex ? "w-5 h-1.5 bg-[#eb9245]" :
                             i === livePageIndex && liveActive ? "w-1.5 h-1.5 bg-green-400/70" :
                             "w-1.5 h-1.5 bg-white/20 hover:bg-white/40"
                           }`} />
@@ -887,11 +887,11 @@ export const Home: React.FC = () => {
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-3 px-4 py-3 rounded-2xl border border-[#c8894a]/20 w-full max-w-[320px]"
-                      style={{ background: "linear-gradient(135deg, rgba(200,137,74,0.08), rgba(200,137,74,0.03))" }}>
+                    <div className="flex items-center gap-3 px-4 py-3 rounded-2xl border border-[#eb9245]/20 w-full max-w-[320px]"
+                      style={{ background: "linear-gradient(135deg, rgba(235,146,69,0.08), rgba(235,146,69,0.03))" }}>
                       <img src={`${imgBase}mahesh.png`} alt="Mahesh Shelke"
                         className="w-10 h-10 rounded-full object-cover shrink-0"
-                        style={{ border: "2px solid rgba(200,137,74,0.5)" }} />
+                        style={{ border: "2px solid rgba(235,146,69,0.5)" }} />
                       <div>
                         <p className="text-[13px] font-bold text-white">Mahesh Shelke</p>
                         <p className="text-[11px] text-white/40 font-sans">Developer · Ghostly AI</p>
@@ -948,12 +948,12 @@ export const Home: React.FC = () => {
                         {chatMessages.map((msg, i) => (
                           <div key={i} className={`flex flex-col gap-1.5 ${msg.role === "user" ? "items-end" : "items-start"}`}>
                             <span className={`text-[9px] font-bold uppercase tracking-widest ${
-                              msg.role === "user" ? "text-[#c8894a]/60" : "text-blue-400/60"
+                              msg.role === "user" ? "text-[#eb9245]/60" : "text-blue-400/60"
                             }`}>
                               {msg.role === "user" ? "You" : "👻 Ghostly AI"}
                             </span>
                             {msg.role === "user" ? (
-                              <div className="max-w-[85%] bg-[#c8894a]/15 border border-[#c8894a]/20 rounded-2xl rounded-tr-sm px-4 py-2.5 text-[13px] text-white/85 font-sans leading-relaxed">
+                              <div className="max-w-[85%] bg-[#eb9245]/15 border border-[#eb9245]/20 rounded-2xl rounded-tr-sm px-4 py-2.5 text-[13px] text-white/85 font-sans leading-relaxed">
                                 {msg.text}
                               </div>
                             ) : (
@@ -965,9 +965,9 @@ export const Home: React.FC = () => {
                         ))}
                         {chatStreaming && chatMessages[chatMessages.length - 1]?.role === "assistant" && chatMessages[chatMessages.length - 1]?.text === "" && (
                           <div className="flex items-center gap-2 text-white/30 text-[12px] font-sans">
-                            <span className="w-1.5 h-1.5 bg-[#c8894a] rounded-full animate-pulse" />
-                            <span className="w-1.5 h-1.5 bg-[#c8894a] rounded-full animate-pulse" style={{ animationDelay: "0.2s" }} />
-                            <span className="w-1.5 h-1.5 bg-[#c8894a] rounded-full animate-pulse" style={{ animationDelay: "0.4s" }} />
+                            <span className="w-1.5 h-1.5 bg-[#eb9245] rounded-full animate-pulse" />
+                            <span className="w-1.5 h-1.5 bg-[#eb9245] rounded-full animate-pulse" style={{ animationDelay: "0.2s" }} />
+                            <span className="w-1.5 h-1.5 bg-[#eb9245] rounded-full animate-pulse" style={{ animationDelay: "0.4s" }} />
                           </div>
                         )}
                         <div ref={chatEndRef} />
@@ -984,7 +984,7 @@ export const Home: React.FC = () => {
                       <div>
                         <p className="text-[15px] font-semibold text-white/50 font-sans mb-2">Ghostly AI is ready</p>
                         <p className="text-[12px] text-white/25 font-sans leading-relaxed">
-                          Click <span className="text-[#c8894a] font-semibold">AI Answer</span> to start live transcription<br />
+                          Click <span className="text-[#eb9245] font-semibold">AI Answer</span> to start live transcription<br />
                           or <span className="text-white/40 font-semibold">Analyze Screen</span> to capture & solve
                         </p>
                       </div>
@@ -1027,9 +1027,9 @@ export const Home: React.FC = () => {
                         <div>
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-1.5">
-                              <span className="text-[10px] font-bold text-[#c8894a]/70 uppercase tracking-widest">🤖 Ghostly AI</span>
+                              <span className="text-[10px] font-bold text-[#eb9245]/70 uppercase tracking-widest">🤖 Ghostly AI</span>
                               {isOnLivePage && isStreaming && (
-                                <span className="w-1.5 h-1.5 bg-[#c8894a] rounded-full animate-pulse" />
+                                <span className="w-1.5 h-1.5 bg-[#eb9245] rounded-full animate-pulse" />
                               )}
                             </div>
                             {!isStreaming && (isOnLivePage ? liveAnswer : activePage?.answer) && (
@@ -1077,10 +1077,10 @@ export const Home: React.FC = () => {
                       onChange={(e) => setChatInput(e.target.value)}
                       placeholder="Ask Ghostly AI anything..."
                       disabled={chatStreaming}
-                      className="w-full bg-white/[0.05] border border-white/[0.07] hover:border-white/[0.14] focus:border-[#c8894a]/50 rounded-xl pl-4 pr-12 py-2.5 text-[13px] font-sans text-white/90 placeholder:text-white/25 focus:outline-none transition-colors disabled:opacity-40"
+                      className="w-full bg-white/[0.05] border border-white/[0.07] hover:border-white/[0.14] focus:border-[#eb9245]/50 rounded-xl pl-4 pr-12 py-2.5 text-[13px] font-sans text-white/90 placeholder:text-white/25 focus:outline-none transition-colors disabled:opacity-40"
                     />
                     <button type="submit" disabled={chatStreaming || !chatInput.trim()}
-                      className={`absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-xl transition-all ${chatInput.trim() ? "bg-[#c8894a] text-black hover:bg-[#d9a877] shadow-md" : "text-white/20"}`}>
+                      className={`absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-xl transition-all ${chatInput.trim() ? "bg-[#eb9245] text-black hover:bg-[#f5a55a] shadow-md" : "text-white/20"}`}>
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                         <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
                       </svg>
@@ -1093,10 +1093,10 @@ export const Home: React.FC = () => {
                       onChange={(e) => setFollowUpText(e.target.value)}
                       placeholder="Ask AI anything..."
                       disabled={isStreaming}
-                      className="w-full bg-white/[0.05] border border-white/[0.07] hover:border-white/[0.14] focus:border-[#c8894a]/50 rounded-xl pl-4 pr-12 py-2.5 text-[13px] font-sans text-white/90 placeholder:text-white/25 focus:outline-none transition-colors disabled:opacity-40"
+                      className="w-full bg-white/[0.05] border border-white/[0.07] hover:border-white/[0.14] focus:border-[#eb9245]/50 rounded-xl pl-4 pr-12 py-2.5 text-[13px] font-sans text-white/90 placeholder:text-white/25 focus:outline-none transition-colors disabled:opacity-40"
                     />
                     <button type="submit" disabled={isStreaming || !followUpText.trim()}
-                      className={`absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-xl transition-all ${followUpText.trim() ? "bg-[#c8894a] text-black hover:bg-[#d9a877] shadow-md" : "text-white/20"}`}>
+                      className={`absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-xl transition-all ${followUpText.trim() ? "bg-[#eb9245] text-black hover:bg-[#f5a55a] shadow-md" : "text-white/20"}`}>
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                         <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
                       </svg>

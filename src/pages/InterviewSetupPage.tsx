@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useStore } from "../store/useStore";
 import type { CandidateProfile } from "../store/useStore";
 
-const BASE = "#1c1917";
+const BASE = "#1b1b26";
 const nm = (raised = true) =>
   raised
     ? "6px 6px 14px rgba(0,0,0,0.55), -3px -3px 8px rgba(255,255,255,0.04)"
@@ -67,7 +67,7 @@ export const InterviewSetupPage: React.FC = () => {
   const nmInput = (focused: boolean): React.CSSProperties => ({
     background: BASE,
     boxShadow: focused
-      ? `${nm(false)}, 0 0 0 1.5px rgba(200,137,74,0.4)`
+      ? `${nm(false)}, 0 0 0 1.5px rgba(235,146,69,0.4)`
       : nm(false),
     border: "none",
     color: "rgba(255,255,255,0.8)",
@@ -107,8 +107,8 @@ export const InterviewSetupPage: React.FC = () => {
             <div
               className="w-8 h-8 rounded-[11px] flex items-center justify-center text-[15px] shrink-0"
               style={{
-                background: "linear-gradient(135deg, #c8894a, #b27838)",
-                boxShadow: "4px 4px 12px rgba(0,0,0,0.5), -2px -2px 6px rgba(255,255,255,0.04), 0 0 16px rgba(200,137,74,0.25)",
+                background: "linear-gradient(135deg, #eb9245, #d97706)",
+                boxShadow: "4px 4px 12px rgba(0,0,0,0.5), -2px -2px 6px rgba(255,255,255,0.04), 0 0 16px rgba(235,146,69,0.25)",
               }}
             >🎯</div>
             <div>
@@ -146,7 +146,7 @@ export const InterviewSetupPage: React.FC = () => {
                 style={{
                   background: BASE,
                   boxShadow: activeTab === tab.id ? nm(false) : nm(),
-                  color: activeTab === tab.id ? "#c8894a" : "rgba(255,255,255,0.3)",
+                  color: activeTab === tab.id ? "#eb9245" : "rgba(255,255,255,0.3)",
                   border: "none",
                 }}
               >
@@ -190,7 +190,7 @@ export const InterviewSetupPage: React.FC = () => {
                     className="w-full flex items-center justify-between px-2.5 py-2 rounded-[9px] transition-all"
                     style={{
                       background: BASE,
-                      boxShadow: langOpen ? `${nm(false)}, 0 0 0 1.5px rgba(200,137,74,0.4)` : nm(false),
+                      boxShadow: langOpen ? `${nm(false)}, 0 0 0 1.5px rgba(235,146,69,0.4)` : nm(false),
                       color: "rgba(255,255,255,0.75)",
                       border: "none",
                     }}
@@ -215,7 +215,7 @@ export const InterviewSetupPage: React.FC = () => {
                               style={{
                                 background: BASE,
                                 boxShadow: language === l.id ? nm(false) : "none",
-                                color: language === l.id ? "#c8894a" : "rgba(255,255,255,0.5)",
+                                color: language === l.id ? "#eb9245" : "rgba(255,255,255,0.5)",
                                 border: "none",
                               }}
                             >
@@ -235,7 +235,7 @@ export const InterviewSetupPage: React.FC = () => {
                   style={{ background: BASE, boxShadow: nm(false) }}
                 >
                   <div>
-                    <p className="text-[10px] font-extrabold" style={{ color: autoAI ? "#c8894a" : "rgba(255,255,255,0.6)" }}>
+                    <p className="text-[10px] font-extrabold" style={{ color: autoAI ? "#eb9245" : "rgba(255,255,255,0.6)" }}>
                       Auto AI Answer
                     </p>
                     <p className="text-[8px] font-medium mt-0.5" style={{ color: "rgba(255,255,255,0.28)" }}>
@@ -246,8 +246,8 @@ export const InterviewSetupPage: React.FC = () => {
                     onClick={() => setAutoAI(!autoAI)}
                     style={{
                       width: "34px", height: "19px",
-                      background: autoAI ? "linear-gradient(135deg, #c8894a, #b27838)" : BASE,
-                      boxShadow: autoAI ? "0 0 14px rgba(200,137,74,0.35)" : nm(false),
+                      background: autoAI ? "linear-gradient(135deg, #eb9245, #d97706)" : BASE,
+                      boxShadow: autoAI ? "0 0 14px rgba(235,146,69,0.35)" : nm(false),
                       borderRadius: "999px", border: "none", cursor: "pointer", position: "relative",
                     }}
                   >
@@ -290,7 +290,7 @@ export const InterviewSetupPage: React.FC = () => {
                   style={{ background: BASE, boxShadow: nm(false) }}
                 >
                   <span className="text-[11px]">{hasProfile ? "✓" : "💡"}</span>
-                  <p className="text-[8px] font-semibold" style={{ color: hasProfile ? "#c8894a" : "rgba(255,255,255,0.38)" }}>
+                  <p className="text-[8px] font-semibold" style={{ color: hasProfile ? "#eb9245" : "rgba(255,255,255,0.38)" }}>
                     {hasProfile ? "Profile saved — AI speaks as you" : "AI speaks as you using your profile."}
                   </p>
                 </div>
@@ -362,7 +362,7 @@ export const InterviewSetupPage: React.FC = () => {
           {/* Footer */}
           <div className="px-3 pb-3 pt-2" style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
             {!isReady && activeTab === "profile" && (
-              <p className="text-[8px] font-semibold text-center mb-1.5 flex items-center justify-center gap-1" style={{ color: "rgba(200,137,74,0.6)" }}>
+              <p className="text-[8px] font-semibold text-center mb-1.5 flex items-center justify-center gap-1" style={{ color: "rgba(235,146,69,0.6)" }}>
                 ⚠ Fill Company & Position in Session tab first
               </p>
             )}
@@ -372,10 +372,10 @@ export const InterviewSetupPage: React.FC = () => {
               onClick={handleContinue} disabled={!isReady}
               className="w-full py-2.5 rounded-[12px] text-[12px] font-extrabold flex items-center justify-center gap-2 transition-all"
               style={{
-                background: isReady ? "linear-gradient(135deg, #c8894a 0%, #b27838 100%)" : BASE,
+                background: isReady ? "linear-gradient(135deg, #eb9245 0%, #d97706 100%)" : BASE,
                 color: isReady ? "#fff" : "rgba(255,255,255,0.2)",
                 boxShadow: isReady
-                  ? "4px 4px 12px rgba(0,0,0,0.5), -2px -2px 6px rgba(255,255,255,0.04), 0 0 18px rgba(200,137,74,0.28)"
+                  ? "4px 4px 12px rgba(0,0,0,0.5), -2px -2px 6px rgba(255,255,255,0.04), 0 0 18px rgba(235,146,69,0.28)"
                   : nm(false),
                 border: "none",
                 cursor: isReady ? "pointer" : "not-allowed",
