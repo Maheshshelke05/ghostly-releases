@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useStore } from "../store/useStore";
 
-const BASE = "#1b1b26";
+const BASE = "#1c1917";
 const nm = (raised = true) =>
   raised
     ? "6px 6px 14px rgba(0,0,0,0.55), -3px -3px 8px rgba(255,255,255,0.04)"
@@ -95,7 +95,7 @@ export const AudioSetupPage: React.FC = () => {
 
   const STATUS_COLOR = {
     idle:    "rgba(255,255,255,0.28)",
-    testing: "#eb9245",
+    testing: "#c8894a",
     ok:      "#22c55e",
     error:   "#f87171",
   };
@@ -123,8 +123,8 @@ export const AudioSetupPage: React.FC = () => {
             <div
               className="w-8 h-8 rounded-[11px] flex items-center justify-center text-[15px] shrink-0"
               style={{
-                background: "linear-gradient(135deg, #eb9245, #d97706)",
-                boxShadow: "4px 4px 12px rgba(0,0,0,0.5), -2px -2px 6px rgba(255,255,255,0.04), 0 0 16px rgba(235,146,69,0.28)",
+                background: "linear-gradient(135deg, #c8894a, #b27838)",
+                boxShadow: "4px 4px 12px rgba(0,0,0,0.5), -2px -2px 6px rgba(255,255,255,0.04), 0 0 16px rgba(200,137,74,0.28)",
               }}
             >🎙️</div>
             <div>
@@ -159,7 +159,7 @@ export const AudioSetupPage: React.FC = () => {
                 style={{
                   background: BASE,
                   boxShadow: micDropOpen
-                    ? `${nm(false)}, 0 0 0 1.5px rgba(235,146,69,0.4)`
+                    ? `${nm(false)}, 0 0 0 1.5px rgba(200,137,74,0.4)`
                     : nm(false),
                   color: "rgba(255,255,255,0.75)", border: "none",
                 }}
@@ -168,7 +168,7 @@ export const AudioSetupPage: React.FC = () => {
                   {/* Animated mic ring */}
                   <div
                     className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 relative"
-                    style={{ background: BASE, boxShadow: testing ? `${nm(false)}, 0 0 0 1.5px rgba(235,146,69,0.5)` : nm() }}
+                    style={{ background: BASE, boxShadow: testing ? `${nm(false)}, 0 0 0 1.5px rgba(200,137,74,0.5)` : nm() }}
                   >
                     {testing && <div className="absolute inset-0 rounded-full border-2 border-orange-400/30 animate-ping" />}
                     <span className="text-[11px] relative z-10">{testing ? "🔴" : "🎤"}</span>
@@ -203,15 +203,15 @@ export const AudioSetupPage: React.FC = () => {
                             onClick={() => { setSelectedMic(id); handleReset(); setMicDropOpen(false); }}
                             className="w-full text-left px-3 py-2 flex items-center justify-between transition-all"
                             style={{
-                              background: isSel ? "rgba(235,146,69,0.08)" : "transparent",
-                              color: isSel ? "#eb9245" : "rgba(255,255,255,0.55)",
+                              background: isSel ? "rgba(200,137,74,0.08)" : "transparent",
+                              color: isSel ? "#c8894a" : "rgba(255,255,255,0.55)",
                               borderBottom: idx < microphones.length ? "1px solid rgba(255,255,255,0.03)" : "none",
                             }}
                             onMouseEnter={e => { if (!isSel) e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
                             onMouseLeave={e => { if (!isSel) e.currentTarget.style.background = "transparent"; }}
                           >
                             <span className="text-[11px] font-bold truncate pr-3">{label}</span>
-                            {isSel && <span className="text-[9px] font-black shrink-0" style={{ color: "#eb9245" }}>✓</span>}
+                            {isSel && <span className="text-[9px] font-black shrink-0" style={{ color: "#c8894a" }}>✓</span>}
                           </button>
                         );
                       })}
@@ -242,11 +242,11 @@ export const AudioSetupPage: React.FC = () => {
                           style={{
                             minHeight: "3px", maxHeight: "32px",
                             background: h > 40
-                              ? "linear-gradient(to top, #eb9245, #fbbf24)"
+                              ? "linear-gradient(to top, #c8894a, #d9a877)"
                               : h > 15
-                              ? "rgba(235,146,69,0.45)"
+                              ? "rgba(200,137,74,0.45)"
                               : "rgba(255,255,255,0.08)",
-                            boxShadow: h > 40 ? "0 0 6px rgba(235,146,69,0.4)" : "none",
+                            boxShadow: h > 40 ? "0 0 6px rgba(200,137,74,0.4)" : "none",
                           }}
                         />
                       ))}
@@ -263,20 +263,20 @@ export const AudioSetupPage: React.FC = () => {
                           className="h-full rounded-full"
                           style={{
                             background: micLevel > 60
-                              ? "linear-gradient(90deg, #eb9245, #fbbf24)"
+                              ? "linear-gradient(90deg, #c8894a, #d9a877)"
                               : micLevel > 25
-                              ? "rgba(235,146,69,0.55)"
+                              ? "rgba(200,137,74,0.55)"
                               : "rgba(255,255,255,0.15)",
-                            boxShadow: micLevel > 40 ? "0 0 8px rgba(235,146,69,0.35)" : "none",
+                            boxShadow: micLevel > 40 ? "0 0 8px rgba(200,137,74,0.35)" : "none",
                           }}
                         />
                       </div>
                     </div>
                     {testing && (
-                      <p className="text-[8px] font-semibold text-center flex items-center justify-center gap-1.5" style={{ color: "rgba(235,146,69,0.65)" }}>
+                      <p className="text-[8px] font-semibold text-center flex items-center justify-center gap-1.5" style={{ color: "rgba(200,137,74,0.65)" }}>
                         <motion.span
                           animate={{ scale: [1, 1.4, 1] }} transition={{ duration: 0.8, repeat: Infinity }}
-                          className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: "#eb9245" }}
+                          className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: "#c8894a" }}
                         />
                         Speak aloud to test
                       </p>
@@ -322,13 +322,13 @@ export const AudioSetupPage: React.FC = () => {
                 style={{
                   background: testDone
                     ? BASE
-                    : "linear-gradient(135deg, #eb9245 0%, #d97706 100%)",
+                    : "linear-gradient(135deg, #c8894a 0%, #b27838 100%)",
                   color: testDone ? "#22c55e" : "#fff",
                   boxShadow: testDone
                     ? `${nm(false)}, 0 0 0 1.5px rgba(34,197,94,0.3)`
                     : testing
                     ? nm(false)
-                    : "4px 4px 12px rgba(0,0,0,0.5), -2px -2px 6px rgba(255,255,255,0.04), 0 0 16px rgba(235,146,69,0.28)",
+                    : "4px 4px 12px rgba(0,0,0,0.5), -2px -2px 6px rgba(255,255,255,0.04), 0 0 16px rgba(200,137,74,0.28)",
                   border: "none",
                 }}
               >
@@ -355,7 +355,7 @@ export const AudioSetupPage: React.FC = () => {
             <div className="flex items-start gap-2 px-2.5 py-2 rounded-[10px]" style={{ background: BASE, boxShadow: nm(false) }}>
               <span className="text-[12px] shrink-0">🎧</span>
               <p className="text-[8px] font-medium leading-relaxed" style={{ color: "rgba(255,255,255,0.38)" }}>
-                Captures <b style={{ color: "rgba(235,146,69,0.75)" }}>all system audio</b> — Zoom, Meet, Teams transcribed automatically.
+                Captures <b style={{ color: "rgba(200,137,74,0.75)" }}>all system audio</b> — Zoom, Meet, Teams transcribed automatically.
               </p>
             </div>
           </div>
@@ -367,10 +367,10 @@ export const AudioSetupPage: React.FC = () => {
               onClick={handleActivate}
               className="w-full py-2.5 rounded-[12px] text-[12px] font-extrabold flex items-center justify-center gap-2 transition-all"
               style={{
-                background: testDone ? "linear-gradient(135deg, #eb9245 0%, #d97706 100%)" : BASE,
+                background: testDone ? "linear-gradient(135deg, #c8894a 0%, #b27838 100%)" : BASE,
                 color: testDone ? "#fff" : "rgba(255,255,255,0.28)",
                 boxShadow: testDone
-                  ? "4px 4px 12px rgba(0,0,0,0.5), -2px -2px 6px rgba(255,255,255,0.04), 0 0 18px rgba(235,146,69,0.28)"
+                  ? "4px 4px 12px rgba(0,0,0,0.5), -2px -2px 6px rgba(255,255,255,0.04), 0 0 18px rgba(200,137,74,0.28)"
                   : nm(false),
                 border: "none",
               }}

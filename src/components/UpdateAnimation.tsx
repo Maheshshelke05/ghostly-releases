@@ -88,8 +88,8 @@ export const UpdateAnimation: React.FC<UpdateAnimationProps> = ({ status, progre
           emoji: "👻",
           title: "Ghostly AI",
           subtitle: "Ready",
-          color: "#eb9245",
-          glow: "rgba(235, 146, 69, 0.5)",
+          color: "#c8894a",
+          glow: "rgba(200,137,74, 0.5)",
         };
     }
   };
