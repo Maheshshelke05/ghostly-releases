@@ -61,11 +61,11 @@ function createMainWindow(): BrowserWindow {
     minHeight: 300,
     x: Math.floor((primary.width - 700) / 2),
     y: isDev ? 100 : 0,
-    transparent: true,
-    frame: false,
+    transparent: !isDev,
+    frame: isDev,
     alwaysOnTop: !isDev,
     skipTaskbar: true,
-    hasShadow: false,
+    hasShadow: isDev,
     resizable: true,
     show: false,
     webPreferences: {
@@ -145,8 +145,6 @@ if (!gotTheLock) {
 
   // ── App ready ───────────────────────────────────────────────────────────────
   app.whenReady().then(() => {
-    Menu.setApplicationMenu(null);
-
     // Register deep link protocol
     if (process.defaultApp && process.argv.length >= 2) {
       app.setAsDefaultProtocolClient("ghostly", process.execPath, [path.resolve(process.argv[1])]);
