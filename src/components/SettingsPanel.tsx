@@ -76,12 +76,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
       >
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
-          <span className="text-[15px] font-bold tracking-[-0.3px]" style={{ color: "#0f172a" }}>Settings</span>
+          <span className="text-[15px] font-bold tracking-[-0.3px]" style={{ color: "#1c1917" }}>Settings</span>
           <button onClick={onClose}
             className="w-7 h-7 flex items-center justify-center rounded-full text-[14px] transition-all"
-            style={{ background: "#f1f5f9", color: "#64748b" }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = "#e2e8f0"; e.currentTarget.style.color = "#334155"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = "#f1f5f9"; e.currentTarget.style.color = "#64748b"; }}>
+            style={{ background: "#f5f5f4", color: "#78716c" }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "#e7e5e4"; e.currentTarget.style.color = "#44403c"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "#f5f5f4"; e.currentTarget.style.color = "#78716c"; }}>
             ✕
           </button>
         </div>
@@ -97,9 +97,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
         </div>
 
         {/* Opacity Slider */}
-        <div className="mb-4 p-3 rounded-[14px]" style={{ background: "#f8fafc", border: "1.5px solid #e2e8f0" }}>
+        <div className="mb-4 p-3 rounded-[14px]" style={{ background: "#fafaf9", border: "1.5px solid #e7e5e4" }}>
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-semibold" style={{ color: "#334155" }}>Window Opacity</span>
+            <span className="text-[11px] font-semibold" style={{ color: "#44403c" }}>Window Opacity</span>
             <span className="text-[11px] font-bold font-mono" style={{ color: "#0d9488" }}>
               {Math.round((settings.opacity ?? 1) * 100)}%
             </span>
@@ -117,25 +117,25 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
           />
         </div>
 
-        <div className="h-px mb-4" style={{ background: "#f1f5f9" }} />
+        <div className="h-px mb-4" style={{ background: "#f5f5f4" }} />
 
         {/* Keyboard Shortcuts */}
         <div className="mb-4">
-          <p className="text-[10px] font-bold uppercase tracking-widest mb-2.5" style={{ color: "#94a3b8" }}>
+          <p className="text-[10px] font-bold uppercase tracking-widest mb-2.5" style={{ color: "#a8a29e" }}>
             Keyboard Shortcuts
           </p>
           <div className="flex flex-col gap-1.5">
             {SHORTCUTS.map((s) => (
               <div key={s.label} className="flex items-center justify-between py-1 px-2 rounded-lg"
                 style={{ background: "transparent" }}
-                onMouseEnter={(e) => (e.currentTarget as HTMLDivElement).style.background = "#f8fafc"}
+                onMouseEnter={(e) => (e.currentTarget as HTMLDivElement).style.background = "#fafaf9"}
                 onMouseLeave={(e) => (e.currentTarget as HTMLDivElement).style.background = "transparent"}>
-                <span className="text-[12px] font-medium" style={{ color: "#475569" }}>{s.label}</span>
+                <span className="text-[12px] font-medium" style={{ color: "#57534e" }}>{s.label}</span>
                 <div className="flex items-center gap-1">
                   {s.keys.map((k, i) => (
                     <kbd key={`${k}-${i}`}
                       className="px-2 py-0.5 rounded-md text-[10px] font-bold font-mono"
-                      style={{ background: "#f1f5f9", border: "1.5px solid #e2e8f0", color: "#475569", boxShadow: "0 1px 0 #e2e8f0" }}>
+                      style={{ background: "#f5f5f4", border: "1.5px solid #e7e5e4", color: "#57534e", boxShadow: "0 1px 0 #e7e5e4" }}>
                       {k}
                     </kbd>
                   ))}
@@ -147,7 +147,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
 
         {/* API Keys */}
         <div className="mb-2">
-          <p className="text-[10px] font-bold uppercase tracking-widest mb-2.5" style={{ color: "#94a3b8" }}>
+          <p className="text-[10px] font-bold uppercase tracking-widest mb-2.5" style={{ color: "#a8a29e" }}>
             API Keys
           </p>
           <div className="flex flex-col gap-2">
@@ -165,7 +165,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
                   onChange={e => handleKeySave("deepgram", e.target.value)}
                   placeholder="Deepgram API key…"
                   className="w-full rounded-[10px] px-3 pr-8 py-2 text-[11px] font-mono focus:outline-none"
-                  style={{ border: "1.5px solid #e2e8f0", background: "#f8fafc", color: "#0f172a" }}
+                  style={{ border: "1.5px solid #e7e5e4", background: "#fafaf9", color: "#1c1917" }}
                 />
                 <button onClick={() => setShowKeys(s => ({ ...s, deepgram: !s["deepgram"] }))}
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-slate-400">{
@@ -188,7 +188,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
                     onChange={e => handleKeySave(p.id, e.target.value)}
                     placeholder={p.ph}
                     className="w-full rounded-[10px] px-3 pr-8 py-2 text-[11px] font-mono focus:outline-none"
-                    style={{ border: "1.5px solid #e2e8f0", background: "#f8fafc", color: "#0f172a" }}
+                    style={{ border: "1.5px solid #e7e5e4", background: "#fafaf9", color: "#1c1917" }}
                   />
                   <button onClick={() => setShowKeys(s => ({ ...s, [p.id]: !s[p.id] }))}
                     className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-slate-400">{
@@ -203,8 +203,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
         {/* ── OpenRouter Model Picker ── */}
         {localKeys["openrouter"] && (
           <div className="mt-4">
-            <div className="h-px mb-3" style={{ background: "#f1f5f9" }} />
-            <p className="text-[10px] font-bold uppercase tracking-widest mb-2.5" style={{ color: "#94a3b8" }}>
+            <div className="h-px mb-3" style={{ background: "#f5f5f4" }} />
+            <p className="text-[10px] font-bold uppercase tracking-widest mb-2.5" style={{ color: "#a8a29e" }}>
               🔀 OpenRouter — Free Models
             </p>
             <p className="text-[9px] text-slate-400 mb-2 font-medium leading-relaxed">
@@ -222,11 +222,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
                     }}
                     className="flex items-center justify-between px-3 py-2 rounded-[10px] text-left transition-all"
                     style={{
-                      background: isActive ? "#f0fdf4" : "#f8fafc",
-                      border: `1.5px solid ${isActive ? "#86efac" : "#e2e8f0"}`,
+                      background: isActive ? "#f0fdf4" : "#fafaf9",
+                      border: `1.5px solid ${isActive ? "#86efac" : "#e7e5e4"}`,
                     }}
-                    onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = "#f1f5f9"; }}
-                    onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = "#f8fafc"; }}
+                    onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = "#f5f5f4"; }}
+                    onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = "#fafaf9"; }}
                   >
                     <div className="flex-1 min-w-0">
                       <p className="text-[11px] font-bold text-slate-700 leading-tight">{m.name}</p>

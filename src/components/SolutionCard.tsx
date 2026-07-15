@@ -61,7 +61,7 @@ export const SolutionCard: React.FC<SolutionCardProps> = ({
                 </span>
                 <button
                   onClick={() => copyToClipboard(codeString, blockId)}
-                  className="text-[10px] font-medium text-white/30 hover:text-[#eb9245] transition-colors px-2 py-1 rounded-lg hover:bg-white/[0.05]"
+                  className="text-[10px] font-medium text-white/30 hover:text-[#c8894a] transition-colors px-2 py-1 rounded-lg hover:bg-white/[0.05]"
                 >
                   {copiedBlock === blockId ? "✓ Copied" : "Copy"}
                 </button>
@@ -88,7 +88,7 @@ export const SolutionCard: React.FC<SolutionCardProps> = ({
         return (
           <code
             className="px-2 py-0.5 rounded-md text-[12px] font-medium"
-            style={{ background: "rgba(235,146,69,0.15)", color: "#f5a55a", fontFamily: "'JetBrains Mono', monospace", userSelect: "text", WebkitUserSelect: "text" } as React.CSSProperties}
+            style={{ background: "rgba(200,137,74,0.15)", color: "#d9a877", fontFamily: "'JetBrains Mono', monospace", userSelect: "text", WebkitUserSelect: "text" } as React.CSSProperties}
             {...props}
           >
             {children}
@@ -141,7 +141,7 @@ export const SolutionCard: React.FC<SolutionCardProps> = ({
       ),
       blockquote: ({ children, ...props }: React.HTMLAttributes<HTMLElement>) => (
         <blockquote
-          className="border-l-[3px] border-[#eb9245] bg-[#eb9245]/[0.08] px-4 py-3 rounded-r-xl my-4 [&>p]:text-white/85 [&>p]:font-normal [&>p]:mb-0 [&>p>strong]:text-[#eb9245] [&>p>strong]:font-bold"
+          className="border-l-[3px] border-[#c8894a] bg-[#c8894a]/[0.08] px-4 py-3 rounded-r-xl my-4 [&>p]:text-white/85 [&>p]:font-normal [&>p]:mb-0 [&>p>strong]:text-[#c8894a] [&>p>strong]:font-bold"
           style={{ fontFamily: "'Inter', -apple-system, sans-serif", userSelect: "text", WebkitUserSelect: "text" } as React.CSSProperties}
           {...props}
         >
@@ -167,7 +167,7 @@ export const SolutionCard: React.FC<SolutionCardProps> = ({
         </ol>
       ),
       li: ({ children, ...props }: React.HTMLAttributes<HTMLLIElement>) => (
-        <li className="text-[13px] text-white/75 flex items-start gap-2 before:content-['•'] before:text-[#eb9245] before:font-bold before:text-[16px] before:leading-[1.3]" style={{ fontFamily: "'Inter', -apple-system, sans-serif", userSelect: "text", WebkitUserSelect: "text" } as React.CSSProperties} {...props}>
+        <li className="text-[13px] text-white/75 flex items-start gap-2 before:content-['•'] before:text-[#c8894a] before:font-bold before:text-[16px] before:leading-[1.3]" style={{ fontFamily: "'Inter', -apple-system, sans-serif", userSelect: "text", WebkitUserSelect: "text" } as React.CSSProperties} {...props}>
           <span>{children}</span>
         </li>
       ),
@@ -193,7 +193,7 @@ export const SolutionCard: React.FC<SolutionCardProps> = ({
           rehypePlugins={[rehypeRaw]}
           components={components as any}
         >
-          {content + (isStreaming ? " <span class=\"text-[#eb9245] animate-pulse ml-1 inline-block\">▍</span>" : "")}
+          {content + (isStreaming ? " <span class=\"text-[#c8894a] animate-pulse ml-1 inline-block\">▍</span>" : "")}
         </ReactMarkdown>
       </div>
 
@@ -201,7 +201,7 @@ export const SolutionCard: React.FC<SolutionCardProps> = ({
         <div className="mt-4 pt-3 border-t border-white/[0.06] flex justify-end">
           <button
             onClick={() => copyToClipboard(content, "full")}
-            className="text-[11px] font-medium text-white/40 hover:text-[#eb9245] transition-colors px-3 py-1.5 rounded-lg hover:bg-white/[0.05]"
+            className="text-[11px] font-medium text-white/40 hover:text-[#c8894a] transition-colors px-3 py-1.5 rounded-lg hover:bg-white/[0.05]"
           >
             {copiedBlock === "full" ? "✓ Copied All" : "📋 Copy All"}
           </button>

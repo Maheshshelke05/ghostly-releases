@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useStore } from "../store/useStore";
 
-const BASE = "#1b1b26";
+const BASE = "#1c1917";
 const nm = (raised = true) =>
   raised
     ? "6px 6px 14px rgba(0,0,0,0.55), -3px -3px 8px rgba(255,255,255,0.04)"
@@ -65,13 +65,13 @@ export const LoginPage: React.FC = () => {
                 className="w-14 h-14 rounded-[16px] flex items-center justify-center text-[26px] relative"
                 style={{
                   background: BASE,
-                  boxShadow: `${nm()}, 0 0 0 1px rgba(255,255,255,0.02), 0 0 20px rgba(235,146,69,0.1)`,
+                  boxShadow: `${nm()}, 0 0 0 1px rgba(255,255,255,0.02), 0 0 20px rgba(200,137,74,0.1)`,
                 }}
               >
                 👻
                 <span
                   className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full"
-                  style={{ background: "#22c55e", border: "2px solid #1b1b26", boxShadow: "0 0 6px rgba(34,197,94,0.7)" }}
+                  style={{ background: "#22c55e", border: "2px solid #1c1917", boxShadow: "0 0 6px rgba(34,197,94,0.7)" }}
                 />
               </motion.div>
               <div className="text-center">
@@ -83,7 +83,7 @@ export const LoginPage: React.FC = () => {
             </div>
 
             {/* Divider */}
-            <div className="w-full h-px bg-[#0d0d14]/40" />
+            <div className="w-full h-px bg-[#0c0a09]/40" />
 
             {/* Feature pills */}
             <div className="w-full flex flex-col gap-1.5">
@@ -104,7 +104,7 @@ export const LoginPage: React.FC = () => {
             </div>
 
             {/* Permissions Guide */}
-            <div className="w-full rounded-[10px] px-2.5 py-2 border-l-[3px] border-l-[#eb9245]" style={{ background: BASE, boxShadow: nm(false) }}>
+            <div className="w-full rounded-[10px] px-2.5 py-2 border-l-[3px] border-l-[#c8894a]" style={{ background: BASE, boxShadow: nm(false) }}>
               <p className="text-[7.5px] font-black uppercase tracking-[0.1em] mb-1 text-orange-400/80 font-sans">⚙️ Permissions Guide</p>
               <div className="flex flex-col gap-0.5">
                 {[
@@ -123,7 +123,7 @@ export const LoginPage: React.FC = () => {
             </div>
 
             {/* Divider */}
-            <div className="w-full h-px bg-[#0d0d14]/40" />
+            <div className="w-full h-px bg-[#0c0a09]/40" />
 
             {/* CTA */}
             <div className="w-full flex flex-col gap-2">
@@ -152,11 +152,11 @@ export const LoginPage: React.FC = () => {
                   onMouseLeave={() => setBtnHovered(false)}
                   className="w-full py-2.5 rounded-[11px] flex items-center justify-center gap-2 relative overflow-hidden outline-none border-none font-sans"
                   style={{
-                    background: "linear-gradient(135deg, #eb9245 0%, #d97706 100%)",
+                    background: "linear-gradient(135deg, #c8894a 0%, #b27838 100%)",
                     color: "#fff",
                     boxShadow: btnHovered
                       ? nm(false)
-                      : "4px 4px 12px rgba(0,0,0,0.5), -2px -2px 6px rgba(255,255,255,0.04), 0 0 16px rgba(235,146,69,0.2)",
+                      : "4px 4px 12px rgba(0,0,0,0.5), -2px -2px 6px rgba(255,255,255,0.04), 0 0 16px rgba(200,137,74,0.2)",
                   }}
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24">

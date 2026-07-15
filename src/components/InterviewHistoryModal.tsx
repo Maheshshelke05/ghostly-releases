@@ -23,7 +23,7 @@ interface InterviewRecord {
   qaHistory?: QAPair[];
 }
 
-const BASE = "#1b1b26";
+const BASE = "#1c1917";
 const nm = (raised = true) =>
   raised
     ? "6px 6px 14px rgba(0,0,0,0.55), -3px -3px 8px rgba(255,255,255,0.04)"
@@ -32,7 +32,7 @@ const nm = (raised = true) =>
 const FEATURE_LABELS: Record<string, { icon: string; label: string; color: string; bg: string; border: string }> = {
   "ai-answer": { icon: "🎙️", label: "AI Answer",    color: "#4ade80", bg: "rgba(34,197,94,0.1)", border: "rgba(34,197,94,0.2)" },
   "screen":    { icon: "🖥️", label: "Screen AI",    color: "#60a5fa", bg: "rgba(96,165,250,0.1)", border: "rgba(96,165,250,0.2)" },
-  "chat":      { icon: "💬", label: "AI Chat",       color: "#f97316", bg: "rgba(249,115,22,0.1)", border: "rgba(249,115,22,0.2)" },
+  "chat":      { icon: "💬", label: "AI Chat",       color: "#c8894a", bg: "rgba(200,137,74,0.1)", border: "rgba(200,137,74,0.2)" },
   "follow-up": { icon: "🔄", label: "Follow-up",     color: "#a78bfa", bg: "rgba(167,139,250,0.1)", border: "rgba(167,139,250,0.2)" },
 };
 
@@ -135,7 +135,7 @@ export const InterviewHistoryModal: React.FC<Props> = ({ open, onClose }) => {
               onMouseEnter={() => window.ghostly.enableMouse()}
             >
               {/* Header */}
-              <div className="flex items-center justify-between px-6 py-5 border-b border-[#0d0d14]/40 relative z-10" style={{ flexShrink: 0 }}>
+              <div className="flex items-center justify-between px-6 py-5 border-b border-[#0c0a09]/40 relative z-10" style={{ flexShrink: 0 }}>
                 <div className="flex items-center gap-4">
                   {selected && (
                     <button
@@ -199,7 +199,7 @@ export const InterviewHistoryModal: React.FC<Props> = ({ open, onClose }) => {
               <div className="flex-1 min-h-0 overflow-y-auto" style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.1) transparent" }}>
                 {loading ? (
                   <div className="flex items-center justify-center py-20 gap-3">
-                    <svg className="animate-spin" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#eb9245" strokeWidth="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                    <svg className="animate-spin" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c8894a" strokeWidth="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
                     <span className="text-[13px] font-bold text-white/40">Loading history…</span>
                   </div>
                 ) : records.length === 0 ? (
@@ -255,7 +255,7 @@ export const InterviewHistoryModal: React.FC<Props> = ({ open, onClose }) => {
                               )}
                               <div className="flex items-center gap-2 mt-2.5 flex-wrap">
                                 <span className="text-[10px] font-black px-2 py-0.5 rounded-md"
-                                  style={{ background: BASE, color: "#eb9245", boxShadow: nm(false) }}>
+                                  style={{ background: BASE, color: "#c8894a", boxShadow: nm(false) }}>
                                   {TYPE_LABELS[rec.interviewType] || rec.interviewType}
                                 </span>
                                 {rec.featuresUsed?.map(f => (
@@ -401,9 +401,9 @@ const DetailView: React.FC<{
                           <p className="text-[13px] text-white/80 leading-relaxed font-semibold">{qa.question}</p>
                         </div>
                         {/* Answer */}
-                        <div className="rounded-[12px] p-4 relative overflow-hidden border-l-[3px] border-l-[#eb9245]" style={{ background: BASE, boxShadow: nm(false) }}>
+                        <div className="rounded-[12px] p-4 relative overflow-hidden border-l-[3px] border-l-[#c8894a]" style={{ background: BASE, boxShadow: nm(false) }}>
                           <div className="flex items-center justify-between mb-3">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-[#eb9245] font-sans">🤖 Ghostly AI Answer</p>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-[#c8894a] font-sans">🤖 Ghostly AI Answer</p>
                             <button onClick={() => copyText(qa.answer, i)}
                               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all outline-none"
                               style={{
