@@ -320,7 +320,7 @@ export const Home: React.FC = () => {
       else if (screenshotList.length) featuresUsedRef.current.add("screen");
 
       // Save Q&A to session history
-      const questionText = transcriptOverride || followUpQuery || "Screen Analysis";
+      const questionText = transcriptOverride || (followUpQuery && !followUpQuery.includes("staff engineer") ? followUpQuery : "Screen Analysis");
       const featureTag = transcriptOverride ? "ai-answer" : screenshotList.length ? "screen" : "follow-up";
       sessionQARef.current.push({ question: questionText, answer: fullSolution, feature: featureTag, timestamp: Date.now() });
 
@@ -334,10 +334,13 @@ export const Home: React.FC = () => {
         });
       }
 
-      addSessionMessage({ id: uuidv4(), role: "user", content: prompt, screenshotBase64: latestScreenshot });
+      addSessionMessage({ id: uuidv4(), role: "user", content: questionText, screenshotBase64: latestScreenshot });
       addSessionMessage({ id: uuidv4(), role: "assistant", content: fullSolution });
 
-      // NOTE: Individual entries no longer saved here — full session saved on End button via saveSessionToHistory
+      // Clear streaming buffer on completion to prevent duplicate pagination count
+      if (!liveActive) {
+        clearSolution();
+      }
 
     } catch (err) {
       if (signal.aborted) return;
@@ -384,7 +387,7 @@ export const Home: React.FC = () => {
     if (!audio.isModelReady) {
       setError(audio.downloadProgress !== null
         ? `Transcription engine downloading (${audio.downloadProgress}%). Please wait...`
-        : "Transcription engine initializing. Please wait...");
+        : "Deepgram API key missing — add it in Api Setup.");
       return;
     }
     // Reset session tracking when starting fresh
@@ -422,13 +425,24 @@ export const Home: React.FC = () => {
   // ── Screen Analysis ─────────────────────────────────────────────────────────
   const handleScreenAnalysis = useCallback(async () => {
     try {
+      // Abort any ongoing AI stream first
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+        setIsStreaming(false);
+      }
+      // Pause live audio mode if currently running so feature calls never collide
+      if (liveActive) {
+        audio.stopInterview();
+        setLiveActive(false);
+      }
+      clearSolution();
       const b64 = await window.ghostly.captureFullscreen();
       addScreenshot(b64);
-      // Use proper buildPrompt with interviewType and language settings
       const screenPrompt = buildPrompt(settings.interviewType, settings.language);
       runAIStream([b64], undefined, screenPrompt);
     } catch { setError("Failed to capture screen."); }
-  }, [runAIStream, setError, settings.interviewType, settings.language, addScreenshot]);
+  }, [runAIStream, setError, settings.interviewType, settings.language, addScreenshot, liveActive, audio, clearSolution, setIsStreaming]);
 
   // ── Tab change ──────────────────────────────────────────────────────────────
   const supportAd = useMemo(() => ads.find((ad) => ad.is_active && ad.script_url && ad.container_id), [ads]);
@@ -483,9 +497,25 @@ export const Home: React.FC = () => {
   };
 
   const handleTabChange = useCallback((tab: "ai" | "screen" | "chat" | "support") => {
+    // Abort any active AI stream when switching tabs to avoid feature collisions
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+      setIsStreaming(false);
+    }
+
+    // Stop live audio listening when switching away from AI Answer tab
+    if (tab !== "ai" && liveActive) {
+      audio.stopInterview();
+      setLiveActive(false);
+    }
+
     setActiveTab(tab);
-    if (tab === "screen") handleScreenAnalysis();
-  }, [handleScreenAnalysis]);
+
+    if (tab === "screen") {
+      handleScreenAnalysis();
+    }
+  }, [handleScreenAnalysis, liveActive, audio, setIsStreaming]);
 
   // ── Normal mode QA pairs — Fix #17: only recalc when streaming done, not every chunk
   const sessionMessagesForPairs = isStreaming ? undefined : sessionMessages;
@@ -510,12 +540,15 @@ export const Home: React.FC = () => {
   }));
 
   const livePageIndex = pages.length;
-  const totalPages = pages.length + (liveActive && (audio.liveText || pendingTranscript || isStreaming || currentSolution) ? 1 : 0)
-    + (!liveActive && (isStreaming || currentSolution) ? 1 : 0);
+  const totalPages = liveActive
+    ? pages.length + (audio.liveText || pendingTranscript || isStreaming || currentSolution ? 1 : 0)
+    : activeTab === "screen"
+      ? (isStreaming || currentSolution || pages.length > 0 ? 1 : 0)
+      : Math.max(1, pages.length + (isStreaming ? 1 : 0));
 
-  const isOnLivePage = pageIndex >= pages.length;
+  const isOnLivePage = activeTab === "screen" ? false : pageIndex >= pages.length;
   // Fix: clamp pageIndex to prevent out-of-bounds blank screen
-  const safePageIndex = Math.min(pageIndex, Math.max(0, pages.length - 1));
+  const safePageIndex = activeTab === "screen" ? 0 : Math.min(pageIndex, Math.max(0, pages.length - 1));
   const activePage = !isOnLivePage ? (pages[safePageIndex] ?? null) : null;
 
   // In live mode: current screen = pendingTranscript + currentSolution (same screen)
@@ -648,19 +681,12 @@ export const Home: React.FC = () => {
     }
   }, [chatStreaming, chatMessages, settings]);
 
-  // Force show window, opacity 1, enable mouse, and auto-start live mode on mount
+  // Force show window, opacity 1, and enable mouse on mount when entering interview screen
   useEffect(() => {
     window.ghostly.setOpacity(1);
     window.ghostly.show();
     window.ghostly.enableMouse();
-
-    if (sessionStorage.getItem("ghostly_autostart") === "true") {
-      sessionStorage.removeItem("ghostly_autostart");
-      setTimeout(() => {
-        handleToggleLive();
-      }, 250);
-    }
-  }, [handleToggleLive]);
+  }, []);
 
   // Hotkeys
   useEffect(() => {
@@ -1002,12 +1028,22 @@ export const Home: React.FC = () => {
                         </p>
                       </div>
                       {!audio.isModelReady && (
-                        <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 border border-blue-500/20 rounded-full mt-2">
-                          <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" />
-                          <span className="text-[10px] text-blue-400/80">
-                            {audio.downloadProgress !== null ? `Loading engine... ${audio.downloadProgress}%` : "Initializing audio engine..."}
-                          </span>
-                        </div>
+                        audio.downloadProgress !== null ? (
+                          <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 border border-blue-500/20 rounded-full mt-2">
+                            <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" />
+                            <span className="text-[10px] text-blue-400/80">
+                              {`Loading engine... ${audio.downloadProgress}%`}
+                            </span>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setSettingsOpen(true)}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 border border-amber-500/25 rounded-full mt-2 hover:bg-amber-500/15 transition-colors"
+                          >
+                            <span className="w-1.5 h-1.5 bg-amber-400 rounded-full" />
+                            <span className="text-[10px] text-amber-400/90">Deepgram API key missing — open Settings</span>
+                          </button>
+                        )
                       )}
                     </motion.div>
                   ) : (
@@ -1017,8 +1053,11 @@ export const Home: React.FC = () => {
                       className="flex flex-col gap-5">
 
                       {/* ── Interviewer Question ── */}
-                      {/* In live mode: question is in TopBar ticker — don't repeat it here */}
-                      {!(isOnLivePage && liveActive) && (isOnLivePage ? liveQuestion : activePage?.question) && (
+                      {/* Hide question box for Screen Analysis or system prompt */}
+                      {activeTab !== "screen" && !(isOnLivePage && liveActive) &&
+                        (isOnLivePage ? liveQuestion : activePage?.question) &&
+                        activePage?.question !== "Screen Analysis" &&
+                        !activePage?.question?.includes("staff engineer") && (
                         <div>
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-1.5">
@@ -1035,25 +1074,25 @@ export const Home: React.FC = () => {
                         </div>
                       )}
 
-                      {/* ── AI Answer ── clean main area in live mode ── */}
-                      {(isOnLivePage ? (isStreaming || liveAnswer) : activePage?.answer) && (
+                      {/* ── AI Answer ── clean main area ── */}
+                      {(activeTab === "screen" || (isOnLivePage ? (isStreaming || liveAnswer) : activePage?.answer)) && (
                         <div>
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-1.5">
-                              <span className="text-[10px] font-bold text-[#eb9245]/70 uppercase tracking-widest">🤖 Ghostly AI</span>
-                              {isOnLivePage && isStreaming && (
-                                <span className="w-1.5 h-1.5 bg-[#eb9245] rounded-full animate-pulse" />
+                              <span className="text-[10px] font-bold text-violet-400/80 uppercase tracking-widest">🤖 Ghostly AI Solution</span>
+                              {isStreaming && (
+                                <span className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-pulse" />
                               )}
                             </div>
-                            {!isStreaming && (isOnLivePage ? liveAnswer : activePage?.answer) && (
-                              <CopyButton text={isOnLivePage ? liveAnswer : activePage?.answer || ""} />
+                            {!isStreaming && (
+                              <CopyButton text={activeTab === "screen" ? (currentSolution || activePage?.answer || pages[pages.length - 1]?.answer || "") : (isOnLivePage ? liveAnswer : activePage?.answer || "")} />
                             )}
                           </div>
-                          <div className="rounded-xl overflow-hidden border border-white/[0.05]"
-                            style={{ background: "rgba(8,8,10,0.7)" }}>
+                          <div className="rounded-xl overflow-hidden border border-violet-500/15 shadow-2xl"
+                            style={{ background: "rgba(10,10,14,0.75)" }}>
                             <SolutionCard
-                              content={isOnLivePage ? liveAnswer : (activePage?.answer || "")}
-                              isStreaming={isOnLivePage && isStreaming}
+                              content={activeTab === "screen" ? (currentSolution || activePage?.answer || pages[pages.length - 1]?.answer || "") : (isOnLivePage ? liveAnswer : (activePage?.answer || ""))}
+                              isStreaming={isStreaming}
                             />
                           </div>
                           <div ref={answerEndRef} />

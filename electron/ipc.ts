@@ -149,6 +149,34 @@ export function registerIpcHandlers(): void {
     });
   });
 
+  // NVIDIA key test — cheap GET, no completion tokens spent, same CORS bypass as above
+  ipcMain.handle("nvidia-test-key", async (_event, { apiKey }: { apiKey: string }) => {
+    return new Promise((resolve, reject) => {
+      const options = {
+        hostname: "integrate.api.nvidia.com",
+        port: 443,
+        path: "/v1/models",
+        method: "GET",
+        headers: { "Authorization": `Bearer ${apiKey}` },
+      };
+
+      const req = https.request(options, (res) => {
+        let data = "";
+        res.on("data", (chunk) => { data += chunk; });
+        res.on("end", () => {
+          if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+            resolve({ ok: true, status: res.statusCode, data });
+          } else {
+            resolve({ ok: false, status: res.statusCode, data });
+          }
+        });
+      });
+
+      req.on("error", (error) => reject(error));
+      req.end();
+    });
+  });
+
   // Anthropic API proxy - bypass CORS
   ipcMain.handle("anthropic-api-call", async (_event, { apiKey, body }: { apiKey: string; body: any }) => {
     return new Promise((resolve, reject) => {

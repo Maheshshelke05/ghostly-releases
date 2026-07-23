@@ -51,6 +51,7 @@ export const ApiSetupPage: React.FC = () => {
   const [activeProv, setActiveProv] = useState(settings.activeProvider);
   const [expanded, setExpanded]     = useState<string | null>(null);
   const [deepFocused, setDeepFocused] = useState(false);
+  const [testStatus, setTestStatus] = useState<Record<string, { status: "idle" | "testing" | "valid" | "invalid"; message?: string }>>({});
 
   const hasDeepgram = !!deepgram.trim();
   const filledAI    = AI_PROVIDERS.filter(p => aiKeys[p.id]?.trim());
@@ -61,15 +62,137 @@ export const ApiSetupPage: React.FC = () => {
     if (filledAI.length > 0 && !aiKeys[activeProv]?.trim()) setActiveProv(filledAI[0].id);
   }, [JSON.stringify(aiKeys)]);
 
+  const handleTestKey = async (providerId: string, apiKey: string) => {
+    const key = apiKey.trim();
+    if (!key) {
+      setTestStatus(prev => ({
+        ...prev,
+        [providerId]: { status: "invalid", message: "Enter an API key first" }
+      }));
+      return;
+    }
+
+    setTestStatus(prev => ({
+      ...prev,
+      [providerId]: { status: "testing" }
+    }));
+
+    try {
+      if (providerId === "deepgram") {
+        // Real Deepgram test: send silent WAV buffer to /v1/listen REST endpoint
+        const silentWav = new Uint8Array([
+          0x52,0x49,0x46,0x46, 0x24,0x00,0x00,0x00, 0x57,0x41,0x56,0x45,
+          0x66,0x6d,0x74,0x20, 0x10,0x00,0x00,0x00, 0x01,0x00,0x01,0x00,
+          0x44,0xac,0x00,0x00, 0x88,0x58,0x01,0x00, 0x02,0x00,0x10,0x00,
+          0x64,0x61,0x74,0x61, 0x00,0x00,0x00,0x00
+        ]);
+        const res = await fetch("https://api.deepgram.com/v1/listen?model=nova-2", {
+          method: "POST",
+          headers: {
+            Authorization: `Token ${key}`,
+            "Content-Type": "audio/wav",
+          },
+          body: silentWav,
+        });
+        if (res.ok) {
+          setTestStatus(prev => ({ ...prev, deepgram: { status: "valid", message: "Deepgram Key Valid! ⚡" } }));
+        } else {
+          setTestStatus(prev => ({ ...prev, deepgram: { status: "invalid", message: `Invalid Key (HTTP ${res.status})` } }));
+        }
+      } else if (providerId === "gemini") {
+        // Real Gemini test: actual generateContent call
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: "hi" }] }]
+          })
+        });
+        if (res.ok) {
+          setTestStatus(prev => ({ ...prev, gemini: { status: "valid", message: "Gemini Key Valid! 🔵" } }));
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          const errMsg = errData.error?.message || `Invalid Key (HTTP ${res.status})`;
+          setTestStatus(prev => ({ ...prev, gemini: { status: "invalid", message: errMsg.length > 25 ? "Invalid Gemini Key" : errMsg } }));
+        }
+      } else if (providerId === "groq") {
+        // Real Groq test: 1-token chat completion call
+        const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${key}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "llama-3.3-70b-versatile",
+            messages: [{ role: "user", content: "hi" }],
+            max_tokens: 1,
+          })
+        });
+        if (res.ok) {
+          setTestStatus(prev => ({ ...prev, groq: { status: "valid", message: "Groq Key Valid! ⚡" } }));
+        } else {
+          setTestStatus(prev => ({ ...prev, groq: { status: "invalid", message: `Invalid Key (HTTP ${res.status})` } }));
+        }
+      } else if (providerId === "openrouter") {
+        // Real OpenRouter test: auth check endpoint
+        const res = await fetch("https://openrouter.ai/api/v1/auth/key", {
+          headers: { Authorization: `Bearer ${key}` },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data?.data) {
+          setTestStatus(prev => ({ ...prev, openrouter: { status: "valid", message: "OpenRouter Key Valid! 🔀" } }));
+        } else {
+          setTestStatus(prev => ({ ...prev, openrouter: { status: "invalid", message: `Invalid Key (HTTP ${res.status})` } }));
+        }
+      } else if (providerId === "nvidia") {
+        // Real NVIDIA test: 1-token chat completion call
+        const res = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${key}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "meta/llama-3.3-70b-instruct",
+            messages: [{ role: "user", content: "hi" }],
+            max_tokens: 1,
+          })
+        }).catch(() => null);
+        if (res && res.ok) {
+          setTestStatus(prev => ({ ...prev, nvidia: { status: "valid", message: "NVIDIA Key Valid! 🟢" } }));
+        } else {
+          setTestStatus(prev => ({ ...prev, nvidia: { status: "invalid", message: "Invalid NVIDIA Key" } }));
+        }
+      }
+    } catch (err: any) {
+      setTestStatus(prev => ({
+        ...prev,
+        [providerId]: { status: "invalid", message: err?.message || "Network test failed" }
+      }));
+    }
+  };
+
   const handleSave = () => {
     if (!canProceed) return;
-    AI_PROVIDERS.forEach(p => setApiKey(p.id, aiKeys[p.id]?.trim() || ""));
+    const trimmedDeepgram = deepgram.trim();
+    const updatedApiKeys = { ...settings.apiKeys };
+    AI_PROVIDERS.forEach(p => {
+      if (aiKeys[p.id]?.trim()) {
+        updatedApiKeys[p.id] = aiKeys[p.id].trim();
+        setApiKey(p.id, aiKeys[p.id].trim());
+      }
+    });
+
     updateSettings({
-      deepgramApiKey: deepgram.trim(), transcriptionEngine: "deepgram",
+      deepgramApiKey: trimmedDeepgram,
+      transcriptionEngine: "deepgram",
+      apiKeys: updatedApiKeys,
       activeProvider: activeProv as any,
       activeModel: selModel[activeProv] || AI_PROVIDERS.find(p => p.id === activeProv)?.models[0] || "",
     });
-    setTimeout(() => window.ghostly.saveSettings(useStore.getState().settings), 50);
+
+    window.ghostly.saveSettings(useStore.getState().settings);
     setAppScreen("audio-setup");
   };
 
@@ -228,6 +351,43 @@ export const ApiSetupPage: React.FC = () => {
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] transition-opacity opacity-40 hover:opacity-80"
                 >{showKeys["deepgram"] ? "🙈" : "👁"}</button>
               </div>
+
+              {/* Test Deepgram Key button */}
+              <div className="flex items-center justify-between mt-0.5">
+                <button
+                  type="button"
+                  onClick={() => handleTestKey("deepgram", deepgram)}
+                  disabled={!hasDeepgram || testStatus["deepgram"]?.status === "testing"}
+                  className="text-[8.5px] font-extrabold px-2.5 py-1 rounded-lg flex items-center gap-1 transition-all"
+                  style={{
+                    background: testStatus["deepgram"]?.status === "valid"
+                      ? "rgba(34,197,94,0.15)"
+                      : testStatus["deepgram"]?.status === "invalid"
+                        ? "rgba(239,68,68,0.15)"
+                        : "rgba(139,92,246,0.12)",
+                    border: testStatus["deepgram"]?.status === "valid"
+                      ? "1px solid rgba(34,197,94,0.3)"
+                      : testStatus["deepgram"]?.status === "invalid"
+                        ? "1px solid rgba(239,68,68,0.3)"
+                        : "1px solid rgba(139,92,246,0.3)",
+                    color: testStatus["deepgram"]?.status === "valid"
+                      ? "#4ade80"
+                      : testStatus["deepgram"]?.status === "invalid"
+                        ? "#f87171"
+                        : "#a78bfa",
+                    cursor: !hasDeepgram ? "not-allowed" : "pointer",
+                    opacity: !hasDeepgram ? 0.5 : 1,
+                  }}
+                >
+                  {testStatus["deepgram"]?.status === "testing" ? "🔄 Testing..." : "⚡ Test Key"}
+                </button>
+
+                {testStatus["deepgram"]?.message && (
+                  <span className="text-[8px] font-bold" style={{ color: testStatus["deepgram"]?.status === "valid" ? "#4ade80" : "#f87171" }}>
+                    {testStatus["deepgram"]?.message}
+                  </span>
+                )}
+              </div>
             </div>
 
             <div className="h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
@@ -356,6 +516,43 @@ export const ApiSetupPage: React.FC = () => {
                               </select>
                             </div>
                           )}
+
+                          {/* Test Key button for AI Provider */}
+                          <div className="flex items-center justify-between mt-1 pt-1" style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                            <button
+                              type="button"
+                              onClick={() => handleTestKey(p.id, aiKeys[p.id] || "")}
+                              disabled={!hasKey || testStatus[p.id]?.status === "testing"}
+                              className="text-[8.5px] font-extrabold px-2.5 py-1 rounded-lg flex items-center gap-1 transition-all"
+                              style={{
+                                background: testStatus[p.id]?.status === "valid"
+                                  ? "rgba(34,197,94,0.15)"
+                                  : testStatus[p.id]?.status === "invalid"
+                                    ? "rgba(239,68,68,0.15)"
+                                    : "rgba(139,92,246,0.12)",
+                                border: testStatus[p.id]?.status === "valid"
+                                  ? "1px solid rgba(34,197,94,0.3)"
+                                  : testStatus[p.id]?.status === "invalid"
+                                    ? "1px solid rgba(239,68,68,0.3)"
+                                    : "1px solid rgba(139,92,246,0.3)",
+                                color: testStatus[p.id]?.status === "valid"
+                                  ? "#4ade80"
+                                  : testStatus[p.id]?.status === "invalid"
+                                    ? "#f87171"
+                                    : "#a78bfa",
+                                cursor: !hasKey ? "not-allowed" : "pointer",
+                                opacity: !hasKey ? 0.5 : 1,
+                              }}
+                            >
+                              {testStatus[p.id]?.status === "testing" ? "🔄 Testing..." : "⚡ Test Key"}
+                            </button>
+
+                            {testStatus[p.id]?.message && (
+                              <span className="text-[8px] font-bold truncate max-w-[170px]" style={{ color: testStatus[p.id]?.status === "valid" ? "#4ade80" : "#f87171" }}>
+                                {testStatus[p.id]?.message}
+                              </span>
+                            )}
+                          </div>
                         </motion.div>
                       )}
                     </div>
