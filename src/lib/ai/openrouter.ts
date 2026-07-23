@@ -19,6 +19,10 @@ export class OpenRouterProvider implements AIProvider {
   async *streamSolution(options: AIRequestOptions): AsyncGenerator<string> {
     const { base64Image, prompt, messages = [], model, apiKey, maxTokens = 8192 } = options;
 
+    if (!apiKey || !apiKey.trim()) {
+      throw new Error("OpenRouter API key missing. Get a free API key at openrouter.ai/keys");
+    }
+
     const requestedModel = model || "openrouter/auto";
     const safeModel = OPENROUTER_FREE_MODELS.some((m) => m.id === requestedModel) ? requestedModel : "openrouter/auto";
 
@@ -49,7 +53,7 @@ export class OpenRouterProvider implements AIProvider {
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${apiKey.trim()}`,
         "Content-Type": "application/json",
         "HTTP-Referer": "https://ghostly.ai",
         "X-Title": "Ghostly AI",
@@ -65,6 +69,9 @@ export class OpenRouterProvider implements AIProvider {
 
     if (!response.ok) {
       const err = await response.json().catch(() => ({ error: { message: response.statusText } }));
+      if (response.status === 401) {
+        throw new Error("Invalid OpenRouter API key. Get a free API key at openrouter.ai/keys");
+      }
       throw new Error(`OpenRouter API error: ${err.error?.message || response.statusText}`);
     }
 

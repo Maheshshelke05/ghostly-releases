@@ -648,6 +648,20 @@ export const Home: React.FC = () => {
     }
   }, [chatStreaming, chatMessages, settings]);
 
+  // Force show window, opacity 1, enable mouse, and auto-start live mode on mount
+  useEffect(() => {
+    window.ghostly.setOpacity(1);
+    window.ghostly.show();
+    window.ghostly.enableMouse();
+
+    if (sessionStorage.getItem("ghostly_autostart") === "true") {
+      sessionStorage.removeItem("ghostly_autostart");
+      setTimeout(() => {
+        handleToggleLive();
+      }, 250);
+    }
+  }, [handleToggleLive]);
+
   // Hotkeys
   useEffect(() => {
     const offScreenshot = window.ghostly.onScreenshot(addScreenshot);
@@ -773,7 +787,6 @@ export const Home: React.FC = () => {
               className="flex-1 min-h-0 flex flex-col rounded-2xl overflow-hidden border border-white/[0.07] shadow-2xl"
               style={{ background: "rgba(16,16,18,0.94)", backdropFilter: "blur(28px)" }}
               onMouseEnter={() => window.ghostly.enableMouse()}
-              onMouseLeave={() => window.ghostly.disableMouse()}
             >
               {/* ── Card Header ── */}
               <div className="flex items-center justify-between px-4 h-11 border-b border-white/[0.06] flex-shrink-0"

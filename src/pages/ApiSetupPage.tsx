@@ -4,17 +4,31 @@ import { useStore } from "../store/useStore";
 import { NVIDIA_MODELS } from "../lib/ai/nvidia";
 import { OPENROUTER_FREE_MODELS } from "../lib/ai/openrouter";
 
-const BASE = "#1b1b26";
-const nm = (raised = true) =>
-  raised
-    ? "6px 6px 14px rgba(0,0,0,0.55), -3px -3px 8px rgba(255,255,255,0.04)"
-    : "inset 4px 4px 10px rgba(0,0,0,0.5), inset -2px -2px 6px rgba(255,255,255,0.04)";
-
 const AI_PROVIDERS = [
-  { id: "groq",       label: "Groq",       icon: "🟣", badge: "FAST",     url: "https://console.groq.com/keys",           ph: "gsk_…",   models: ["meta-llama/llama-4-scout-17b-16e-instruct", "llama-3.3-70b-versatile", "llama-3.1-8b-instant"], modelLabels: { "meta-llama/llama-4-scout-17b-16e-instruct": "Llama 4 Scout — FREE + VISION", "llama-3.3-70b-versatile": "Llama 3.3 70B — FREE + FAST", "llama-3.1-8b-instant": "Llama 3.1 8B — FREE + INSTANT" } },
-  { id: "gemini",     label: "Gemini",     icon: "🔵", badge: "FREE",     url: "https://aistudio.google.com/app/apikey", ph: "AIza…",   models: ["gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-3.1-flash-lite"], modelLabels: { "gemini-3.5-flash": "Gemini 3.5 Flash — FREE", "gemini-2.5-flash": "Gemini 2.5 Flash — FREE", "gemini-2.5-pro": "Gemini 2.5 Pro — FREE", "gemini-2.0-flash": "Gemini 2.0 Flash — FREE", "gemini-3.1-flash-lite": "Gemini 3.1 Lite — FREE" } },
-  { id: "openrouter", label: "OpenRouter", icon: "🔀", badge: "16 FREE",  url: "https://openrouter.ai/keys",              ph: "sk-or-…", models: OPENROUTER_FREE_MODELS.map(m => m.id), modelLabels: Object.fromEntries(OPENROUTER_FREE_MODELS.map(m => [m.id, `${m.name} — FREE`])) },
-  { id: "nvidia",     label: "NVIDIA",     icon: "🟢", badge: "FREE",     url: "https://build.nvidia.com/",               ph: "nvapi-…", models: NVIDIA_MODELS.map(m => m.id), modelLabels: Object.fromEntries(NVIDIA_MODELS.map(m => [m.id, `${m.name} — FREE`])) },
+  {
+    id: "groq", label: "Groq", icon: "⚡", badge: "FAST", badgeColor: "rgba(139,92,246,0.15)", badgeBorder: "rgba(139,92,246,0.3)", badgeText: "#a78bfa",
+    url: "https://console.groq.com/keys", ph: "gsk_…",
+    models: ["meta-llama/llama-4-scout-17b-16e-instruct", "llama-3.3-70b-versatile", "llama-3.1-8b-instant"],
+    modelLabels: { "meta-llama/llama-4-scout-17b-16e-instruct": "Llama 4 Scout — FREE + VISION", "llama-3.3-70b-versatile": "Llama 3.3 70B — FREE + FAST", "llama-3.1-8b-instant": "Llama 3.1 8B — FREE + INSTANT" },
+  },
+  {
+    id: "gemini", label: "Gemini", icon: "🔵", badge: "FREE", badgeColor: "rgba(59,130,246,0.12)", badgeBorder: "rgba(59,130,246,0.3)", badgeText: "#60a5fa",
+    url: "https://aistudio.google.com/app/apikey", ph: "AIza…",
+    models: ["gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-3.1-flash-lite"],
+    modelLabels: { "gemini-3.5-flash": "Gemini 3.5 Flash — FREE", "gemini-2.5-flash": "Gemini 2.5 Flash — FREE", "gemini-2.5-pro": "Gemini 2.5 Pro — FREE", "gemini-2.0-flash": "Gemini 2.0 Flash — FREE", "gemini-3.1-flash-lite": "Gemini 3.1 Lite — FREE" },
+  },
+  {
+    id: "openrouter", label: "OpenRouter", icon: "🔀", badge: "16 FREE", badgeColor: "rgba(34,197,94,0.1)", badgeBorder: "rgba(34,197,94,0.28)", badgeText: "#4ade80",
+    url: "https://openrouter.ai/keys", ph: "sk-or-…",
+    models: OPENROUTER_FREE_MODELS.map(m => m.id),
+    modelLabels: Object.fromEntries(OPENROUTER_FREE_MODELS.map(m => [m.id, `${m.name} — FREE`])),
+  },
+  {
+    id: "nvidia", label: "NVIDIA", icon: "🟢", badge: "FREE", badgeColor: "rgba(34,197,94,0.1)", badgeBorder: "rgba(34,197,94,0.25)", badgeText: "#4ade80",
+    url: "https://build.nvidia.com/", ph: "nvapi-…",
+    models: NVIDIA_MODELS.map(m => m.id),
+    modelLabels: Object.fromEntries(NVIDIA_MODELS.map(m => [m.id, `${m.name} — FREE`])),
+  },
 ];
 
 export const ApiSetupPage: React.FC = () => {
@@ -36,6 +50,7 @@ export const ApiSetupPage: React.FC = () => {
   const [showKeys, setShowKeys]     = useState<Record<string, boolean>>({});
   const [activeProv, setActiveProv] = useState(settings.activeProvider);
   const [expanded, setExpanded]     = useState<string | null>(null);
+  const [deepFocused, setDeepFocused] = useState(false);
 
   const hasDeepgram = !!deepgram.trim();
   const filledAI    = AI_PROVIDERS.filter(p => aiKeys[p.id]?.trim());
@@ -58,141 +73,177 @@ export const ApiSetupPage: React.FC = () => {
     setAppScreen("audio-setup");
   };
 
-  const nmInput: React.CSSProperties = {
-    background: BASE, boxShadow: nm(false), border: "none",
-    color: "rgba(255,255,255,0.8)", borderRadius: "9px", padding: "7px 10px 7px 32px",
-    fontSize: "10.5px", fontFamily: "monospace", fontWeight: 600,
-    width: "100%", outline: "none", transition: "box-shadow 0.15s",
-  };
-
-  const LABEL = "text-[7px] font-black uppercase tracking-[0.1em]";
-  const LC: React.CSSProperties = { color: "rgba(255,255,255,0.28)" };
-
   return (
     <div
       className="h-screen w-full flex items-center justify-center px-3 py-2 overflow-y-auto"
       style={{ background: "transparent", pointerEvents: "none", userSelect: "none", fontFamily: "'Inter', -apple-system, sans-serif" }}
     >
+      {/* Ambient glow */}
+      <div className="fixed inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse 70% 50% at 50% 0%, rgba(139,92,246,0.09) 0%, transparent 60%)" }} />
+
       <motion.div
-        initial={{ opacity: 0, scale: 0.97, y: 8 }}
+        initial={{ opacity: 0, scale: 0.97, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-        className="w-full max-w-[300px] flex flex-col gap-2"
+        transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+        className="w-full max-w-[310px] flex flex-col gap-2.5 relative z-10"
         style={{ pointerEvents: "auto" }}
         onMouseEnter={() => window.ghostly.enableMouse()}
-        onMouseLeave={() => window.ghostly.disableMouse()}
       >
-        {/* Header */}
+        {/* ── Header ── */}
         <div className="flex items-center justify-between px-0.5">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <div
-              className="w-8 h-8 rounded-[11px] flex items-center justify-center text-[15px] shrink-0"
+              className="w-9 h-9 rounded-[13px] flex items-center justify-center text-[17px] shrink-0"
               style={{
-                background: "linear-gradient(135deg, #6366f1, #4f46e5)",
-                boxShadow: "4px 4px 12px rgba(0,0,0,0.5), -2px -2px 6px rgba(255,255,255,0.04), 0 0 16px rgba(99,102,241,0.28)",
+                background: "linear-gradient(135deg, rgba(139,92,246,0.25), rgba(99,102,241,0.18))",
+                border: "1.5px solid rgba(139,92,246,0.4)",
+                boxShadow: "0 0 20px rgba(139,92,246,0.25), 0 4px 12px rgba(0,0,0,0.4)",
               }}
             >🔑</div>
             <div>
-              <p className="text-[12px] font-extrabold text-white leading-tight">API Setup</p>
-              <p className="text-[8px] font-bold uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.28)" }}>Step 2 of 3 · Stored locally</p>
+              <p className="text-[13px] font-black text-white leading-tight">API Setup</p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                {[1, 2, 3].map(i => (
+                  <div
+                    key={i}
+                    className="h-1 rounded-full transition-all"
+                    style={{
+                      width: i <= 2 ? "20px" : "10px",
+                      background: i <= 2 ? "rgba(139,92,246,0.8)" : "rgba(255,255,255,0.12)",
+                    }}
+                  />
+                ))}
+                <span className="text-[8px] font-bold" style={{ color: "rgba(255,255,255,0.3)" }}>Step 2/3</span>
+              </div>
             </div>
           </div>
           <button
             onClick={() => setAppScreen("interview-setup")}
-            className="flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-[9px] transition-all"
-            style={{ background: BASE, boxShadow: nm(), color: "rgba(255,255,255,0.45)", border: "none" }}
-            onMouseEnter={e => { e.currentTarget.style.boxShadow = nm(false); e.currentTarget.style.color = "#fff"; }}
-            onMouseLeave={e => { e.currentTarget.style.boxShadow = nm(); e.currentTarget.style.color = "rgba(255,255,255,0.45)"; }}
+            className="flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1.5 rounded-xl transition-all"
+            style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.45)" }}
+            onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.09)"; e.currentTarget.style.color = "#fff"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; e.currentTarget.style.color = "rgba(255,255,255,0.45)"; }}
           >
             <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
             Back
           </button>
         </div>
 
-        {/* Card */}
-        <div className="w-full rounded-[18px] overflow-hidden" style={{ background: BASE, boxShadow: nm() }}>
+        {/* ── Main Card ── */}
+        <div
+          className="w-full rounded-[22px] overflow-hidden"
+          style={{
+            background: "rgba(13,13,20,0.9)",
+            backdropFilter: "blur(24px)",
+            WebkitBackdropFilter: "blur(24px)",
+            border: "1px solid rgba(255,255,255,0.08)",
+            boxShadow: "0 16px 48px rgba(0,0,0,0.6), 0 1px 0 rgba(255,255,255,0.06) inset",
+          }}
+        >
+          {/* Accent bar */}
+          <div className="h-0.5" style={{ background: "linear-gradient(90deg, transparent, rgba(139,92,246,0.7), rgba(99,102,241,0.5), transparent)" }} />
 
-          {/* Progress bar top */}
-          <div className="px-3 pt-3 pb-2.5">
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 flex-1">
+          {/* ── Progress checklist ── */}
+          <div className="px-4 pt-3.5 pb-3">
+            <div className="flex items-center gap-3">
+              {/* Deepgram step */}
+              <div className="flex items-center gap-2 flex-1">
                 <div
-                  className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-black shrink-0 transition-all"
+                  className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-black shrink-0 transition-all"
                   style={{
-                    background: hasDeepgram ? "linear-gradient(135deg, #22c55e, #16a34a)" : BASE,
-                    boxShadow: hasDeepgram ? "0 0 10px rgba(34,197,94,0.4)" : nm(false),
+                    background: hasDeepgram ? "linear-gradient(135deg, #22c55e, #16a34a)" : "rgba(255,255,255,0.06)",
+                    border: hasDeepgram ? "none" : "1px solid rgba(255,255,255,0.1)",
                     color: hasDeepgram ? "#fff" : "rgba(255,255,255,0.3)",
+                    boxShadow: hasDeepgram ? "0 0 10px rgba(34,197,94,0.4)" : "none",
                   }}
                 >{hasDeepgram ? "✓" : "1"}</div>
-                <span className="text-[8px] font-bold" style={{ color: hasDeepgram ? "#22c55e" : "rgba(255,255,255,0.3)" }}>Deepgram</span>
+                <span className="text-[9px] font-bold transition-colors" style={{ color: hasDeepgram ? "#4ade80" : "rgba(255,255,255,0.3)" }}>Deepgram</span>
               </div>
-              <div className="flex-1 h-0.5 rounded-full mx-1" style={{ background: BASE, boxShadow: nm(false) }}>
-                <div className="h-full rounded-full transition-all" style={{ width: hasDeepgram && hasAnyAI ? "100%" : "0%", background: "linear-gradient(90deg, #22c55e, #16a34a)" }} />
+
+              {/* Connector */}
+              <div className="flex-1 h-px rounded-full" style={{ background: "rgba(255,255,255,0.06)" }}>
+                <div className="h-full rounded-full transition-all" style={{
+                  width: hasDeepgram && hasAnyAI ? "100%" : "0%",
+                  background: "linear-gradient(90deg, #22c55e, #4ade80)",
+                  transition: "width 0.4s ease",
+                }} />
               </div>
-              <div className="flex items-center gap-1.5 flex-1 justify-end">
-                <span className="text-[8px] font-bold" style={{ color: hasAnyAI ? "#22c55e" : "rgba(255,255,255,0.3)" }}>AI Provider</span>
+
+              {/* AI Provider step */}
+              <div className="flex items-center gap-2 flex-1 justify-end">
+                <span className="text-[9px] font-bold transition-colors" style={{ color: hasAnyAI ? "#4ade80" : "rgba(255,255,255,0.3)" }}>AI Provider</span>
                 <div
-                  className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-black shrink-0 transition-all"
+                  className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-black shrink-0 transition-all"
                   style={{
-                    background: hasAnyAI ? "linear-gradient(135deg, #22c55e, #16a34a)" : BASE,
-                    boxShadow: hasAnyAI ? "0 0 10px rgba(34,197,94,0.4)" : nm(false),
+                    background: hasAnyAI ? "linear-gradient(135deg, #22c55e, #16a34a)" : "rgba(255,255,255,0.06)",
+                    border: hasAnyAI ? "none" : "1px solid rgba(255,255,255,0.1)",
                     color: hasAnyAI ? "#fff" : "rgba(255,255,255,0.3)",
+                    boxShadow: hasAnyAI ? "0 0 10px rgba(34,197,94,0.4)" : "none",
                   }}
                 >{hasAnyAI ? "✓" : "2"}</div>
               </div>
             </div>
           </div>
 
-          <div className="mx-3 h-px" style={{ background: "rgba(255,255,255,0.04)" }} />
+          <div className="mx-4 h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
 
-          <div className="px-3 pt-2.5 pb-2 flex flex-col gap-2.5 max-h-[60vh] overflow-y-auto" style={{ scrollbarWidth: "none" }}>
+          <div className="px-3.5 pt-3 pb-2 flex flex-col gap-3 max-h-[55vh] overflow-y-auto" style={{ scrollbarWidth: "none" }}>
 
-            {/* Deepgram */}
+            {/* ── Deepgram ── */}
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center justify-between">
-                <label className={`${LABEL} flex items-center gap-1.5`} style={LC}>
+                <label className="text-[8px] font-black uppercase tracking-[0.12em] flex items-center gap-1.5" style={{ color: "rgba(255,255,255,0.3)" }}>
                   🎙️ Deepgram
-                  <span className="px-1.5 py-0.5 rounded text-[6.5px] font-black" style={{ background: BASE, boxShadow: nm(false), color: "#f87171" }}>REQUIRED</span>
+                  <span className="px-1.5 py-0.5 rounded-full text-[7px] font-black" style={{ background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.28)", color: "#f87171" }}>REQUIRED</span>
                 </label>
                 <button
                   onClick={() => window.ghostly.openExternal("https://console.deepgram.com/signup")}
-                  className="text-[8px] font-bold transition-all"
-                  style={{ color: "rgba(235,146,69,0.6)", background: "none", border: "none" }}
-                  onMouseEnter={e => { e.currentTarget.style.color = "#eb9245"; }}
-                  onMouseLeave={e => { e.currentTarget.style.color = "rgba(235,146,69,0.6)"; }}
+                  className="text-[8.5px] font-bold transition-colors"
+                  style={{ color: "rgba(139,92,246,0.7)", background: "none", border: "none" }}
+                  onMouseEnter={e => { e.currentTarget.style.color = "#a78bfa"; }}
+                  onMouseLeave={e => { e.currentTarget.style.color = "rgba(139,92,246,0.7)"; }}
                 >Get Free Key ↗</button>
               </div>
               <div className="relative">
-                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[12px] pointer-events-none">🎙️</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[13px] pointer-events-none">🎙️</span>
                 <input
                   type={showKeys["deepgram"] ? "text" : "password"}
                   value={deepgram} onChange={e => setDeepgram(e.target.value)}
+                  onFocus={() => setDeepFocused(true)}
+                  onBlur={() => setDeepFocused(false)}
                   placeholder="Paste Deepgram API key…"
-                  className="w-full rounded-[9px] pr-8 py-2 text-[11px] font-mono focus:outline-none placeholder:text-white/15"
+                  className="w-full rounded-xl text-[11px] font-mono focus:outline-none transition-all placeholder:text-white/15"
                   style={{
-                    ...nmInput,
-                    boxShadow: hasDeepgram ? `${nm(false)}, 0 0 0 1.5px rgba(34,197,94,0.35)` : nm(false),
+                    padding: "9px 36px 9px 36px",
+                    background: "rgba(255,255,255,0.04)",
+                    border: hasDeepgram
+                      ? "1px solid rgba(34,197,94,0.4)"
+                      : deepFocused ? "1px solid rgba(139,92,246,0.5)" : "1px solid rgba(255,255,255,0.08)",
+                    boxShadow: hasDeepgram ? "0 0 12px rgba(34,197,94,0.12)" : deepFocused ? "0 0 0 3px rgba(139,92,246,0.1)" : "none",
+                    color: "rgba(255,255,255,0.85)",
                   }}
                 />
                 <button
                   onClick={() => setShowKeys(s => ({ ...s, deepgram: !s["deepgram"] }))}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] opacity-40 hover:opacity-80 transition-opacity"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] transition-opacity opacity-40 hover:opacity-80"
                 >{showKeys["deepgram"] ? "🙈" : "👁"}</button>
               </div>
             </div>
 
-            <div className="h-px" style={{ background: "rgba(255,255,255,0.04)" }} />
+            <div className="h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
 
-            {/* AI Providers */}
-            <div className="flex flex-col gap-1.5">
+            {/* ── AI Providers ── */}
+            <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between">
-                <label className={LABEL} style={LC}>🤖 AI Provider</label>
-                <span className="text-[8px] font-bold" style={{ color: hasAnyAI ? "#22c55e" : "rgba(255,255,255,0.25)" }}>
+                <label className="text-[8px] font-black uppercase tracking-[0.12em]" style={{ color: "rgba(255,255,255,0.3)" }}>
+                  🤖 AI Provider
+                </label>
+                <span className="text-[8.5px] font-bold" style={{ color: hasAnyAI ? "#4ade80" : "rgba(255,255,255,0.25)" }}>
                   {filledAI.length}/{AI_PROVIDERS.length} added
                 </span>
               </div>
 
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-2">
                 {AI_PROVIDERS.map(p => {
                   const hasKey   = !!aiKeys[p.id]?.trim();
                   const isActive = activeProv === p.id;
@@ -201,91 +252,106 @@ export const ApiSetupPage: React.FC = () => {
                   return (
                     <div
                       key={p.id}
-                      className="rounded-[12px] overflow-hidden transition-all"
+                      className="rounded-[14px] overflow-hidden transition-all"
                       style={{
-                        background: BASE,
-                        boxShadow: isActive && hasKey
-                          ? `${nm()}, 0 0 0 1.5px rgba(235,146,69,0.35)`
-                          : nm(),
+                        background: isActive && hasKey ? "rgba(139,92,246,0.08)" : "rgba(255,255,255,0.04)",
+                        border: isActive && hasKey
+                          ? "1px solid rgba(139,92,246,0.3)"
+                          : "1px solid rgba(255,255,255,0.07)",
+                        boxShadow: isActive && hasKey ? "0 0 16px rgba(139,92,246,0.12)" : "none",
                       }}
                     >
-                      <div className="flex items-center gap-2 px-2.5 py-2">
-                        <span className="text-[13px] shrink-0">{p.icon}</span>
-                        <span className="text-[10px] font-extrabold flex-1" style={{ color: isActive && hasKey ? "#eb9245" : "rgba(255,255,255,0.65)" }}>
+                      <div className="flex items-center gap-2.5 px-3 py-2.5">
+                        <span className="text-[15px] shrink-0">{p.icon}</span>
+                        <span className="text-[11px] font-bold flex-1" style={{ color: isActive && hasKey ? "#a78bfa" : "rgba(255,255,255,0.7)" }}>
                           {p.label}
                         </span>
+
+                        {/* Badge */}
                         <span
-                          className="text-[6.5px] font-black px-1.5 py-0.5 rounded-full"
-                          style={{ background: BASE, boxShadow: nm(false), color: "rgba(255,255,255,0.3)" }}
+                          className="text-[7px] font-black px-1.5 py-0.5 rounded-full shrink-0"
+                          style={{ background: p.badgeColor, border: `1px solid ${p.badgeBorder}`, color: p.badgeText }}
                         >{p.badge}</span>
+
+                        {/* Has key indicator */}
                         {hasKey && (
-                          <span
-                            className="text-[7px] font-black px-1 py-0.5 rounded-full"
-                            style={{ background: BASE, boxShadow: nm(false), color: "#22c55e" }}
-                          >✓</span>
+                          <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full shrink-0" style={{ background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.3)", color: "#4ade80" }}>✓</span>
                         )}
+
+                        {/* Set active */}
                         {hasKey && (
                           <button
                             onClick={() => setActiveProv(p.id)}
-                            className="text-[7px] font-black px-1.5 py-0.5 rounded-full uppercase transition-all"
+                            className="text-[8px] font-black px-2 py-0.5 rounded-full uppercase transition-all shrink-0"
                             style={{
-                              background: BASE,
-                              boxShadow: isActive ? `${nm(false)}, 0 0 8px rgba(235,146,69,0.3)` : nm(),
-                              color: isActive ? "#eb9245" : "rgba(255,255,255,0.35)",
-                              border: "none",
+                              background: isActive ? "rgba(139,92,246,0.2)" : "rgba(255,255,255,0.05)",
+                              border: isActive ? "1px solid rgba(139,92,246,0.4)" : "1px solid rgba(255,255,255,0.1)",
+                              color: isActive ? "#a78bfa" : "rgba(255,255,255,0.35)",
                             }}
                           >{isActive ? "Active" : "Use"}</button>
                         )}
+
+                        {/* External link */}
                         <button
                           onClick={() => window.ghostly.openExternal(p.url)}
-                          className="text-[8px] font-bold transition-all opacity-30 hover:opacity-80"
-                          style={{ background: "none", border: "none", color: "#eb9245" }}
+                          className="text-[10px] font-bold transition-colors shrink-0 opacity-35 hover:opacity-80"
+                          style={{ background: "none", border: "none", color: "#a78bfa" }}
                         >↗</button>
+
+                        {/* Expand toggle */}
                         <button
                           onClick={() => setExpanded(isOpen ? null : p.id)}
-                          className="text-[8px] transition-all duration-200"
-                          style={{ background: "none", border: "none", color: "rgba(255,255,255,0.28)", transform: isOpen ? "rotate(180deg)" : "none" }}
+                          className="text-[9px] transition-transform duration-200 shrink-0"
+                          style={{ background: "none", border: "none", color: "rgba(255,255,255,0.3)", transform: isOpen ? "rotate(180deg)" : "none" }}
                         >▼</button>
                       </div>
 
+                      {/* Expanded API key input */}
                       {isOpen && (
                         <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: "auto" }}
-                          className="px-2.5 pb-2.5 flex flex-col gap-1.5"
-                          style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}
+                          initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
+                          className="px-3 pb-3 flex flex-col gap-2"
+                          style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}
                         >
-                          <div className="relative mt-2">
-                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] pointer-events-none opacity-50">🔑</span>
+                          <div className="relative mt-2.5">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] pointer-events-none opacity-50">🔑</span>
                             <input
                               type={showKeys[p.id] ? "text" : "password"}
                               value={aiKeys[p.id] || ""}
                               onChange={e => setAiKeys(k => ({ ...k, [p.id]: e.target.value }))}
                               placeholder={p.ph}
-                              className="w-full rounded-[8px] pr-8 py-1.5 text-[10px] font-mono focus:outline-none placeholder:text-white/15"
+                              className="w-full rounded-xl text-[10px] font-mono focus:outline-none transition-all placeholder:text-white/15"
                               style={{
-                                ...nmInput,
-                                fontSize: "10px",
-                                padding: "6px 32px 6px 28px",
-                                boxShadow: hasKey ? `${nm(false)}, 0 0 0 1.5px rgba(34,197,94,0.3)` : nm(false),
+                                padding: "8px 32px 8px 28px",
+                                background: "rgba(255,255,255,0.04)",
+                                border: hasKey ? "1px solid rgba(34,197,94,0.35)" : "1px solid rgba(255,255,255,0.09)",
+                                boxShadow: hasKey ? "0 0 8px rgba(34,197,94,0.12)" : "none",
+                                color: "rgba(255,255,255,0.82)",
                               }}
+                              onFocus={e => { if (!hasKey) { e.currentTarget.style.borderColor = "rgba(139,92,246,0.5)"; e.currentTarget.style.boxShadow = "0 0 0 3px rgba(139,92,246,0.1)"; } }}
+                              onBlur={e => { if (!hasKey) { e.currentTarget.style.borderColor = "rgba(255,255,255,0.09)"; e.currentTarget.style.boxShadow = "none"; } }}
                             />
                             <button
                               onClick={() => setShowKeys(s => ({ ...s, [p.id]: !s[p.id] }))}
-                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] opacity-40 hover:opacity-80 transition-opacity"
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] opacity-40 hover:opacity-80 transition-opacity"
                             >{showKeys[p.id] ? "🙈" : "👁"}</button>
                           </div>
+
                           {hasKey && (
                             <div className="flex items-center gap-2">
-                              <span className="text-[7px] font-bold uppercase shrink-0" style={{ color: "rgba(255,255,255,0.25)" }}>Model</span>
+                              <span className="text-[8px] font-bold uppercase shrink-0" style={{ color: "rgba(255,255,255,0.25)" }}>Model</span>
                               <select
                                 value={selModel[p.id] || p.models[0]}
                                 onChange={e => setSelModel(m => ({ ...m, [p.id]: e.target.value }))}
-                                className="flex-1 text-[9px] font-semibold rounded-[7px] px-2 py-1 focus:outline-none cursor-pointer"
-                                style={{ background: BASE, boxShadow: nm(false), color: "rgba(255,255,255,0.65)", border: "none" }}
+                                className="flex-1 text-[9px] font-semibold rounded-lg px-2 py-1.5 focus:outline-none cursor-pointer transition-all"
+                                style={{
+                                  background: "rgba(255,255,255,0.06)",
+                                  border: "1px solid rgba(255,255,255,0.09)",
+                                  color: "rgba(255,255,255,0.7)",
+                                }}
                               >
                                 {p.models.map(m => (
-                                  <option key={m} value={m} style={{ background: BASE }}>{(p as any).modelLabels?.[m] || m}</option>
+                                  <option key={m} value={m} style={{ background: "#0d0d14" }}>{(p as any).modelLabels?.[m] || m}</option>
                                 ))}
                               </select>
                             </div>
@@ -296,30 +362,38 @@ export const ApiSetupPage: React.FC = () => {
                   );
                 })}
               </div>
-              <p className="text-[7.5px] text-center" style={{ color: "rgba(255,255,255,0.18)" }}>
+
+              <p className="text-[8px] text-center" style={{ color: "rgba(255,255,255,0.2)" }}>
                 OpenAI · Anthropic · Grok — coming soon
               </p>
             </div>
           </div>
 
-          {/* Footer */}
-          <div className="px-3 pb-3 pt-2" style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
+          {/* ── Footer ── */}
+          <div className="px-3.5 pb-3.5 pt-2.5" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
             <motion.button
-              whileHover={canProceed ? { scale: 1.02 } : {}}
+              whileHover={canProceed ? { scale: 1.02, y: -1 } : {}}
               whileTap={canProceed ? { scale: 0.97 } : {}}
               onClick={handleSave} disabled={!canProceed}
-              className="w-full py-2.5 rounded-[12px] text-[12px] font-extrabold flex items-center justify-center gap-2 transition-all"
+              className="w-full py-3 rounded-[14px] text-[12px] font-extrabold flex items-center justify-center gap-2 relative overflow-hidden transition-all"
               style={{
-                background: canProceed ? "linear-gradient(135deg, #eb9245 0%, #d97706 100%)" : BASE,
-                color: canProceed ? "#fff" : "rgba(255,255,255,0.2)",
-                boxShadow: canProceed
-                  ? "4px 4px 12px rgba(0,0,0,0.5), -2px -2px 6px rgba(255,255,255,0.04), 0 0 18px rgba(235,146,69,0.28)"
-                  : nm(false),
-                border: "none", cursor: canProceed ? "pointer" : "not-allowed",
+                background: canProceed ? "linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)" : "rgba(255,255,255,0.04)",
+                color: canProceed ? "#fff" : "rgba(255,255,255,0.22)",
+                border: canProceed ? "none" : "1px solid rgba(255,255,255,0.07)",
+                boxShadow: canProceed ? "0 6px 24px rgba(139,92,246,0.45), 0 1px 0 rgba(255,255,255,0.2) inset" : "none",
+                cursor: canProceed ? "pointer" : "not-allowed",
               }}
             >
-              <span className="text-[14px]">{canProceed ? "🎙️" : "🔒"}</span>
-              {canProceed ? "Save & Continue →" : "Complete required fields"}
+              {canProceed && (
+                <motion.div
+                  className="absolute inset-0 w-1/3"
+                  style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent)" }}
+                  animate={{ x: ["-100%", "400%"] }}
+                  transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                />
+              )}
+              <span className="relative z-10 text-[15px]">{canProceed ? "🎙️" : "🔒"}</span>
+              <span className="relative z-10">{canProceed ? "Save & Continue →" : "Complete required fields"}</span>
             </motion.button>
           </div>
         </div>

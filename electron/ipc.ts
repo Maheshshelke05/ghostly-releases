@@ -94,9 +94,9 @@ export function registerIpcHandlers(): void {
   });
 
   ipcMain.handle("save-history", (_event, history: any[]) => {
-    // Fix: validate history is an array
+    // Fix: validate history is an array and cap at 30 items to keep store JSON lightweight
     if (Array.isArray(history)) {
-      store.set("history", history);
+      store.set("history", history.slice(0, 30));
     }
   });
 

@@ -46,9 +46,9 @@ const SettingsIcon = () => (
 );
 
 const TABS = [
-  { id: "ai" as const,      label: "AI Answer", Icon: MicIcon,    color: "#f97316", glow: "rgba(249,115,22,0.45)" },
+  { id: "ai" as const,      label: "AI Answer", Icon: MicIcon,    color: "#8b5cf6", glow: "rgba(139,92,246,0.5)" },
   { id: "screen" as const,  label: "Screen",    Icon: ScreenIcon, color: "#3b82f6", glow: "rgba(59,130,246,0.45)" },
-  { id: "chat" as const,    label: "Chat",      Icon: ChatIcon,   color: "#8b5cf6", glow: "rgba(139,92,246,0.45)" },
+  { id: "chat" as const,    label: "Chat",      Icon: ChatIcon,   color: "#a78bfa", glow: "rgba(167,139,250,0.45)" },
   { id: "support" as const, label: "Report",   Icon: null,       color: "#fb923c", glow: "rgba(251,146,60,0.45)" },
 ];
 
@@ -97,7 +97,6 @@ export const TopBar: React.FC<TopBarProps> = ({
         className="w-full max-w-[960px] flex flex-col pointer-events-auto"
         style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
         onMouseEnter={() => window.ghostly.enableMouse()}
-        onMouseLeave={() => { if (!settingsOpen) window.ghostly.disableMouse(); }}
       >
         {/* ── Main Bar ── */}
         <div
@@ -114,8 +113,8 @@ export const TopBar: React.FC<TopBarProps> = ({
             <div
               className="w-6 h-6 rounded-[8px] flex items-center justify-center text-[12px] shrink-0 relative"
               style={{
-                background: "linear-gradient(135deg, #f97316 0%, #ea580c 100%)",
-                boxShadow: "0 2px 8px rgba(249,115,22,0.55), inset 0 1px 0 rgba(255,255,255,0.2)",
+                background: "linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)",
+                boxShadow: "0 2px 8px rgba(139,92,246,0.5), inset 0 1px 0 rgba(255,255,255,0.2)",
               }}
             >
               👻
@@ -298,20 +297,6 @@ export const TopBar: React.FC<TopBarProps> = ({
             End
           </button>
 
-          {/* ── Settings ── */}
-          <button
-            onClick={onOpenSettings}
-            className="w-8 h-8 flex items-center justify-center rounded-[9px] transition-all duration-200 shrink-0"
-            style={
-              settingsOpen
-                ? { background: "rgba(249,115,22,0.18)", border: "1px solid rgba(249,115,22,0.4)", color: "#fb923c", boxShadow: "0 0 12px rgba(249,115,22,0.2)" }
-                : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.3)" }
-            }
-            onMouseEnter={e => { if (!settingsOpen) { e.currentTarget.style.background = "rgba(255,255,255,0.09)"; e.currentTarget.style.color = "rgba(255,255,255,0.7)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; } }}
-            onMouseLeave={e => { if (!settingsOpen) { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; e.currentTarget.style.color = "rgba(255,255,255,0.3)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)"; } }}
-          >
-            <SettingsIcon />
-          </button>
 
           {/* ── Close ── */}
           <button
@@ -379,13 +364,13 @@ export const TopBar: React.FC<TopBarProps> = ({
                   onClick={onMicSend}
                   className="flex items-center gap-1 px-2.5 h-6 rounded-[8px] text-[9px] font-bold whitespace-nowrap transition-all duration-150"
                   style={{
-                    background: "linear-gradient(135deg, #f97316, #ea580c)",
+                    background: "linear-gradient(135deg, #8b5cf6, #7c3aed)",
                     color: "#fff",
-                    boxShadow: "0 2px 8px rgba(249,115,22,0.45)",
-                    border: "1px solid rgba(249,115,22,0.3)",
+                    boxShadow: "0 2px 8px rgba(139,92,246,0.45)",
+                    border: "1px solid rgba(139,92,246,0.3)",
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 3px 14px rgba(249,115,22,0.65)"; e.currentTarget.style.transform = "translateY(-0.5px)"; }}
-                  onMouseLeave={e => { e.currentTarget.style.boxShadow = "0 2px 8px rgba(249,115,22,0.45)"; e.currentTarget.style.transform = "none"; }}
+                  onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 3px 14px rgba(139,92,246,0.6)"; e.currentTarget.style.transform = "translateY(-0.5px)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.boxShadow = "0 2px 8px rgba(139,92,246,0.45)"; e.currentTarget.style.transform = "none"; }}
                 >
                   <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>

@@ -4,7 +4,7 @@ import http from "http";
 import { autoUpdater } from "electron-updater";
 import { registerHotkeys, unregisterHotkeys } from "./hotkeys";
 import { registerIpcHandlers } from "./ipc";
-import { applyStealthMode } from "./stealth";
+import { applyStealthMode, removeStealthMode, safeguardVisibility } from "./stealth";
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -45,29 +45,31 @@ function handleDeepLink(url: string) {
 
 function enforceStealthOnWindow(win: BrowserWindow): void {
   if (!app.isPackaged) return;
-  win.on("show", () => applyStealthMode(win));
-  win.on("focus", () => applyStealthMode(win));
-  win.on("restore", () => applyStealthMode(win));
+  win.on("show", () => { applyStealthMode(win); safeguardVisibility(win); });
+  win.on("focus", () => { applyStealthMode(win); safeguardVisibility(win); });
+  win.on("restore", () => { applyStealthMode(win); safeguardVisibility(win); });
 }
 
 function createMainWindow(): BrowserWindow {
   const primary = screen.getPrimaryDisplay().workAreaSize;
 
-  const isDev = !app.isPackaged;
+  Menu.setApplicationMenu(null);
+
   const win = new BrowserWindow({
     width: 700,
     height: 600,
     minWidth: 400,
     minHeight: 300,
     x: Math.floor((primary.width - 700) / 2),
-    y: isDev ? 100 : 0,
-    transparent: !isDev,
-    frame: isDev,
-    alwaysOnTop: !isDev,
+    y: 80,
+    transparent: true,
+    frame: false,
+    alwaysOnTop: true,
     skipTaskbar: true,
-    hasShadow: isDev,
+    hasShadow: false,
     resizable: true,
     show: false,
+    backgroundColor: "#00000000",
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.js"),
       contextIsolation: true,
@@ -76,13 +78,37 @@ function createMainWindow(): BrowserWindow {
     },
   });
 
-  if (!isDev) {
-    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-    win.setAlwaysOnTop(true, "screen-saver");
-  }
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  win.setAlwaysOnTop(true, "screen-saver");
   win.setIgnoreMouseEvents(false);
 
   enforceStealthOnWindow(win);
+
+  // Surface renderer failures to the terminal instead of leaving a silently blank
+  // window — a transparent frameless window that fails to paint looks identical to
+  // one that's simply "not visible", with no way to tell the difference otherwise.
+  win.webContents.on("did-fail-load", (_e, errorCode, errorDescription, validatedURL) => {
+    console.error(
+      `[Ghostly] ❌ Renderer failed to load (${errorCode} ${errorDescription}): ${validatedURL}`,
+    );
+  });
+  win.webContents.on("render-process-gone", (_e, details) => {
+    console.error("[Ghostly] ❌ Renderer process gone:", JSON.stringify(details));
+  });
+  win.webContents.on("unresponsive", () => {
+    console.error("[Ghostly] ❌ Renderer became unresponsive");
+  });
+  win.webContents.on("preload-error", (_e, preloadPath, error) => {
+    console.error(`[Ghostly] ❌ Preload script error in ${preloadPath}:`, error);
+  });
+  if (!app.isPackaged) {
+    win.webContents.on("console-message", (_e, level, message, line, sourceId) => {
+      if (level >= 2) {
+        // warning(2) / error(3) only — keep the terminal readable
+        console.log(`[Renderer ${level === 3 ? "ERROR" : "WARN"}] ${message} (${sourceId}:${line})`);
+      }
+    });
+  }
 
   if (process.env.ELECTRON_RENDERER_URL) {
     win.loadURL(process.env.ELECTRON_RENDERER_URL);
@@ -94,6 +120,7 @@ function createMainWindow(): BrowserWindow {
     win.setOpacity(1);
     win.show();
     win.focus();
+    win.setAlwaysOnTop(true, "screen-saver");
     if (app.isPackaged) applyStealthMode(win);
   });
 
@@ -102,14 +129,23 @@ function createMainWindow(): BrowserWindow {
 
 function toggleWindowVisibility() {
   if (!mainWindow) return;
-  if (mainWindow.getOpacity() === 0) {
+  const isCurrentlyHidden = mainWindow.getOpacity() === 0 || !mainWindow.isVisible();
+  if (isCurrentlyHidden) {
     mainWindow.setOpacity(1);
+    mainWindow.show();
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.setAlwaysOnTop(true, "screen-saver");
     mainWindow.setIgnoreMouseEvents(false);
     mainWindow.focus();
+    mainWindow.webContents.send("ghostly:show");
+    // The 0 -> 1 opacity jump can leave Windows' DWM holding a stale (blank)
+    // composited frame for this window — same class of bug as the stealth-mode
+    // repaint glitch, just triggered by the ordinary hide/show toggle instead of
+    // SetWindowDisplayAffinity. Nudge it so it can never come back up blank.
+    safeguardVisibility(mainWindow);
   } else {
     mainWindow.setOpacity(0);
     mainWindow.blur();
-    mainWindow.setIgnoreMouseEvents(true, { forward: false });
   }
 }
 
@@ -175,11 +211,22 @@ if (!gotTheLock) {
       ["media", "microphone", "camera", "audioCapture", "desktopCapture", "display-capture"].includes(permission)
     );
     mainWindow.webContents.session.setDisplayMediaRequestHandler((_req, cb) => {
+      // desktopCapturer.getSources() runs a Windows desktop-duplication capture session.
+      // If our own window is WDA_EXCLUDEFROMCAPTURE at that exact moment, Windows' DWM
+      // can stop compositing that window to the real screen too (not just to capture
+      // streams) — the whole app, TopBar included, goes invisible on the user's own
+      // monitor. Drop the exclusion for the duration of the enumeration, then restore
+      // it once the capture session has actually torn down.
+      if (mainWindow) removeStealthMode(mainWindow);
       desktopCapturer.getSources({ types: ["screen"] }).then((sources) => {
         // audio: "loopback" — captures ALL system audio including Zoom, Meet, Teams
         // This is the key flag that makes cross-app audio capture work on Windows
         cb(sources[0] ? { video: sources[0], audio: "loopback" } : { video: sources[0] });
-      }).catch(() => cb({}));
+      }).catch(() => cb({})).finally(() => {
+        // Reapplying immediately can retrigger the same glitch — give the capture
+        // session's teardown a moment to finish first.
+        setTimeout(() => { if (mainWindow) applyStealthMode(mainWindow); }, 800);
+      });
     }, { useSystemPicker: false });
 
     // IPC handlers
@@ -192,7 +239,7 @@ if (!gotTheLock) {
       } catch { /* invalid URL — ignore */ }
     });
     ipcMain.on("ghostly:enable-mouse", () => mainWindow?.setIgnoreMouseEvents(false));
-    ipcMain.on("ghostly:disable-mouse", () => mainWindow?.setIgnoreMouseEvents(true, { forward: true }));
+    ipcMain.on("ghostly:disable-mouse", () => mainWindow?.setIgnoreMouseEvents(false));
     ipcMain.on("ghostly:set-opacity", (_event, value: number) => {
       if (mainWindow) mainWindow.setOpacity(Math.min(1, Math.max(0.1, value)));
     });
@@ -202,10 +249,17 @@ if (!gotTheLock) {
     ipcMain.on("ghostly:show", () => {
       if (mainWindow) {
         mainWindow.setOpacity(1);
+        mainWindow.show();
+        mainWindow.setAlwaysOnTop(true, "screen-saver");
         mainWindow.setIgnoreMouseEvents(false);
         mainWindow.focus();
-        // Re-apply after short delay to override any pending interview-mode disable
-        setTimeout(() => mainWindow?.setIgnoreMouseEvents(false), 150);
+        safeguardVisibility(mainWindow);
+        setTimeout(() => {
+          if (mainWindow) {
+            mainWindow.setAlwaysOnTop(true, "screen-saver");
+            mainWindow.setIgnoreMouseEvents(false);
+          }
+        }, 150);
       }
     });
     ipcMain.on("ghostly:quit", () => app.quit());

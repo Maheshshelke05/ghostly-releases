@@ -75,7 +75,9 @@ export function useInterviewAudio() {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const workletUrlRef = useRef<string | null>(null);
   // Fix: isMounted guard prevents setState after unmount
-  const isMountedRef = useRef(true);
+  const isRecordingRef = useRef(false);
+  const isMountedRef = useRef(false);
+  const reconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const deepgramApiKey = useStore(
     (s) => s.settings.deepgramApiKey ?? import.meta.env.VITE_DEEPGRAM_API_KEY ?? ""
@@ -92,6 +94,7 @@ export function useInterviewAudio() {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
+      isRecordingRef.current = false;
       performCleanup();
     };
   }, []);
@@ -107,6 +110,10 @@ export function useInterviewAudio() {
   }, [deepgramApiKey, addLog]);
 
   const performCleanup = () => {
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
     // Close WebSocket cleanly
     if (wsRef.current) {
       wsRef.current.onmessage = null;
@@ -140,6 +147,7 @@ export function useInterviewAudio() {
 
   const startInterview = async () => {
     if (!isModelReady) return addLog("Cannot start: Deepgram key missing.");
+    isRecordingRef.current = true;
     if (isMountedRef.current) setIsRecording(true);
     addLog("Starting audio capture (Zoom/Meet/Teams supported)...");
 
@@ -178,60 +186,74 @@ export function useInterviewAudio() {
       workletUrlRef.current = workletUrl;
       await audioCtx.audioWorklet.addModule(workletUrl);
 
-      const params = new URLSearchParams({
-        model: "nova-2",
-        smart_format: "true",
-        encoding: "linear16",
-        sample_rate: String(audioCtx.sampleRate),
-        channels: "1",
-        interim_results: "true",
-        utterance_end_ms: "1500",
-        endpointing: "300",
-        vad_events: "true",
-        no_delay: "true",
-      });
+      const connectWebSocket = () => {
+        if (!isMountedRef.current || !isRecordingRef.current) return;
+        const params = new URLSearchParams({
+          model: "nova-2",
+          smart_format: "true",
+          encoding: "linear16",
+          sample_rate: String(audioCtx.sampleRate),
+          channels: "1",
+          interim_results: "true",
+          utterance_end_ms: "1500",
+          endpointing: "300",
+          vad_events: "true",
+          no_delay: "true",
+        });
 
-      const ws = new WebSocket(
-        `wss://api.deepgram.com/v1/listen?${params}`,
-        ["token", deepgramApiKey]
-      );
-      wsRef.current = ws;
-      dgPendingRef.current = [];
-      dgAccumulatedRef.current = "";
+        const ws = new WebSocket(
+          `wss://api.deepgram.com/v1/listen?${params}`,
+          ["token", deepgramApiKey]
+        );
+        wsRef.current = ws;
 
-      ws.onopen = () => {
-        if (!isMountedRef.current) { ws.close(); return; }
-        addLog("Deepgram WebSocket connected ✔");
-        for (const c of dgPendingRef.current) ws.send(c);
-        dgPendingRef.current = [];
-      };
+        ws.onopen = () => {
+          if (!isMountedRef.current || !isRecordingRef.current) { ws.close(); return; }
+          addLog("Deepgram WebSocket connected ✔");
+          for (const c of dgPendingRef.current) ws.send(c);
+          dgPendingRef.current = [];
+        };
 
-      ws.onmessage = (ev) => {
-        if (!isMountedRef.current) return;
-        try {
-          const data = JSON.parse(ev.data);
-          if (data.type === "UtteranceEnd") return;
-          const alt = data.channel?.alternatives?.[0];
-          const rawTranscript = alt?.transcript;
-          if (!rawTranscript?.trim()) return;
-          // Fix: sanitize transcript before setting state — prevents XSS
-          const transcript = sanitizeText(rawTranscript);
-          if (!transcript) return;
-          const acc = dgAccumulatedRef.current;
-          if (data.is_final) {
-            const newAcc = acc + (acc ? " " : "") + transcript;
-            dgAccumulatedRef.current = newAcc;
-            setLiveText(newAcc);
-          } else {
-            setLiveText(acc + (acc ? " " : "") + transcript);
+        ws.onmessage = (ev) => {
+          if (!isMountedRef.current) return;
+          try {
+            const data = JSON.parse(ev.data);
+            if (data.type === "UtteranceEnd") return;
+            const alt = data.channel?.alternatives?.[0];
+            const rawTranscript = alt?.transcript;
+            if (!rawTranscript?.trim()) return;
+            const transcript = sanitizeText(rawTranscript);
+            if (!transcript) return;
+            const acc = dgAccumulatedRef.current;
+            if (data.is_final) {
+              const newAcc = acc + (acc ? " " : "") + transcript;
+              dgAccumulatedRef.current = newAcc;
+              setLiveText(newAcc);
+            } else {
+              setLiveText(acc + (acc ? " " : "") + transcript);
+            }
+          } catch { /* malformed JSON — ignore */ }
+        };
+
+        ws.onerror = () => {
+          if (isMountedRef.current && isRecordingRef.current) {
+            addLog("[WARNING] Deepgram connection error. Reconnecting in 3s...");
           }
-        } catch { /* malformed JSON — ignore */ }
+        };
+
+        ws.onclose = (ev) => {
+          if (isMountedRef.current && isRecordingRef.current && !ev.wasClean) {
+            addLog("Deepgram WebSocket closed. Retrying connection in 3s...");
+            reconnectTimerRef.current = setTimeout(() => {
+              if (isMountedRef.current && isRecordingRef.current) {
+                connectWebSocket();
+              }
+            }, 3000);
+          }
+        };
       };
 
-      ws.onerror = () => addLog("[ERROR] Deepgram WebSocket error");
-      ws.onclose = () => {
-        if (isMountedRef.current) addLog("Deepgram WebSocket closed.");
-      };
+      connectWebSocket();
 
       const source = audioCtx.createMediaStreamSource(sysStream);
       const voiceBoost = audioCtx.createGain();
@@ -254,9 +276,10 @@ export function useInterviewAudio() {
       workletNode.port.onmessage = (e) => {
         if (e.data.type !== "audio") return;
         const buf = e.data.buffer as ArrayBuffer;
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(buf);
-        } else if (ws.readyState === WebSocket.CONNECTING) {
+        const currentWs = wsRef.current;
+        if (currentWs?.readyState === WebSocket.OPEN) {
+          currentWs.send(buf);
+        } else if (currentWs?.readyState === WebSocket.CONNECTING) {
           dgPendingRef.current.push(buf);
         }
         // Fix: drop buffer if ws is closing/closed — prevents memory buildup
@@ -264,6 +287,7 @@ export function useInterviewAudio() {
 
       addLog("🎙️ Listening to system audio...");
     } catch (err) {
+      isRecordingRef.current = false;
       const safeErr = err instanceof Error ? sanitizeText(err.message) : "Unknown error";
       addLog(`[ERROR] ${safeErr}`);
       if (isMountedRef.current) setIsRecording(false);
@@ -272,6 +296,7 @@ export function useInterviewAudio() {
   };
 
   const stopInterview = () => {
+    isRecordingRef.current = false;
     if (isMountedRef.current) {
       setIsRecording(false);
       setLiveText("");

@@ -14,12 +14,12 @@ export function buildSessionContext(session: InterviewSession | null): string {
     ctx += `\n\nCANDIDATE PROFILE:`;
     if (p.fullName)       ctx += `\n- Name: ${p.fullName}`;
     if (p.location)       ctx += `\n- Location: ${p.location}`;
-    if (p.summary)        ctx += `\n- Summary: ${p.summary}`;
-    if (p.skills)         ctx += `\n- Skills: ${p.skills}`;
-    if (p.experience)     ctx += `\n- Experience:\n${p.experience}`;
-    if (p.projects)       ctx += `\n- Projects:\n${p.projects}`;
-    if (p.education)      ctx += `\n- Education: ${p.education}`;
-    if (p.certifications) ctx += `\n- Certifications: ${p.certifications}`;
+    if (p.summary)        ctx += `\n- Summary: ${p.summary.slice(0, 600)}`;
+    if (p.skills)         ctx += `\n- Skills: ${p.skills.slice(0, 600)}`;
+    if (p.experience)     ctx += `\n- Experience:\n${p.experience.slice(0, 1200)}`;
+    if (p.projects)       ctx += `\n- Projects:\n${p.projects.slice(0, 1200)}`;
+    if (p.education)      ctx += `\n- Education: ${p.education.slice(0, 300)}`;
+    if (p.certifications) ctx += `\n- Certifications: ${p.certifications.slice(0, 300)}`;
     if (p.github)         ctx += `\n- GitHub: ${p.github}`;
     if (p.linkedin)       ctx += `\n- LinkedIn: ${p.linkedin}`;
   }

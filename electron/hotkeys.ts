@@ -1,5 +1,6 @@
 import { globalShortcut, BrowserWindow } from "electron";
 import { captureFullScreen } from "./capture";
+import { safeguardVisibility } from "./stealth";
 
 const MOVE_STEP = 25;
 
@@ -19,6 +20,7 @@ export function registerHotkeys(win: BrowserWindow): void {
         win.setOpacity(1);
         win.setIgnoreMouseEvents(true, { forward: true });
         win.focus();
+        safeguardVisibility(win);
       }
       win.webContents.send("ghostly:screenshot", base64);
       setTimeout(() => win.webContents.send("ghostly:solve"), 100);
@@ -28,6 +30,7 @@ export function registerHotkeys(win: BrowserWindow): void {
         win.setOpacity(1);
         win.setIgnoreMouseEvents(true, { forward: true });
         win.focus();
+        safeguardVisibility(win);
       }
     }
   });
@@ -47,6 +50,7 @@ export function registerHotkeys(win: BrowserWindow): void {
         win.setOpacity(1);
         win.setIgnoreMouseEvents(true, { forward: true });
         win.focus();
+        safeguardVisibility(win);
       }
       win.webContents.send("ghostly:screenshot", base64);
       console.log("[Ghostly] Screenshot captured and sent to renderer");
@@ -56,6 +60,7 @@ export function registerHotkeys(win: BrowserWindow): void {
         win.setOpacity(1);
         win.setIgnoreMouseEvents(true, { forward: true });
         win.focus();
+        safeguardVisibility(win);
       }
     }
   });
@@ -66,6 +71,7 @@ export function registerHotkeys(win: BrowserWindow): void {
     if (win.getOpacity() === 0) {
       win.setOpacity(1);
       win.setIgnoreMouseEvents(true, { forward: true });
+      safeguardVisibility(win);
     }
     win.focus();
     win.webContents.send("ghostly:solve");
@@ -74,18 +80,21 @@ export function registerHotkeys(win: BrowserWindow): void {
 
   // Show / Hide — Ctrl+B
   const regB = globalShortcut.register("CommandOrControl+B", () => {
-    if (win.getOpacity() > 0) {
-      // Hide — click-through completely
+    const isCurrentlyHidden = win.getOpacity() === 0 || !win.isVisible();
+    if (isCurrentlyHidden) {
+      // SHOW / UNHIDE
+      win.setOpacity(1);
+      win.show();
+      if (win.isMinimized()) win.restore();
+      win.setAlwaysOnTop(true, "screen-saver");
+      win.setIgnoreMouseEvents(false);
+      win.focus();
+      win.webContents.send("ghostly:show");
+      safeguardVisibility(win);
+    } else {
+      // HIDE
       win.setOpacity(0);
       win.blur();
-      win.setIgnoreMouseEvents(true, { forward: false });
-    } else {
-      // Show — enable mouse fully so all pages work
-      win.setOpacity(1);
-      win.setIgnoreMouseEvents(false); // Full mouse enable
-      win.focus();
-      // Renderer ko bhi signal bhejo
-      win.webContents.send("ghostly:show");
     }
   });
   console.log("[Ghostly] Ctrl+B registered:", regB);

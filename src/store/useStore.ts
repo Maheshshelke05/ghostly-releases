@@ -205,7 +205,7 @@ export const useStore = create<GhostlyStore>((set) => ({
   clearSolution: () => set({ currentSolution: "", screenshots: [], currentScreenshot: null, error: null, sessionMessages: [] }),
   setMouseEnabled: (v) => set({ mouseEnabled: v }),
   addSessionMessage: (msg) => set((state) => ({ sessionMessages: [...state.sessionMessages, msg] })),
-  addToHistory: (s) => set((state) => ({ history: [s, ...state.history] })),
+  addToHistory: (s) => set((state) => ({ history: [s, ...state.history].slice(0, 30) })),
   removeFromHistory: (id) => set((state) => ({ history: state.history.filter((s) => s.id !== id) })),
   clearHistory: () => set({ history: [] }),
   setHistory: (history) => set({ history }),

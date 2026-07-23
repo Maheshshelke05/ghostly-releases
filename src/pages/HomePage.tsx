@@ -3,19 +3,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Ad, useStore } from "../store/useStore";
 import { InterviewHistoryModal } from "../components/InterviewHistoryModal";
 
-const BASE = "#1b1b26";
-const nm = (raised = true) =>
-  raised
-    ? "6px 6px 14px rgba(0,0,0,0.55), -3px -3px 8px rgba(255,255,255,0.04)"
-    : "inset 4px 4px 10px rgba(0,0,0,0.5), inset -2px -2px 6px rgba(255,255,255,0.04)";
-
 const SHORTCUTS = [
-  { keys: "Ctrl+E",  label: "Screenshot" },
-  { keys: "Ctrl+0",  label: "Send AI"    },
-  { keys: "Ctrl+N",  label: "Next Q"     },
-  { keys: "Ctrl+B",  label: "Show/Hide"  },
-  { keys: "Ctrl+G",  label: "Start Over" },
-  { keys: "Ctrl+↵",  label: "Ask AI"     },
+  { keys: "Ctrl+E",  label: "Screenshot", color: "rgba(139,92,246,0.15)", border: "rgba(139,92,246,0.3)", textColor: "#a78bfa" },
+  { keys: "Ctrl+0",  label: "Send AI",    color: "rgba(34,197,94,0.1)", border: "rgba(34,197,94,0.25)", textColor: "#4ade80" },
+  { keys: "Ctrl+N",  label: "Next Q",     color: "rgba(59,130,246,0.1)", border: "rgba(59,130,246,0.25)", textColor: "#60a5fa" },
+  { keys: "Ctrl+B",  label: "Show/Hide",  color: "rgba(251,191,36,0.08)", border: "rgba(251,191,36,0.22)", textColor: "#fbbf24" },
+  { keys: "Ctrl+G",  label: "Start Over", color: "rgba(239,68,68,0.08)", border: "rgba(239,68,68,0.2)", textColor: "#f87171" },
+  { keys: "Ctrl+↵",  label: "Ask AI",     color: "rgba(139,92,246,0.12)", border: "rgba(139,92,246,0.28)", textColor: "#c4b5fd" },
 ];
 
 const escapeHtml = (v: string) =>
@@ -49,6 +43,24 @@ export const HomePage: React.FC = () => {
   const displayAd = gateAd || activeAd;
   const [adGate, setAdGate] = useState(false);
   const [adClicked, setAdClicked] = useState(false);
+  const [skipCountdown, setSkipCountdown] = useState(5);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (adGate) {
+      setSkipCountdown(5);
+      timer = setInterval(() => {
+        setSkipCountdown((c) => {
+          if (c <= 1) {
+            clearInterval(timer);
+            return 0;
+          }
+          return c - 1;
+        });
+      }, 1000);
+    }
+    return () => { if (timer) clearInterval(timer); };
+  }, [adGate]);
 
   const getCachedAds = async () => {
     const stateAds = useStore.getState().ads;
@@ -101,11 +113,7 @@ export const HomePage: React.FC = () => {
   }, [historyOpen]);
 
   useEffect(() => {
-    if (historyOpen) {
-      window.ghostly.enableMouse();
-    } else {
-      window.ghostly.disableMouse();
-    }
+    window.ghostly.enableMouse();
   }, [historyOpen]);
 
   const handleCheckUpdate = () => {
@@ -120,54 +128,57 @@ export const HomePage: React.FC = () => {
       className="h-screen w-full flex items-center justify-center px-3 py-2 overflow-y-auto"
       style={{ background: "transparent", pointerEvents: "none", fontFamily: "'Inter', -apple-system, sans-serif", userSelect: "none" }}
     >
+      {/* Ambient glow */}
+      <div
+        className="fixed inset-0 pointer-events-none"
+        style={{
+          background: "radial-gradient(ellipse 80% 60% at 50% 0%, rgba(139,92,246,0.09) 0%, transparent 60%)",
+        }}
+      />
+
       <motion.div
-        initial={{ opacity: 0, y: 10, scale: 0.97 }}
+        initial={{ opacity: 0, y: 12, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-        className="w-full max-w-[300px] flex flex-col gap-2"
+        transition={{ duration: 0.38, ease: [0.16, 1, 0.3, 1] }}
+        className="w-full max-w-[310px] flex flex-col gap-2 relative z-10"
         style={{ pointerEvents: "auto" }}
         onMouseEnter={() => window.ghostly.enableMouse()}
-        onMouseLeave={() => window.ghostly.disableMouse()}
       >
         {/* ── Header ── */}
         <div className="flex items-center justify-between px-0.5">
           <div className="flex items-center gap-2.5">
-            {/* Ghost icon — neumorphic raised circle */}
+            {/* Ghost icon */}
             <div className="relative shrink-0">
               <motion.div
-                animate={{ scale: [1, 1.04, 1] }}
+                animate={{ y: [0, -3, 0] }}
                 transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-                className="w-9 h-9 rounded-[12px] flex items-center justify-center text-[19px]"
+                className="w-10 h-10 rounded-[13px] flex items-center justify-center text-[20px]"
                 style={{
-                  background: BASE,
-                  boxShadow: `${nm()}, 0 0 0 1.5px rgba(235,146,69,0.2)`,
+                  background: "linear-gradient(135deg, rgba(139,92,246,0.2) 0%, rgba(99,102,241,0.12) 100%)",
+                  border: "1.5px solid rgba(139,92,246,0.3)",
+                  boxShadow: "0 0 20px rgba(139,92,246,0.2), 0 4px 12px rgba(0,0,0,0.4)",
                 }}
               >
                 👻
               </motion.div>
               <motion.span
-                animate={{ scale: [1, 1.35, 1], opacity: [1, 0.6, 1] }}
+                animate={{ scale: [1, 1.4, 1], opacity: [1, 0.6, 1] }}
                 transition={{ duration: 2, repeat: Infinity }}
                 className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full"
-                style={{ background: "#22c55e", border: "2px solid #0d0d14", boxShadow: "0 0 6px rgba(34,197,94,0.7)" }}
+                style={{ background: "#22c55e", border: "2px solid #0d0d14", boxShadow: "0 0 8px rgba(34,197,94,0.7)" }}
               />
             </div>
             <div>
-              <div className="flex items-center gap-1.5">
-                <h1 className="text-[17px] font-black tracking-tight text-white leading-none">Ghotly AI</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-[16px] font-black tracking-tight text-white leading-none">Ghotly AI</h1>
                 <span
                   className="px-1.5 py-0.5 rounded-full text-[8px] font-black"
-                  style={{
-                    background: BASE,
-                    boxShadow: nm(false),
-                    color: "#eb9245",
-                    border: "none",
-                  }}
+                  style={{ background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.3)", color: "#a78bfa" }}
                 >
                   v{version}
                 </span>
               </div>
-              <p className="text-[9px] font-medium mt-0.5" style={{ color: "rgba(255,255,255,0.3)" }}>
+              <p className="text-[9px] font-medium mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>
                 Stealth AI Copilot
               </p>
             </div>
@@ -175,10 +186,23 @@ export const HomePage: React.FC = () => {
           {/* Quit */}
           <button
             onClick={() => window.ghostly.quit()}
-            className="w-7 h-7 flex items-center justify-center rounded-[8px] transition-all shrink-0"
-            style={{ background: BASE, boxShadow: nm(), color: "rgba(255,255,255,0.28)" }}
-            onMouseEnter={(e) => { window.ghostly.enableMouse(); e.currentTarget.style.boxShadow = nm(false); e.currentTarget.style.color = "#f87171"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.boxShadow = nm(); e.currentTarget.style.color = "rgba(255,255,255,0.28)"; }}
+            className="w-7 h-7 flex items-center justify-center rounded-[9px] transition-all shrink-0"
+            style={{
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.07)",
+              color: "rgba(255,255,255,0.3)",
+            }}
+            onMouseEnter={e => {
+              window.ghostly.enableMouse();
+              e.currentTarget.style.background = "rgba(239,68,68,0.15)";
+              e.currentTarget.style.borderColor = "rgba(239,68,68,0.35)";
+              e.currentTarget.style.color = "#f87171";
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = "rgba(255,255,255,0.04)";
+              e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)";
+              e.currentTarget.style.color = "rgba(255,255,255,0.3)";
+            }}
           >
             <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
               <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -186,49 +210,98 @@ export const HomePage: React.FC = () => {
           </button>
         </div>
 
-        {/* ── Main Card — neumorphic raised panel ── */}
+        {/* ── Main Card ── */}
         <div
-          className="w-full rounded-[20px] overflow-hidden"
-          style={{ background: BASE, boxShadow: nm() }}
+          className="w-full rounded-[22px] overflow-hidden"
+          style={{
+            background: "rgba(13,13,20,0.9)",
+            backdropFilter: "blur(24px)",
+            WebkitBackdropFilter: "blur(24px)",
+            border: "1px solid rgba(255,255,255,0.08)",
+            boxShadow: "0 16px 48px rgba(0,0,0,0.6), 0 1px 0 rgba(255,255,255,0.06) inset",
+          }}
         >
+          {/* ── Violet top accent ── */}
+          <div
+            className="h-0.5 w-full"
+            style={{ background: "linear-gradient(90deg, transparent, rgba(139,92,246,0.7), rgba(99,102,241,0.5), transparent)" }}
+          />
+
           {/* ── Action Buttons ── */}
           <div className="px-3 pt-3 pb-2.5 flex flex-col gap-2">
-
-            {/* Start Interview — inset orange glow primary */}
+            {/* Start Interview */}
             <motion.button
-              whileHover={{ scale: 1.02 }}
+              whileHover={{ scale: 1.02, y: -1 }}
               whileTap={{ scale: 0.98 }}
               onClick={handleStartInterview}
               disabled={startStatus === "syncing"}
-              className="w-full py-3 rounded-[14px] text-[13px] font-extrabold flex items-center justify-center gap-2 relative overflow-hidden"
+              className="w-full py-3.5 rounded-[14px] text-[13px] font-extrabold flex items-center justify-center gap-2 relative overflow-hidden"
               style={{
-                background: "linear-gradient(135deg, #eb9245 0%, #d97706 100%)",
+                background: startStatus === "syncing"
+                  ? "rgba(139,92,246,0.15)"
+                  : "linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)",
                 color: "#fff",
-                boxShadow: startStatus === "syncing"
-                  ? nm(false)
-                  : "4px 4px 12px rgba(0,0,0,0.5), -2px -2px 6px rgba(255,255,255,0.04), 0 0 20px rgba(235,146,69,0.3)",
                 border: "none",
+                boxShadow: startStatus === "syncing"
+                  ? "none"
+                  : "0 6px 24px rgba(139,92,246,0.45), 0 1px 0 rgba(255,255,255,0.2) inset",
               }}
             >
+              {/* Shimmer */}
+              {startStatus !== "syncing" && (
+                <motion.div
+                  className="absolute inset-0 w-1/3"
+                  style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent)" }}
+                  animate={{ x: ["-100%", "400%"] }}
+                  transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                />
+              )}
               {startStatus === "syncing" ? (
-                <><svg className="animate-spin" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Checking…</>
+                <>
+                  <svg className="animate-spin" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                  </svg>
+                  <span style={{ color: "rgba(255,255,255,0.6)" }}>Syncing…</span>
+                </>
               ) : (
-                <><span className="text-[15px]">⚡</span>Start Interview</>
+                <>
+                  <span className="relative z-10 text-[16px]">⚡</span>
+                  <span className="relative z-10">Start Interview</span>
+                </>
               )}
             </motion.button>
 
             {/* Secondary row */}
             <div className="flex gap-2">
               {/* Check Updates */}
-              <button
+              <motion.button
+                whileTap={{ scale: 0.97 }}
                 onClick={handleCheckUpdate}
                 disabled={checkStatus === "checking"}
-                className="flex-1 py-2 rounded-[11px] text-[10px] font-bold flex items-center justify-center gap-1.5 transition-all"
+                className="flex-1 py-2.5 rounded-[11px] text-[10px] font-bold flex items-center justify-center gap-1.5 transition-all"
                 style={{
-                  background: BASE,
-                  boxShadow: checkStatus === "latest" ? nm(false) : nm(),
-                  color: checkStatus === "latest" ? "#22c55e" : "rgba(255,255,255,0.4)",
-                  border: "none",
+                  background: checkStatus === "latest"
+                    ? "rgba(34,197,94,0.1)"
+                    : "rgba(255,255,255,0.04)",
+                  border: checkStatus === "latest"
+                    ? "1px solid rgba(34,197,94,0.3)"
+                    : "1px solid rgba(255,255,255,0.08)",
+                  color: checkStatus === "latest"
+                    ? "#4ade80"
+                    : "rgba(255,255,255,0.45)",
+                  boxShadow: checkStatus === "latest" ? "0 0 12px rgba(34,197,94,0.15)" : "none",
+                }}
+                onMouseEnter={e => {
+                  if (checkStatus !== "latest") {
+                    e.currentTarget.style.background = "rgba(255,255,255,0.07)";
+                    e.currentTarget.style.color = "rgba(255,255,255,0.7)";
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (checkStatus !== "latest") {
+                    e.currentTarget.style.background = "rgba(255,255,255,0.04)";
+                    e.currentTarget.style.color = "rgba(255,255,255,0.45)";
+                  }
                 }}
               >
                 {checkStatus === "checking" ? (
@@ -238,16 +311,28 @@ export const HomePage: React.FC = () => {
                 ) : (
                   <><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.59-9.21L21.5 8"/></svg>Update</>
                 )}
-              </button>
+              </motion.button>
 
               {/* History */}
               <motion.button
                 whileTap={{ scale: 0.97 }}
                 onClick={() => setHistoryOpen(true)}
-                className="flex-1 py-2 rounded-[11px] text-[10px] font-bold flex items-center justify-center gap-1.5 transition-all"
-                style={{ background: BASE, boxShadow: nm(), color: "rgba(255,255,255,0.4)", border: "none" }}
-                onMouseEnter={e => { e.currentTarget.style.boxShadow = nm(false); }}
-                onMouseLeave={e => { e.currentTarget.style.boxShadow = nm(); }}
+                className="flex-1 py-2.5 rounded-[11px] text-[10px] font-bold flex items-center justify-center gap-1.5 transition-all"
+                style={{
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  color: "rgba(255,255,255,0.45)",
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = "rgba(139,92,246,0.1)";
+                  e.currentTarget.style.borderColor = "rgba(139,92,246,0.25)";
+                  e.currentTarget.style.color = "#a78bfa";
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = "rgba(255,255,255,0.04)";
+                  e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)";
+                  e.currentTarget.style.color = "rgba(255,255,255,0.45)";
+                }}
               >
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                   <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
@@ -255,40 +340,41 @@ export const HomePage: React.FC = () => {
                 History
                 {historyCount > 0 && (
                   <span
-                    className="px-1 py-0.5 rounded-full text-[7px] font-black"
-                    style={{ background: BASE, boxShadow: nm(false), color: "#eb9245" }}
-                  >{historyCount}</span>
+                    className="px-1.5 py-0.5 rounded-full text-[7px] font-black"
+                    style={{ background: "rgba(139,92,246,0.2)", border: "1px solid rgba(139,92,246,0.35)", color: "#a78bfa" }}
+                  >
+                    {historyCount}
+                  </span>
                 )}
               </motion.button>
             </div>
           </div>
 
-          {/* ── Neumorphic Groove Divider ── */}
-          <div className="mx-3 py-1">
-            <div className="h-px" style={{ boxShadow: "0 1px 0 rgba(255,255,255,0.04), 0 -1px 0 rgba(0,0,0,0.35)", background: "transparent" }} />
-          </div>
+          {/* ── Divider ── */}
+          <div className="mx-3 h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
 
           {/* ── Hotkeys ── */}
-          <div className="px-3 py-2.5">
-            <p className="text-[7px] font-black uppercase tracking-[0.14em] mb-2" style={{ color: "rgba(255,255,255,0.2)" }}>
+          <div className="px-3 py-3">
+            <p className="text-[8px] font-black uppercase tracking-[0.15em] mb-2.5" style={{ color: "rgba(255,255,255,0.22)" }}>
               Hotkeys
             </p>
             <div className="grid grid-cols-3 gap-1.5">
               {SHORTCUTS.map((s) => (
                 <div
                   key={s.keys}
-                  className="flex flex-col items-center justify-center gap-1 px-2 py-2 rounded-[10px]"
-                  style={{ background: BASE, boxShadow: nm(false) }}
+                  className="flex flex-col items-center justify-center gap-1 px-2 py-2.5 rounded-[11px] transition-all"
+                  style={{
+                    background: s.color,
+                    border: `1px solid ${s.border}`,
+                  }}
                 >
-                  <span className="text-[7.5px] font-medium" style={{ color: "rgba(255,255,255,0.35)" }}>{s.label}</span>
+                  <span className="text-[8px] font-semibold" style={{ color: "rgba(255,255,255,0.5)" }}>{s.label}</span>
                   <kbd
-                    className="text-[6.5px] font-bold font-mono px-1.5 py-0.5 rounded-[5px]"
+                    className="text-[7px] font-bold font-mono px-1.5 py-0.5 rounded-[5px]"
                     style={{
-                      background: BASE,
-                      boxShadow: nm(),
-                      color: "#eb9245",
+                      background: "rgba(0,0,0,0.25)",
+                      color: s.textColor,
                       border: "none",
-                      letterSpacing: "0.02em",
                     }}
                   >
                     {s.keys}
@@ -298,41 +384,60 @@ export const HomePage: React.FC = () => {
             </div>
           </div>
 
-          {/* ── Groove Divider ── */}
-          <div className="mx-3 py-1">
-            <div className="h-px" style={{ boxShadow: "0 1px 0 rgba(255,255,255,0.04), 0 -1px 0 rgba(0,0,0,0.35)", background: "transparent" }} />
-          </div>
+          {/* ── Divider ── */}
+          <div className="mx-3 h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
 
           {/* ── User row ── */}
-          <div className="px-3 py-2.5 flex items-center justify-between">
-            <div className="flex items-center gap-2">
+          <div className="px-3 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              {/* Avatar */}
               <div
-                className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 overflow-hidden"
-                style={{ background: BASE, boxShadow: nm() }}
+                className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 overflow-hidden"
+                style={{
+                  border: "1.5px solid rgba(139,92,246,0.35)",
+                  boxShadow: "0 0 12px rgba(139,92,246,0.2)",
+                }}
               >
                 {user?.picture ? (
                   <img src={user.picture} alt={user.name} className="w-full h-full object-cover" />
                 ) : (
-                  <span className="text-white text-[10px] font-black">{user?.name?.[0]?.toUpperCase() || "U"}</span>
+                  <span
+                    className="text-[11px] font-black w-full h-full flex items-center justify-center"
+                    style={{ background: "linear-gradient(135deg, rgba(139,92,246,0.3), rgba(99,102,241,0.2))", color: "#a78bfa" }}
+                  >
+                    {user?.name?.[0]?.toUpperCase() || "U"}
+                  </span>
                 )}
               </div>
               <div>
-                <p className="text-[9px] font-bold leading-none" style={{ color: "rgba(255,255,255,0.7)" }}>
+                <p className="text-[10px] font-bold leading-none" style={{ color: "rgba(255,255,255,0.78)" }}>
                   {user?.name || "Guest"}
                 </p>
-                <p className="text-[7.5px] mt-0.5 font-medium" style={{ color: "#eb9245", opacity: 0.65 }}>
+                <p className="text-[8px] mt-0.5 font-semibold" style={{ color: "rgba(167,139,250,0.55)" }}>
                   Ad-supported · Free
                 </p>
               </div>
             </div>
-            {/* Logout — neumorphic icon button */}
+            {/* Logout */}
             <button
               onClick={handleLogout}
               title="Logout"
-              className="w-7 h-7 flex items-center justify-center rounded-[8px] transition-all"
-              style={{ background: BASE, boxShadow: nm(), color: "rgba(255,255,255,0.28)" }}
-              onMouseEnter={e => { e.currentTarget.style.boxShadow = nm(false); e.currentTarget.style.color = "#f87171"; }}
-              onMouseLeave={e => { e.currentTarget.style.boxShadow = nm(); e.currentTarget.style.color = "rgba(255,255,255,0.28)"; }}
+              className="w-7 h-7 flex items-center justify-center rounded-[9px] transition-all"
+              style={{
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.07)",
+                color: "rgba(255,255,255,0.28)",
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = "rgba(239,68,68,0.15)";
+                e.currentTarget.style.borderColor = "rgba(239,68,68,0.35)";
+                e.currentTarget.style.color = "#f87171";
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = "rgba(255,255,255,0.04)";
+                e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)";
+                e.currentTarget.style.color = "rgba(255,255,255,0.28)";
+              }}
             >
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>
@@ -351,110 +456,134 @@ export const HomePage: React.FC = () => {
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
             className="fixed inset-0 z-[9999] flex items-center justify-center"
-            style={{ background: "transparent", pointerEvents: "auto" }}
+            style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(6px)", pointerEvents: "auto" }}
             onMouseEnter={() => window.ghostly.enableMouse()}
           >
             <motion.div
-              initial={{ scale: 0.91, y: 16 }} animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.91, y: 16 }} transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-              className="w-[315px] rounded-[22px] overflow-hidden p-3 flex flex-col gap-2"
-              style={{ background: BASE, boxShadow: "10px 10px 28px rgba(0,0,0,0.65), -4px -4px 12px rgba(255,255,255,0.04)" }}
+              initial={{ scale: 0.92, y: 20, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }}
+              exit={{ scale: 0.92, y: 20, opacity: 0 }} transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+              className="w-[320px] rounded-[24px] overflow-hidden flex flex-col gap-0"
+              style={{
+                background: "rgba(13,13,20,0.96)",
+                backdropFilter: "blur(28px)",
+                border: "1px solid rgba(255,255,255,0.1)",
+                boxShadow: "0 32px 80px rgba(0,0,0,0.7), 0 1px 0 rgba(255,255,255,0.07) inset",
+              }}
             >
-              {/* Top bar */}
-              <div className="flex items-center justify-between px-1">
-                <div className="flex items-center gap-2">
+              {/* Accent top bar */}
+              <div
+                className="h-0.5"
+                style={{ background: "linear-gradient(90deg, transparent, rgba(139,92,246,0.7), rgba(99,102,241,0.5), transparent)" }}
+              />
+
+              <div className="p-4 flex flex-col gap-3">
+                {/* Header */}
+                <div className="flex items-center justify-between">
                   <div
-                    className="px-2.5 py-1 rounded-full text-[7.5px] font-black uppercase tracking-[0.1em]"
-                    style={{ background: BASE, boxShadow: nm(false), color: "#eb9245" }}
+                    className="px-2.5 py-1 rounded-full text-[8px] font-black uppercase tracking-[0.12em]"
+                    style={{ background: "rgba(139,92,246,0.12)", border: "1px solid rgba(139,92,246,0.3)", color: "#a78bfa" }}
                   >
                     📢 Sponsor
                   </div>
+                  <motion.div
+                    key={adClicked ? "unlocked" : "locked"}
+                    initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                    className="px-2.5 py-1 rounded-full text-[8px] font-black flex items-center gap-1.5"
+                    style={{
+                      background: adClicked ? "rgba(34,197,94,0.12)" : "rgba(255,255,255,0.06)",
+                      border: adClicked ? "1px solid rgba(34,197,94,0.3)" : "1px solid rgba(255,255,255,0.1)",
+                      color: adClicked ? "#4ade80" : "rgba(255,255,255,0.35)",
+                    }}
+                  >
+                    {adClicked ? <>✓ Unlocked</> : <>🔒 Locked</>}
+                  </motion.div>
                 </div>
-                <motion.div
-                  key={adClicked ? "unlocked" : "locked"}
-                  initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                  className="px-2 py-0.5 rounded-full text-[7.5px] font-black flex items-center gap-1"
+
+                {/* Ad media */}
+                {displayAd.script_url && displayAd.container_id ? (
+                  <div style={{ borderRadius: "14px", overflow: "hidden", border: "1px solid rgba(255,255,255,0.07)" }}>
+                    <AdNetworkPlacement ad={displayAd} />
+                  </div>
+                ) : displayAd.image_url && (
+                  <div className="rounded-[14px] overflow-hidden" style={{ height: "118px", border: "1px solid rgba(255,255,255,0.07)" }}>
+                    <img src={displayAd.image_url} alt="" className="w-full h-full object-cover" />
+                  </div>
+                )}
+
+                {/* Ad content */}
+                <div>
+                  <p className="text-[13px] font-black leading-tight text-white">{displayAd.title}</p>
+                  <p className="text-[10px] font-medium mt-1 leading-relaxed" style={{ color: "rgba(255,255,255,0.45)" }}>
+                    {displayAd.description}
+                  </p>
+                </div>
+
+                {/* Gate notice */}
+                <div
+                  className="px-3 py-2.5 rounded-xl flex items-start gap-2.5"
                   style={{
-                    background: BASE,
-                    boxShadow: nm(false),
-                    color: adClicked ? "#22c55e" : "#eb9245",
+                    background: adClicked ? "rgba(34,197,94,0.07)" : "rgba(255,255,255,0.04)",
+                    border: adClicked ? "1px solid rgba(34,197,94,0.2)" : "1px solid rgba(255,255,255,0.07)",
                   }}
                 >
-                  {adClicked ? <>✓ Unlocked</> : <>🔒 Locked</>}
-                </motion.div>
-              </div>
-
-              {/* Ad media — neumorphic frame */}
-              {displayAd.script_url && displayAd.container_id ? (
-                <div style={{ borderRadius: "14px", overflow: "hidden", boxShadow: nm(false) }}>
-                  <AdNetworkPlacement ad={displayAd} />
+                  <span className="text-[11px] mt-0.5 shrink-0">{adClicked ? "✅" : "🔓"}</span>
+                  <p className="text-[9px] font-semibold leading-relaxed" style={{ color: adClicked ? "#4ade80" : "rgba(255,255,255,0.45)" }}>
+                    {adClicked
+                      ? "Sponsor visited! Tap Continue to start your interview."
+                      : "Ghotly AI is free through sponsors. Tap below once to unlock your session."}
+                  </p>
                 </div>
-              ) : displayAd.image_url && (
-                <div className="rounded-[14px] overflow-hidden" style={{ height: "118px", boxShadow: nm(false) }}>
-                  <img src={displayAd.image_url} alt="" className="w-full h-full object-cover" />
+
+                {/* Buttons */}
+                <div className="flex flex-col gap-2">
+                  <motion.button
+                    whileHover={!adClicked ? { scale: 1.02, y: -1 } : {}}
+                    whileTap={!adClicked ? { scale: 0.97 } : {}}
+                    onClick={!adClicked ? handleAdClick : undefined}
+                    className="w-full py-3 rounded-[13px] text-[12px] font-extrabold flex items-center justify-center gap-2 transition-all relative overflow-hidden"
+                    style={{
+                      background: adClicked
+                        ? "rgba(34,197,94,0.1)"
+                        : "linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)",
+                      color: adClicked ? "#4ade80" : "#fff",
+                      border: adClicked ? "1px solid rgba(34,197,94,0.25)" : "none",
+                      boxShadow: adClicked
+                        ? "0 0 16px rgba(34,197,94,0.15)"
+                        : "0 6px 20px rgba(139,92,246,0.4), 0 1px 0 rgba(255,255,255,0.18) inset",
+                      cursor: adClicked ? "default" : "pointer",
+                    }}
+                  >
+                    {!adClicked && (
+                      <motion.div
+                        className="absolute inset-0 w-1/3"
+                        style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent)" }}
+                        animate={{ x: ["-100%", "400%"] }}
+                        transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                      />
+                    )}
+                    <span className="relative z-10">
+                      {adClicked ? <>✓ Visited — Thank you!</> : <>{displayAd.cta_text || "Visit Sponsor"} ↗</>}
+                    </span>
+                  </motion.button>
+
+                  <motion.button
+                    onClick={adClicked || skipCountdown === 0 ? handleContinueAfterAd : undefined}
+                    disabled={!adClicked && skipCountdown > 0}
+                    whileHover={adClicked || skipCountdown === 0 ? { scale: 1.01 } : {}}
+                    whileTap={adClicked || skipCountdown === 0 ? { scale: 0.98 } : {}}
+                    className="w-full py-3 rounded-[13px] text-[12px] font-extrabold flex items-center justify-center gap-2 transition-all"
+                    style={{
+                      background: adClicked || skipCountdown === 0 ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.03)",
+                      border: adClicked || skipCountdown === 0 ? "1px solid rgba(139,92,246,0.35)" : "1px solid rgba(255,255,255,0.08)",
+                      color: adClicked || skipCountdown === 0 ? "#a78bfa" : "rgba(255,255,255,0.2)",
+                      cursor: adClicked || skipCountdown === 0 ? "pointer" : "not-allowed",
+                    }}
+                  >
+                    {adClicked || skipCountdown === 0
+                      ? <>Continue to Interview →</>
+                      : <>Visit sponsor or wait {skipCountdown}s…</>}
+                  </motion.button>
                 </div>
-              )}
-
-              {/* Ad content */}
-              <div className="px-1">
-                <p className="text-[13px] font-black leading-tight text-white">{displayAd.title}</p>
-                <p className="text-[9.5px] font-medium mt-1 leading-relaxed" style={{ color: "rgba(255,255,255,0.45)" }}>
-                  {displayAd.description}
-                </p>
-              </div>
-
-              {/* Gate notice — inset chip */}
-              <div
-                className="px-3 py-2 rounded-[11px] flex items-start gap-2"
-                style={{ background: BASE, boxShadow: nm(false) }}
-              >
-                <span className="text-[11px] mt-0.5 shrink-0">{adClicked ? "✅" : "🔓"}</span>
-                <p className="text-[8.5px] font-semibold leading-relaxed" style={{ color: adClicked ? "#22c55e" : "rgba(255,255,255,0.48)" }}>
-                  {adClicked
-                    ? "Sponsor visited! Tap Continue to start your interview."
-                    : "Ghotly AI is free through sponsors. Tap below once to unlock your session."}
-                </p>
-              </div>
-
-              {/* Buttons */}
-              <div className="flex flex-col gap-2 px-0.5">
-                {/* Learn More */}
-                <motion.button
-                  whileHover={!adClicked ? { scale: 1.02 } : {}}
-                  whileTap={!adClicked ? { scale: 0.97 } : {}}
-                  onClick={!adClicked ? handleAdClick : undefined}
-                  className="w-full py-2.5 rounded-[12px] text-[11px] font-extrabold flex items-center justify-center gap-2 transition-all"
-                  style={{
-                    background: adClicked ? BASE : "linear-gradient(135deg, #eb9245 0%, #d97706 100%)",
-                    color: adClicked ? "#22c55e" : "#fff",
-                    boxShadow: adClicked
-                      ? nm(false)
-                      : "4px 4px 12px rgba(0,0,0,0.5), -2px -2px 6px rgba(255,255,255,0.04), 0 0 18px rgba(235,146,69,0.28)",
-                    border: "none",
-                    cursor: adClicked ? "default" : "pointer",
-                  }}
-                >
-                  {adClicked ? <>✓ Visited — Thank you!</> : <>{displayAd.cta_text || "Visit Sponsor"} ↗</>}
-                </motion.button>
-
-                {/* Continue */}
-                <motion.button
-                  onClick={handleContinueAfterAd} disabled={!adClicked}
-                  whileHover={adClicked ? { scale: 1.01 } : {}}
-                  whileTap={adClicked ? { scale: 0.98 } : {}}
-                  className="w-full py-2.5 rounded-[12px] text-[11px] font-extrabold flex items-center justify-center gap-2 transition-all"
-                  style={{
-                    background: BASE,
-                    boxShadow: adClicked ? nm() : nm(false),
-                    color: adClicked ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.18)",
-                    border: "none",
-                    cursor: adClicked ? "pointer" : "not-allowed",
-                  }}
-                >
-                  {adClicked
-                    ? <>Continue to Interview →</>
-                    : <><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Visit sponsor first</>}
-                </motion.button>
               </div>
             </motion.div>
           </motion.div>

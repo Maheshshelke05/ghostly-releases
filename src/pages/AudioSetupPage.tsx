@@ -2,12 +2,6 @@ import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useStore } from "../store/useStore";
 
-const BASE = "#1b1b26";
-const nm = (raised = true) =>
-  raised
-    ? "6px 6px 14px rgba(0,0,0,0.55), -3px -3px 8px rgba(255,255,255,0.04)"
-    : "inset 4px 4px 10px rgba(0,0,0,0.5), inset -2px -2px 6px rgba(255,255,255,0.04)";
-
 export const AudioSetupPage: React.FC = () => {
   const { setAppScreen, settings, updateSettings } = useStore();
   const [microphones, setMicrophones] = useState<MediaDeviceInfo[]>([]);
@@ -17,7 +11,7 @@ export const AudioSetupPage: React.FC = () => {
   const [micLevel, setMicLevel]       = useState(0);
   const [micStatus, setMicStatus]     = useState<"idle" | "testing" | "ok" | "error">("idle");
   const [sysStatus, setSysStatus]     = useState<"idle" | "ok">("idle");
-  const [bars, setBars]               = useState<number[]>(Array(12).fill(0));
+  const [bars, setBars]               = useState<number[]>(Array(16).fill(0));
   const [micDropOpen, setMicDropOpen] = useState(false);
   const micDropRef  = useRef<HTMLDivElement>(null);
   const streamRef   = useRef<MediaStream | null>(null);
@@ -47,7 +41,7 @@ export const AudioSetupPage: React.FC = () => {
   const handleTest = async () => {
     stopStream();
     setTesting(true); setTestDone(false); setMicStatus("testing");
-    setSysStatus("idle"); setMicLevel(0); setBars(Array(12).fill(0));
+    setSysStatus("idle"); setMicLevel(0); setBars(Array(16).fill(0));
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { deviceId: selectedMic === "default" ? undefined : { exact: selectedMic }, echoCancellation: false, noiseSuppression: false },
@@ -63,8 +57,8 @@ export const AudioSetupPage: React.FC = () => {
         analyser.getByteFrequencyData(data);
         const avg = data.reduce((a, b) => a + b, 0) / data.length;
         setMicLevel(Math.min(100, Math.round((avg / 128) * 100)));
-        const cs = Math.floor(data.length / 12);
-        setBars(Array.from({ length: 12 }, (_, i) => {
+        const cs = Math.floor(data.length / 16);
+        setBars(Array.from({ length: 16 }, (_, i) => {
           const sl = data.slice(i * cs, (i + 1) * cs);
           return Math.min(100, Math.round((sl.reduce((x, y) => x + y, 0) / sl.length / 200) * 100));
         }));
@@ -80,12 +74,16 @@ export const AudioSetupPage: React.FC = () => {
   const handleReset = () => {
     stopStream();
     setSelectedMic("default"); setMicLevel(0); setMicStatus("idle");
-    setSysStatus("idle"); setTestDone(false); setTesting(false); setBars(Array(12).fill(0));
+    setSysStatus("idle"); setTestDone(false); setTesting(false); setBars(Array(16).fill(0));
   };
 
   const handleActivate = () => {
     stopStream();
     updateSettings({ micDeviceId: selectedMic });
+    window.ghostly.setOpacity(1);
+    window.ghostly.show();
+    window.ghostly.enableMouse();
+    sessionStorage.setItem("ghostly_autostart", "true");
     setAppScreen("interview");
   };
 
@@ -93,103 +91,136 @@ export const AudioSetupPage: React.FC = () => {
     ? "Default Microphone"
     : microphones.find(m => m.deviceId === selectedMic)?.label || "Unknown";
 
-  const STATUS_COLOR = {
-    idle:    "rgba(255,255,255,0.28)",
-    testing: "#eb9245",
-    ok:      "#22c55e",
-    error:   "#f87171",
-  };
-  const STATUS_TEXT = {
-    idle: "Not Tested", testing: "Listening…", ok: "Signal OK ✓", error: "No Signal ✗",
-  };
+  const STATUS_COLORS = { idle: "rgba(255,255,255,0.28)", testing: "#a78bfa", ok: "#22c55e", error: "#f87171" };
+  const STATUS_BG = { idle: "rgba(255,255,255,0.04)", testing: "rgba(139,92,246,0.1)", ok: "rgba(34,197,94,0.1)", error: "rgba(239,68,68,0.1)" };
+  const STATUS_BORDER = { idle: "rgba(255,255,255,0.08)", testing: "rgba(139,92,246,0.3)", ok: "rgba(34,197,94,0.3)", error: "rgba(239,68,68,0.3)" };
+  const STATUS_TEXT = { idle: "Not Tested", testing: "Listening…", ok: "Signal OK ✓", error: "No Signal ✗" };
 
   return (
     <div
       className="h-screen w-full flex items-center justify-center px-3 py-2"
       style={{ background: "transparent", pointerEvents: "none", userSelect: "none", fontFamily: "'Inter', -apple-system, sans-serif" }}
     >
+      {/* Ambient glow */}
+      <div className="fixed inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse 70% 50% at 50% 0%, rgba(139,92,246,0.09) 0%, transparent 60%)" }} />
+
       <motion.div
-        initial={{ opacity: 0, scale: 0.97, y: 8 }}
+        initial={{ opacity: 0, scale: 0.97, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-        className="w-full max-w-[290px] flex flex-col gap-2"
+        transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+        className="w-full max-w-[300px] flex flex-col gap-2.5 relative z-10"
         style={{ pointerEvents: "auto" }}
         onMouseEnter={() => window.ghostly.enableMouse()}
-        onMouseLeave={() => window.ghostly.disableMouse()}
       >
-        {/* Header */}
+        {/* ── Header ── */}
         <div className="flex items-center justify-between px-0.5">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <div
-              className="w-8 h-8 rounded-[11px] flex items-center justify-center text-[15px] shrink-0"
+              className="w-9 h-9 rounded-[13px] flex items-center justify-center text-[17px] shrink-0"
               style={{
-                background: "linear-gradient(135deg, #eb9245, #d97706)",
-                boxShadow: "4px 4px 12px rgba(0,0,0,0.5), -2px -2px 6px rgba(255,255,255,0.04), 0 0 16px rgba(235,146,69,0.28)",
+                background: "linear-gradient(135deg, rgba(139,92,246,0.25), rgba(99,102,241,0.18))",
+                border: "1.5px solid rgba(139,92,246,0.4)",
+                boxShadow: "0 0 20px rgba(139,92,246,0.25), 0 4px 12px rgba(0,0,0,0.4)",
               }}
             >🎙️</div>
             <div>
-              <p className="text-[12px] font-extrabold text-white leading-tight">Audio Setup</p>
-              <p className="text-[8px] font-bold uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.28)" }}>Step 3 of 3</p>
+              <p className="text-[13px] font-black text-white leading-tight">Audio Setup</p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                {[1, 2, 3].map(i => (
+                  <div
+                    key={i}
+                    className="h-1 rounded-full transition-all"
+                    style={{
+                      width: "20px",
+                      background: "rgba(139,92,246,0.8)",
+                    }}
+                  />
+                ))}
+                <span className="text-[8px] font-bold" style={{ color: "rgba(255,255,255,0.3)" }}>Step 3/3</span>
+              </div>
             </div>
           </div>
           <button
             onClick={() => { stopStream(); setAppScreen("api-setup"); }}
-            className="flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-[9px] transition-all"
-            style={{ background: BASE, boxShadow: nm(), color: "rgba(255,255,255,0.45)", border: "none" }}
-            onMouseEnter={e => { e.currentTarget.style.boxShadow = nm(false); e.currentTarget.style.color = "#fff"; }}
-            onMouseLeave={e => { e.currentTarget.style.boxShadow = nm(); e.currentTarget.style.color = "rgba(255,255,255,0.45)"; }}
+            className="flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1.5 rounded-xl transition-all"
+            style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.45)" }}
+            onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.09)"; e.currentTarget.style.color = "#fff"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; e.currentTarget.style.color = "rgba(255,255,255,0.45)"; }}
           >
             <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
             Back
           </button>
         </div>
 
-        {/* Card */}
-        <div className="w-full rounded-[18px] overflow-visible" style={{ background: BASE, boxShadow: nm() }}>
-          <div className="px-3 pt-3 pb-2 flex flex-col gap-2.5">
+        {/* ── Main Card ── */}
+        <div
+          className="w-full rounded-[22px] overflow-visible"
+          style={{
+            background: "rgba(13,13,20,0.9)",
+            backdropFilter: "blur(24px)",
+            WebkitBackdropFilter: "blur(24px)",
+            border: "1px solid rgba(255,255,255,0.08)",
+            boxShadow: "0 16px 48px rgba(0,0,0,0.6), 0 1px 0 rgba(255,255,255,0.06) inset",
+          }}
+        >
+          {/* Violet top accent */}
+          <div className="h-0.5 rounded-t-[22px]" style={{ background: "linear-gradient(90deg, transparent, rgba(139,92,246,0.7), rgba(99,102,241,0.5), transparent)" }} />
 
-            {/* Mic Selector */}
+          <div className="px-3.5 pt-3.5 pb-3 flex flex-col gap-3">
+
+            {/* ── Mic Selector ── */}
             <div className="flex flex-col gap-1.5 relative" ref={micDropRef}>
-              <label className="text-[7px] font-black uppercase tracking-[0.1em]" style={{ color: "rgba(255,255,255,0.28)" }}>
+              <label className="text-[8px] font-black uppercase tracking-[0.12em]" style={{ color: "rgba(255,255,255,0.28)" }}>
                 🎤 Microphone
               </label>
               <button
                 onClick={() => setMicDropOpen(!micDropOpen)}
-                className="w-full px-2.5 py-2 rounded-[11px] flex items-center justify-between transition-all"
+                className="w-full px-3 py-2.5 rounded-xl flex items-center justify-between transition-all"
                 style={{
-                  background: BASE,
-                  boxShadow: micDropOpen
-                    ? `${nm(false)}, 0 0 0 1.5px rgba(235,146,69,0.4)`
-                    : nm(false),
-                  color: "rgba(255,255,255,0.75)", border: "none",
+                  background: "rgba(255,255,255,0.04)",
+                  border: micDropOpen ? "1px solid rgba(139,92,246,0.5)" : "1px solid rgba(255,255,255,0.08)",
+                  boxShadow: micDropOpen ? "0 0 0 3px rgba(139,92,246,0.1)" : "none",
+                  color: "rgba(255,255,255,0.8)",
                 }}
               >
-                <div className="flex items-center gap-2 overflow-hidden">
-                  {/* Animated mic ring */}
+                <div className="flex items-center gap-2.5 overflow-hidden">
                   <div
-                    className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 relative"
-                    style={{ background: BASE, boxShadow: testing ? `${nm(false)}, 0 0 0 1.5px rgba(235,146,69,0.5)` : nm() }}
+                    className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 relative"
+                    style={{
+                      background: testing ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.06)",
+                      border: testing ? "1px solid rgba(139,92,246,0.35)" : "1px solid rgba(255,255,255,0.1)",
+                      boxShadow: testing ? "0 0 12px rgba(139,92,246,0.3)" : "none",
+                      transition: "all 0.3s",
+                    }}
                   >
-                    {testing && <div className="absolute inset-0 rounded-full border-2 border-orange-400/30 animate-ping" />}
-                    <span className="text-[11px] relative z-10">{testing ? "🔴" : "🎤"}</span>
+                    {testing && (
+                      <div className="absolute inset-0 rounded-full border-2 border-violet-400/30 animate-ping" />
+                    )}
+                    <span className="text-[12px] relative z-10">{testing ? "🔴" : "🎤"}</span>
                   </div>
-                  <p className="text-[11px] font-bold truncate">{selectedMicLabel}</p>
+                  <p className="text-[11px] font-semibold truncate" style={{ color: "rgba(255,255,255,0.82)" }}>{selectedMicLabel}</p>
                 </div>
                 <span
-                  className={`text-[8px] transition-transform duration-200 ${micDropOpen ? "rotate-180" : ""}`}
+                  className={`text-[8px] transition-transform duration-200 shrink-0 ${micDropOpen ? "rotate-180" : ""}`}
                   style={{ color: "rgba(255,255,255,0.3)" }}
                 >▼</span>
               </button>
 
+              {/* Dropdown */}
               <AnimatePresence>
                 {micDropOpen && (
                   <motion.div
-                    initial={{ opacity: 0, y: -4, scale: 0.98 }}
+                    initial={{ opacity: 0, y: -6, scale: 0.97 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                    exit={{ opacity: 0, y: -6, scale: 0.97 }}
                     transition={{ duration: 0.12 }}
-                    className="absolute top-[calc(100%+4px)] left-0 right-0 rounded-[13px] overflow-hidden z-50"
-                    style={{ background: BASE, boxShadow: "8px 8px 20px rgba(0,0,0,0.65), -3px -3px 8px rgba(255,255,255,0.04)" }}
+                    className="absolute top-[calc(100%+4px)] left-0 right-0 rounded-[16px] overflow-hidden z-50"
+                    style={{
+                      background: "rgba(13,13,20,0.98)",
+                      backdropFilter: "blur(24px)",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      boxShadow: "0 16px 40px rgba(0,0,0,0.7)",
+                    }}
                   >
                     <div className="max-h-32 overflow-y-auto" style={{ scrollbarWidth: "none" }}>
                       {["default", ...microphones.map(m => m.deviceId)].map((id, idx) => {
@@ -201,17 +232,17 @@ export const AudioSetupPage: React.FC = () => {
                           <button
                             key={id}
                             onClick={() => { setSelectedMic(id); handleReset(); setMicDropOpen(false); }}
-                            className="w-full text-left px-3 py-2 flex items-center justify-between transition-all"
+                            className="w-full text-left px-3.5 py-2.5 flex items-center justify-between transition-all"
                             style={{
-                              background: isSel ? "rgba(235,146,69,0.08)" : "transparent",
-                              color: isSel ? "#eb9245" : "rgba(255,255,255,0.55)",
-                              borderBottom: idx < microphones.length ? "1px solid rgba(255,255,255,0.03)" : "none",
+                              background: isSel ? "rgba(139,92,246,0.1)" : "transparent",
+                              color: isSel ? "#a78bfa" : "rgba(255,255,255,0.55)",
+                              borderBottom: idx < microphones.length ? "1px solid rgba(255,255,255,0.04)" : "none",
                             }}
                             onMouseEnter={e => { if (!isSel) e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
                             onMouseLeave={e => { if (!isSel) e.currentTarget.style.background = "transparent"; }}
                           >
-                            <span className="text-[11px] font-bold truncate pr-3">{label}</span>
-                            {isSel && <span className="text-[9px] font-black shrink-0" style={{ color: "#eb9245" }}>✓</span>}
+                            <span className="text-[11px] font-semibold truncate pr-3">{label}</span>
+                            {isSel && <span className="text-[9px] font-black shrink-0" style={{ color: "#a78bfa" }}>✓</span>}
                           </button>
                         );
                       })}
@@ -221,7 +252,7 @@ export const AudioSetupPage: React.FC = () => {
               </AnimatePresence>
             </div>
 
-            {/* Visualizer — neumorphic inset container */}
+            {/* ── Visualizer ── */}
             <AnimatePresence>
               {(testing || testDone) && (
                 <motion.div
@@ -230,9 +261,15 @@ export const AudioSetupPage: React.FC = () => {
                   exit={{ opacity: 0, height: 0 }}
                   className="overflow-hidden"
                 >
-                  <div className="rounded-[13px] p-2.5 flex flex-col gap-2" style={{ background: BASE, boxShadow: nm(false) }}>
-                    {/* Bars */}
-                    <div className="flex items-end justify-center gap-[2.5px] h-8">
+                  <div
+                    className="rounded-[14px] p-3 flex flex-col gap-2.5"
+                    style={{
+                      background: "rgba(255,255,255,0.03)",
+                      border: "1px solid rgba(255,255,255,0.07)",
+                    }}
+                  >
+                    {/* Bar visualizer */}
+                    <div className="flex items-end justify-center gap-[3px] h-10">
                       {bars.map((h, i) => (
                         <motion.div
                           key={i}
@@ -240,45 +277,51 @@ export const AudioSetupPage: React.FC = () => {
                           transition={{ duration: 0.07, ease: "linear" }}
                           className="rounded-full flex-1"
                           style={{
-                            minHeight: "3px", maxHeight: "32px",
+                            minHeight: "3px", maxHeight: "40px",
                             background: h > 40
-                              ? "linear-gradient(to top, #eb9245, #fbbf24)"
+                              ? "linear-gradient(to top, #8b5cf6, #a78bfa)"
                               : h > 15
-                              ? "rgba(235,146,69,0.45)"
+                              ? "rgba(139,92,246,0.5)"
                               : "rgba(255,255,255,0.08)",
-                            boxShadow: h > 40 ? "0 0 6px rgba(235,146,69,0.4)" : "none",
+                            boxShadow: h > 40 ? "0 0 8px rgba(139,92,246,0.5)" : "none",
+                            transition: "background 0.15s",
                           }}
                         />
                       ))}
                     </div>
+
                     {/* Level bar */}
-                    <div className="flex items-center gap-2">
-                      <span className="text-[7px] font-black w-5 shrink-0" style={{ color: "rgba(255,255,255,0.28)" }}>
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-[8px] font-bold font-mono w-6 shrink-0 text-right" style={{ color: "rgba(255,255,255,0.3)" }}>
                         {micLevel > 0 ? `${micLevel}%` : "LVL"}
                       </span>
-                      <div className="flex-1 h-1.5 rounded-full" style={{ background: BASE, boxShadow: nm(false) }}>
+                      <div className="flex-1 h-1.5 rounded-full" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.06)" }}>
                         <motion.div
                           animate={{ width: `${micLevel}%` }}
                           transition={{ duration: 0.07 }}
                           className="h-full rounded-full"
                           style={{
                             background: micLevel > 60
-                              ? "linear-gradient(90deg, #eb9245, #fbbf24)"
+                              ? "linear-gradient(90deg, #8b5cf6, #a78bfa)"
                               : micLevel > 25
-                              ? "rgba(235,146,69,0.55)"
-                              : "rgba(255,255,255,0.15)",
-                            boxShadow: micLevel > 40 ? "0 0 8px rgba(235,146,69,0.35)" : "none",
+                              ? "rgba(139,92,246,0.65)"
+                              : "rgba(255,255,255,0.2)",
+                            boxShadow: micLevel > 40 ? "0 0 10px rgba(139,92,246,0.45)" : "none",
+                            transition: "background 0.15s",
                           }}
                         />
                       </div>
                     </div>
+
                     {testing && (
-                      <p className="text-[8px] font-semibold text-center flex items-center justify-center gap-1.5" style={{ color: "rgba(235,146,69,0.65)" }}>
+                      <p className="text-[9px] font-semibold text-center flex items-center justify-center gap-2" style={{ color: "rgba(167,139,250,0.7)" }}>
                         <motion.span
-                          animate={{ scale: [1, 1.4, 1] }} transition={{ duration: 0.8, repeat: Infinity }}
-                          className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: "#eb9245" }}
+                          animate={{ scale: [1, 1.4, 1], opacity: [1, 0.5, 1] }}
+                          transition={{ duration: 0.8, repeat: Infinity }}
+                          className="w-2 h-2 rounded-full inline-block"
+                          style={{ background: "#8b5cf6", boxShadow: "0 0 8px rgba(139,92,246,0.7)" }}
                         />
-                        Speak aloud to test
+                        Speak aloud to test your microphone
                       </p>
                     )}
                   </div>
@@ -286,26 +329,32 @@ export const AudioSetupPage: React.FC = () => {
               )}
             </AnimatePresence>
 
-            {/* Status pills — neumorphic inset */}
-            <div className="grid grid-cols-2 gap-1.5">
+            {/* ── Status pills ── */}
+            <div className="grid grid-cols-2 gap-2">
               {[
                 { label: "Microphone", status: micStatus },
-                { label: "System Audio", status: sysStatus === "ok" ? "ok" : "idle" },
+                { label: "System Audio", status: sysStatus === "ok" ? "ok" as const : "idle" as const },
               ].map(({ label, status }) => (
                 <div
                   key={label}
-                  className="px-2.5 py-1.5 rounded-[10px] flex items-center gap-2"
-                  style={{ background: BASE, boxShadow: nm(false) }}
+                  className="px-3 py-2.5 rounded-[12px] flex items-center gap-2.5 transition-all"
+                  style={{
+                    background: STATUS_BG[status as keyof typeof STATUS_BG],
+                    border: `1px solid ${STATUS_BORDER[status as keyof typeof STATUS_BORDER]}`,
+                  }}
                 >
                   <motion.div
                     animate={status === "testing" ? { scale: [1, 1.5, 1], opacity: [1, 0.4, 1] } : {}}
                     transition={{ duration: 0.8, repeat: Infinity }}
-                    className="w-1.5 h-1.5 rounded-full shrink-0"
-                    style={{ background: STATUS_COLOR[status as keyof typeof STATUS_COLOR] }}
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{
+                      background: STATUS_COLORS[status as keyof typeof STATUS_COLORS],
+                      boxShadow: status === "ok" ? "0 0 8px rgba(34,197,94,0.5)" : status === "testing" ? "0 0 8px rgba(139,92,246,0.5)" : "none",
+                    }}
                   />
                   <div>
-                    <p className="text-[6.5px] font-black uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.22)" }}>{label}</p>
-                    <p className="text-[9px] font-extrabold mt-0.5" style={{ color: STATUS_COLOR[status as keyof typeof STATUS_COLOR] }}>
+                    <p className="text-[7px] font-black uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.25)" }}>{label}</p>
+                    <p className="text-[9.5px] font-bold mt-0.5" style={{ color: STATUS_COLORS[status as keyof typeof STATUS_COLORS] }}>
                       {STATUS_TEXT[status as keyof typeof STATUS_TEXT]}
                     </p>
                   </div>
@@ -313,70 +362,96 @@ export const AudioSetupPage: React.FC = () => {
               ))}
             </div>
 
-            {/* Test + Reset */}
+            {/* ── Test + Reset buttons ── */}
             <div className="flex gap-2">
               <motion.button
                 whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
                 onClick={handleTest} disabled={testing}
-                className="flex-1 py-2 rounded-[10px] text-[11px] font-extrabold flex items-center justify-center gap-1.5 transition-all"
+                className="flex-1 py-2.5 rounded-[12px] text-[11px] font-extrabold flex items-center justify-center gap-2 transition-all relative overflow-hidden"
                 style={{
                   background: testDone
-                    ? BASE
-                    : "linear-gradient(135deg, #eb9245 0%, #d97706 100%)",
-                  color: testDone ? "#22c55e" : "#fff",
-                  boxShadow: testDone
-                    ? `${nm(false)}, 0 0 0 1.5px rgba(34,197,94,0.3)`
+                    ? "rgba(34,197,94,0.1)"
                     : testing
-                    ? nm(false)
-                    : "4px 4px 12px rgba(0,0,0,0.5), -2px -2px 6px rgba(255,255,255,0.04), 0 0 16px rgba(235,146,69,0.28)",
-                  border: "none",
+                    ? "rgba(255,255,255,0.05)"
+                    : "linear-gradient(135deg, #8b5cf6, #7c3aed)",
+                  color: testDone ? "#4ade80" : testing ? "rgba(255,255,255,0.4)" : "#fff",
+                  border: testDone ? "1px solid rgba(34,197,94,0.3)" : testing ? "1px solid rgba(255,255,255,0.08)" : "none",
+                  boxShadow: testDone
+                    ? "0 0 12px rgba(34,197,94,0.2)"
+                    : testing ? "none"
+                    : "0 4px 16px rgba(139,92,246,0.4), 0 1px 0 rgba(255,255,255,0.18) inset",
                 }}
               >
-                {testing
-                  ? <><div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"/>Testing…</>
-                  : testDone ? <>🔄 Re-test</> : <>▶ Test Audio</>}
+                {!testing && !testDone && (
+                  <motion.div
+                    className="absolute inset-0 w-1/3"
+                    style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent)" }}
+                    animate={{ x: ["-100%", "400%"] }}
+                    transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                  />
+                )}
+                <span className="relative z-10">
+                  {testing
+                    ? <><div className="w-3 h-3 border-2 border-white/30 border-t-white/80 rounded-full animate-spin inline-block mr-1.5"/>Testing…</>
+                    : testDone ? <>🔄 Re-test</> : <>▶ Test Audio</>}
+                </span>
               </motion.button>
 
               <AnimatePresence>
                 {(testing || testDone) && (
                   <motion.button
-                    initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.85 }}
+                    initial={{ opacity: 0, scale: 0.85, x: 10 }} animate={{ opacity: 1, scale: 1, x: 0 }} exit={{ opacity: 0, scale: 0.85, x: 10 }}
                     onClick={handleReset}
-                    className="px-3 py-2 rounded-[10px] text-[10px] font-bold transition-all"
-                    style={{ background: BASE, boxShadow: nm(), color: "rgba(255,255,255,0.42)", border: "none" }}
-                    onMouseEnter={e => { e.currentTarget.style.boxShadow = nm(false); e.currentTarget.style.color = "#fff"; }}
-                    onMouseLeave={e => { e.currentTarget.style.boxShadow = nm(); e.currentTarget.style.color = "rgba(255,255,255,0.42)"; }}
+                    className="px-3.5 py-2.5 rounded-[12px] text-[10px] font-bold transition-all"
+                    style={{
+                      background: "rgba(255,255,255,0.04)",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      color: "rgba(255,255,255,0.4)",
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.08)"; e.currentTarget.style.color = "#fff"; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; e.currentTarget.style.color = "rgba(255,255,255,0.4)"; }}
                   >Reset</motion.button>
                 )}
               </AnimatePresence>
             </div>
 
-            {/* Info chip */}
-            <div className="flex items-start gap-2 px-2.5 py-2 rounded-[10px]" style={{ background: BASE, boxShadow: nm(false) }}>
-              <span className="text-[12px] shrink-0">🎧</span>
-              <p className="text-[8px] font-medium leading-relaxed" style={{ color: "rgba(255,255,255,0.38)" }}>
-                Captures <b style={{ color: "rgba(235,146,69,0.75)" }}>all system audio</b> — Zoom, Meet, Teams transcribed automatically.
+            {/* ── Info chip ── */}
+            <div
+              className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl"
+              style={{ background: "rgba(139,92,246,0.06)", border: "1px solid rgba(139,92,246,0.18)" }}
+            >
+              <span className="text-[13px] shrink-0 mt-0.5">🎧</span>
+              <p className="text-[9px] font-medium leading-relaxed" style={{ color: "rgba(255,255,255,0.42)" }}>
+                Captures <b style={{ color: "rgba(167,139,250,0.8)" }}>all system audio</b> — Zoom, Meet, Teams transcribed automatically.
               </p>
             </div>
           </div>
 
-          {/* Footer */}
-          <div className="px-3 pb-3 pt-2" style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
+          {/* ── Footer ── */}
+          <div className="px-3.5 pb-3.5 pt-2.5" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
             <motion.button
-              whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+              whileHover={{ scale: 1.02, y: -1 }} whileTap={{ scale: 0.97 }}
               onClick={handleActivate}
-              className="w-full py-2.5 rounded-[12px] text-[12px] font-extrabold flex items-center justify-center gap-2 transition-all"
+              className="w-full py-3 rounded-[14px] text-[12px] font-extrabold flex items-center justify-center gap-2 relative overflow-hidden transition-all"
               style={{
-                background: testDone ? "linear-gradient(135deg, #eb9245 0%, #d97706 100%)" : BASE,
-                color: testDone ? "#fff" : "rgba(255,255,255,0.28)",
-                boxShadow: testDone
-                  ? "4px 4px 12px rgba(0,0,0,0.5), -2px -2px 6px rgba(255,255,255,0.04), 0 0 18px rgba(235,146,69,0.28)"
-                  : nm(false),
+                background: testDone
+                  ? "linear-gradient(135deg, #22c55e, #16a34a)"
+                  : "linear-gradient(135deg, #8b5cf6, #7c3aed)",
+                color: "#fff",
                 border: "none",
+                boxShadow: testDone
+                  ? "0 6px 24px rgba(34,197,94,0.4), 0 1px 0 rgba(255,255,255,0.2) inset"
+                  : "0 6px 24px rgba(139,92,246,0.4), 0 1px 0 rgba(255,255,255,0.18) inset",
               }}
             >
-              <span className="text-[14px]">{testDone ? "🚀" : "⏭️"}</span>
-              {testDone ? "Launch Interview →" : "Skip & Start →"}
+              <motion.div
+                className="absolute inset-0 w-1/3"
+                style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent)" }}
+                animate={{ x: ["-100%", "400%"] }}
+                transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+              />
+              <span className="relative z-10 text-[15px]">{testDone ? "🚀" : "⏭️"}</span>
+              <span className="relative z-10">{testDone ? "Launch Interview →" : "Skip & Start →"}</span>
             </motion.button>
           </div>
         </div>

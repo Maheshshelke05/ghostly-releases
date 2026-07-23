@@ -84,7 +84,7 @@ const App: React.FC = () => {
             deepgramApiKey: import.meta.env.VITE_DEEPGRAM_API_KEY || savedSettings.deepgramApiKey || "",
           };
           setSettings(merged);
-          if (merged.opacity && merged.opacity !== 1) window.ghostly.setOpacity(merged.opacity);
+          window.ghostly.setOpacity(1);
         }
         if (savedHistory) setHistory(savedHistory);
         if (savedUser) setUser(savedUser);
@@ -96,14 +96,10 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (appScreen === "interview") {
-      window.ghostly.disableMouse();
-    } else {
-      window.ghostly.enableMouse();
-      const t1 = setTimeout(() => window.ghostly.enableMouse(), 100);
-      const t2 = setTimeout(() => window.ghostly.enableMouse(), 400);
-      return () => { clearTimeout(t1); clearTimeout(t2); };
-    }
+    window.ghostly.enableMouse();
+    const t1 = setTimeout(() => window.ghostly.enableMouse(), 100);
+    const t2 = setTimeout(() => window.ghostly.enableMouse(), 400);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [appScreen]);
 
   useEffect(() => {

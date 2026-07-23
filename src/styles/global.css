@@ -1,8 +1,13 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ═══════════════════════════════════════════════════════════════════
+   GHOSTLY AI — Premium Design System v2.0
+   Accent: Purple/Violet #8b5cf6
+   ═══════════════════════════════════════════════════════════════════ */
 
 @layer base {
   * {
@@ -19,14 +24,14 @@
   }
 
   body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-family: 'Inter', 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
 
-  /* Custom scrollbar */
+  /* ── Premium Scrollbar ── */
   ::-webkit-scrollbar {
-    width: 6px;
+    width: 4px;
   }
 
   ::-webkit-scrollbar-track {
@@ -34,139 +39,226 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.12);
-    border-radius: 3px;
+    background: rgba(139, 92, 246, 0.25);
+    border-radius: 4px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(139, 92, 246, 0.45);
   }
 }
 
 @layer components {
-  .glass {
-    background: rgba(0, 0, 0, 0.55);
+
+  /* ── Glass Card (main surface) ── */
+  .glass-card {
+    background: rgba(13, 13, 20, 0.88);
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow:
+      0 24px 64px rgba(0, 0, 0, 0.6),
+      0 1px 0 rgba(255, 255, 255, 0.06) inset,
+      0 -1px 0 rgba(0, 0, 0, 0.3) inset;
   }
 
-  .glass-light {
-    background: rgba(255, 255, 255, 0.05);
+  /* ── Glass Surface (elevated cards within screens) ── */
+  .glass-surface {
+    background: rgba(255, 255, 255, 0.04);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+  }
+
+  /* ── Glass Light (subtle highlight panels) ── */
+  .glass-light {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 10px;
+  }
+
+  /* ── Primary Button (violet gradient) ── */
+  .btn-primary {
+    @apply px-4 py-2.5 rounded-xl font-bold text-sm transition-all duration-200;
+    background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+    color: #fff;
+    border: none;
+    box-shadow:
+      0 4px 16px rgba(139, 92, 246, 0.4),
+      0 1px 0 rgba(255, 255, 255, 0.15) inset;
+  }
+
+  .btn-primary:hover {
+    box-shadow:
+      0 6px 24px rgba(139, 92, 246, 0.55),
+      0 1px 0 rgba(255, 255, 255, 0.15) inset;
+    transform: translateY(-1px);
+  }
+
+  .btn-primary:active {
+    transform: translateY(0px) scale(0.98);
+    box-shadow: 0 2px 8px rgba(139, 92, 246, 0.35);
+  }
+
+  /* ── Ghost Button ── */
+  .btn-ghost {
+    @apply px-4 py-2 rounded-xl font-medium text-sm transition-all duration-200;
+    color: rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.04);
     border: 1px solid rgba(255, 255, 255, 0.08);
   }
 
+  .btn-ghost:hover {
+    color: rgba(255, 255, 255, 0.85);
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.14);
+  }
+
+  /* ── Danger Button ── */
+  .btn-danger {
+    @apply px-4 py-2 rounded-xl font-medium text-sm transition-all duration-200;
+    color: rgba(248, 113, 113, 0.7);
+    background: rgba(239, 68, 68, 0.08);
+    border: 1px solid rgba(239, 68, 68, 0.18);
+  }
+
+  .btn-danger:hover {
+    color: #f87171;
+    background: rgba(239, 68, 68, 0.18);
+    border-color: rgba(239, 68, 68, 0.4);
+    box-shadow: 0 0 16px rgba(239, 68, 68, 0.2);
+  }
+
+  /* ── Input Field ── */
+  .input-field {
+    @apply w-full px-3 py-2.5 rounded-xl text-sm transition-all duration-200;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    color: rgba(255, 255, 255, 0.88);
+    outline: none;
+  }
+
+  .input-field::placeholder {
+    color: rgba(255, 255, 255, 0.25);
+  }
+
+  .input-field:focus {
+    border-color: rgba(139, 92, 246, 0.5);
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.12);
+    background: rgba(139, 92, 246, 0.04);
+  }
+
+  /* ── Settings Select ── */
+  .settings-select {
+    @apply w-full px-3 py-2 rounded-xl text-xs font-mono transition-all duration-200;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    color: rgba(255, 255, 255, 0.8);
+    -webkit-appearance: none;
+    appearance: none;
+    outline: none;
+  }
+
+  .settings-select:focus {
+    border-color: rgba(139, 92, 246, 0.45);
+    box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.1);
+  }
+
+  .settings-select option {
+    background: #13131e;
+    color: #e0e0e0;
+  }
+
+  /* ── Settings Input ── */
+  .settings-input {
+    @apply w-full px-3 py-2 rounded-xl text-xs font-mono transition-all duration-200;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    color: rgba(255, 255, 255, 0.8);
+    outline: none;
+  }
+
+  .settings-input::placeholder {
+    color: rgba(255, 255, 255, 0.22);
+  }
+
+  .settings-input:focus {
+    border-color: rgba(139, 92, 246, 0.45);
+    box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.1);
+  }
+
+  /* ── Card (general) ── */
+  .card {
+    @apply rounded-2xl p-4 transition-all duration-200;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+  }
+
+  .card:hover {
+    border-color: rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  /* ── Violet Glow ── */
+  .glow-violet {
+    box-shadow:
+      0 0 24px rgba(139, 92, 246, 0.35),
+      0 0 8px rgba(139, 92, 246, 0.15);
+  }
+
+  /* ── Green Glow ── */
+  .glow-green {
+    box-shadow:
+      0 0 16px rgba(34, 197, 94, 0.35),
+      0 0 6px rgba(34, 197, 94, 0.2);
+  }
+
+  /* ── Orange Glow ── */
+  .glow-orange {
+    box-shadow:
+      0 0 20px rgba(249, 115, 22, 0.35),
+      0 0 8px rgba(249, 115, 22, 0.15);
+  }
+
+  /* ── Gradient text (violet) ── */
+  .gradient-text-violet {
+    background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 50%, #c4b5fd 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* ── Gradient text (white) ── */
+  .gradient-text-white {
+    background: linear-gradient(135deg, #ffffff 0%, rgba(255,255,255,0.7) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* ── ghostly-gradient (legacy compat) ── */
   .ghostly-gradient {
-    background: linear-gradient(135deg, #00ff88 0%, #00cc6a 100%);
+    background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
   }
 
   .ghostly-gradient-text {
-    background: linear-gradient(135deg, #00ff88 0%, #00cc6a 50%, #00ff88 100%);
+    background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 50%, #c4b5fd 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
 
   .ghostly-border {
-    border: 1px solid rgba(0, 255, 136, 0.2);
+    border: 1px solid rgba(139, 92, 246, 0.25);
   }
 
   .ghostly-glow {
     box-shadow:
-      0 0 20px rgba(0, 255, 136, 0.15),
-      0 0 60px rgba(0, 255, 136, 0.05);
+      0 0 20px rgba(139, 92, 246, 0.2),
+      0 0 60px rgba(139, 92, 246, 0.08);
   }
 
-  .btn-primary {
-    @apply px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200;
-    background: rgba(0, 255, 136, 0.15);
-    color: #00ff88;
-    border: 1px solid rgba(0, 255, 136, 0.3);
-  }
-
-  .btn-primary:hover {
-    background: rgba(0, 255, 136, 0.25);
-    box-shadow: 0 0 20px rgba(0, 255, 136, 0.2);
-  }
-
-  .btn-primary:active {
-    background: rgba(0, 255, 136, 0.3);
-  }
-
-  .btn-ghost {
-    @apply px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200;
-    color: rgba(255, 255, 255, 0.5);
-  }
-
-  .btn-ghost:hover {
-    color: rgba(255, 255, 255, 0.8);
-    background: rgba(255, 255, 255, 0.05);
-  }
-
-  .input-field {
-    @apply w-full px-3 py-2 rounded-lg text-sm transition-all duration-200;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.9);
-  }
-
-  .input-field::placeholder {
-    color: rgba(255, 255, 255, 0.3);
-  }
-
-  .input-field:focus {
-    outline: none;
-    border-color: rgba(0, 255, 136, 0.4);
-    box-shadow: 0 0 0 1px rgba(0, 255, 136, 0.15);
-  }
-
-  .card {
-    @apply rounded-xl p-4 transition-all duration-200;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-  }
-
-  .card:hover {
-    border-color: rgba(255, 255, 255, 0.1);
-  }
-
-  .settings-select {
-    @apply w-full px-3 py-2 rounded-lg text-xs font-mono transition-all duration-200;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.8);
-    -webkit-appearance: none;
-    appearance: none;
-  }
-
-  .settings-select:focus {
-    outline: none;
-    border-color: rgba(0, 255, 136, 0.3);
-  }
-
-  .settings-select option {
-    background: #1a1a1e;
-    color: #e0e0e0;
-  }
-
-  .settings-input {
-    @apply w-full px-3 py-2 rounded-lg text-xs font-mono transition-all duration-200;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.8);
-  }
-
-  .settings-input::placeholder {
-    color: rgba(255, 255, 255, 0.25);
-  }
-
-  .settings-input:focus {
-    outline: none;
-    border-color: rgba(0, 255, 136, 0.3);
-  }
-
-  /* Title bar drag region */
+  /* ── Drag region ── */
   .drag-region {
     -webkit-app-region: drag;
   }
@@ -174,17 +266,90 @@
   .no-drag {
     -webkit-app-region: no-drag;
   }
+
+  /* ── Status Badge ── */
+  .badge-success {
+    background: rgba(34, 197, 94, 0.12);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    color: #4ade80;
+    padding: 2px 8px;
+    border-radius: 100px;
+    font-size: 9px;
+    font-weight: 700;
+  }
+
+  .badge-warning {
+    background: rgba(251, 191, 36, 0.12);
+    border: 1px solid rgba(251, 191, 36, 0.3);
+    color: #fbbf24;
+    padding: 2px 8px;
+    border-radius: 100px;
+    font-size: 9px;
+    font-weight: 700;
+  }
+
+  .badge-violet {
+    background: rgba(139, 92, 246, 0.12);
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    color: #a78bfa;
+    padding: 2px 8px;
+    border-radius: 100px;
+    font-size: 9px;
+    font-weight: 700;
+  }
 }
 
 @layer utilities {
+  /* ── Animations ── */
   .animate-in {
     animation:
       fadeIn 0.2s ease-out,
       slideUp 0.3s ease-out;
   }
 
-  /* Hide scrollbar on live transcript ticker (Webkit / Electron) */
+  /* Hide scrollbar on live transcript ticker */
   .live-transcript-scroll::-webkit-scrollbar {
     display: none;
+  }
+
+  /* ── Float pulse (for logo icons) ── */
+  @keyframes float-pulse {
+    0%, 100% { transform: translateY(0px) scale(1); }
+    50% { transform: translateY(-3px) scale(1.02); }
+  }
+
+  .animate-float-pulse {
+    animation: float-pulse 3s ease-in-out infinite;
+  }
+
+  /* ── Shimmer ── */
+  @keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(200%); }
+  }
+
+  .animate-shimmer {
+    animation: shimmer 2s ease-in-out infinite;
+  }
+
+  /* ── Glow pulse ── */
+  @keyframes glow-pulse {
+    0%, 100% { box-shadow: 0 0 16px rgba(139, 92, 246, 0.3); }
+    50% { box-shadow: 0 0 32px rgba(139, 92, 246, 0.55); }
+  }
+
+  .animate-glow-pulse {
+    animation: glow-pulse 2s ease-in-out infinite;
+  }
+
+  /* ── Fade In / Slide Up ── */
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes slideUp {
+    from { transform: translateY(10px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
   }
 }

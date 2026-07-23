@@ -3,293 +3,242 @@ import { motion, AnimatePresence } from "framer-motion";
 
 export const SplashScreen: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
   const [progress, setProgress] = useState(0);
-  const [showLightning, setShowLightning] = useState(false);
+  const [phase, setPhase] = useState<"loading" | "ready">("loading");
+  const version = typeof window !== "undefined" && (window as any).ghostly?.getVersion?.()
+    ? (window as any).ghostly.getVersion()
+    : "3.3.3";
 
   useEffect(() => {
-    // Progress animation
     const interval = setInterval(() => {
       setProgress(prev => {
         if (prev >= 100) {
           clearInterval(interval);
-          setTimeout(onComplete, 500);
+          setPhase("ready");
+          setTimeout(onComplete, 700);
           return 100;
         }
-        return prev + 2;
+        // Speed varies: fast at start, slows near end
+        const step = prev < 60 ? 3 : prev < 90 ? 1.5 : 0.8;
+        return Math.min(prev + step, 100);
       });
-    }, 30);
+    }, 28);
 
-    // Lightning flashes
-    const lightningInterval = setInterval(() => {
-      setShowLightning(true);
-      setTimeout(() => setShowLightning(false), 100);
-    }, 800);
-
-    return () => {
-      clearInterval(interval);
-      clearInterval(lightningInterval);
-    };
+    return () => clearInterval(interval);
   }, [onComplete]);
+
+  const PHASES = ["Initializing core...", "Loading AI providers...", "Setting up stealth mode...", "Ready"];
+  const phaseText = progress < 30 ? PHASES[0] : progress < 60 ? PHASES[1] : progress < 95 ? PHASES[2] : PHASES[3];
 
   return (
     <AnimatePresence>
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[10000] flex items-center justify-center"
+        exit={{ opacity: 0, scale: 1.04 }}
+        transition={{ duration: 0.4 }}
+        className="fixed inset-0 z-[10000] flex items-center justify-center overflow-hidden"
         style={{
-          background: "linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 100%)",
+          background: "linear-gradient(135deg, #0a0a12 0%, #0d0d1a 50%, #0a0a12 100%)",
           pointerEvents: "auto",
         }}
       >
-        {/* Lightning Flash */}
-        <AnimatePresence>
-          {showLightning && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: [0, 0.4, 0] }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.1 }}
-              className="absolute inset-0"
-              style={{
-                background: "radial-gradient(circle at 50% 50%, rgba(235,146,69,0.3), transparent 60%)",
-                mixBlendMode: "screen",
-              }}
-            />
-          )}
-        </AnimatePresence>
+        {/* ── Background ambient glows ── */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background: "radial-gradient(ellipse 60% 50% at 50% 20%, rgba(139,92,246,0.12) 0%, transparent 70%)",
+          }}
+        />
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background: "radial-gradient(ellipse 40% 30% at 80% 80%, rgba(99,102,241,0.07) 0%, transparent 60%)",
+          }}
+        />
 
-        {/* Animated Background Particles */}
-        {[...Array(30)].map((_, i) => (
+        {/* ── Floating orbs ── */}
+        {[
+          { size: 3, x: "15%", y: "20%", delay: 0, color: "rgba(139,92,246,0.5)" },
+          { size: 2, x: "80%", y: "15%", delay: 0.6, color: "rgba(167,139,250,0.4)" },
+          { size: 4, x: "10%", y: "70%", delay: 1.2, color: "rgba(99,102,241,0.35)" },
+          { size: 2.5, x: "88%", y: "65%", delay: 0.3, color: "rgba(196,181,253,0.3)" },
+          { size: 1.5, x: "50%", y: "85%", delay: 0.9, color: "rgba(139,92,246,0.4)" },
+          { size: 3, x: "25%", y: "50%", delay: 1.5, color: "rgba(167,139,250,0.25)" },
+        ].map((orb, i) => (
           <motion.div
             key={i}
-            initial={{ opacity: 0, scale: 0 }}
+            className="absolute rounded-full pointer-events-none"
+            style={{
+              width: `${orb.size * 4}px`,
+              height: `${orb.size * 4}px`,
+              left: orb.x,
+              top: orb.y,
+              background: orb.color,
+              filter: "blur(1px)",
+              boxShadow: `0 0 ${orb.size * 6}px ${orb.color}`,
+            }}
             animate={{
-              opacity: [0, 0.6, 0],
-              scale: [0, 1.5, 0],
-              x: [0, (Math.random() - 0.5) * 400],
-              y: [0, (Math.random() - 0.5) * 400],
+              opacity: [0.3, 0.8, 0.3],
+              scale: [1, 1.4, 1],
             }}
             transition={{
-              duration: 2 + Math.random() * 2,
+              duration: 2.5 + i * 0.4,
               repeat: Infinity,
-              delay: Math.random() * 2,
-              ease: "easeOut",
-            }}
-            className="absolute w-1 h-1 rounded-full"
-            style={{
-              background: "#eb9245",
-              boxShadow: "0 0 10px rgba(235,146,69,0.8)",
-              left: "50%",
-              top: "50%",
+              delay: orb.delay,
+              ease: "easeInOut",
             }}
           />
         ))}
 
-        {/* Main Content */}
-        <div className="relative flex flex-col items-center gap-12">
-          {/* Logo with Electric Effect */}
-          <div className="relative">
-            {/* Rotating outer ring */}
+        {/* ── Main content ── */}
+        <div className="relative flex flex-col items-center gap-10 z-10">
+          {/* ── Logo ── */}
+          <div className="relative flex flex-col items-center gap-6">
+            {/* Outer glow ring */}
             <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
-              className="absolute inset-0 w-56 h-56 rounded-full"
+              className="absolute rounded-full pointer-events-none"
               style={{
-                background: "conic-gradient(from 0deg, transparent, rgba(235,146,69,0.4), transparent)",
-                filter: "blur(30px)",
+                width: "160px",
+                height: "160px",
+                background: "radial-gradient(circle, rgba(139,92,246,0.2) 0%, transparent 70%)",
+                filter: "blur(20px)",
               }}
+              animate={{ scale: [1, 1.2, 1], opacity: [0.5, 0.9, 0.5] }}
+              transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
             />
 
-            {/* Pulsing middle ring */}
+            {/* Logo card */}
             <motion.div
-              animate={{
-                scale: [1, 1.15, 1],
-                opacity: [0.4, 0.7, 0.4],
-              }}
-              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-              className="absolute inset-0 w-56 h-56 rounded-full"
+              initial={{ scale: 0.6, opacity: 0, rotate: -10 }}
+              animate={{ scale: 1, opacity: 1, rotate: 0 }}
+              transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+              className="relative w-32 h-32 rounded-[32px] flex items-center justify-center"
               style={{
-                border: "3px solid #eb9245",
-                boxShadow: "0 0 60px rgba(235,146,69,0.6), inset 0 0 40px rgba(235,146,69,0.4)",
-              }}
-            />
-
-            {/* Inner circle with logo */}
-            <motion.div
-              initial={{ scale: 0, rotate: -180 }}
-              animate={{ scale: 1, rotate: 0 }}
-              transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-              className="relative w-56 h-56 rounded-full flex items-center justify-center"
-              style={{
-                background: "radial-gradient(circle, rgba(235,146,69,0.15), transparent)",
-                border: "4px solid #eb9245",
-                boxShadow: "0 0 80px rgba(235,146,69,0.6), inset 0 0 40px rgba(235,146,69,0.3)",
+                background: "linear-gradient(135deg, rgba(139,92,246,0.18) 0%, rgba(99,102,241,0.12) 100%)",
+                border: "1.5px solid rgba(139,92,246,0.4)",
+                boxShadow: "0 0 60px rgba(139,92,246,0.3), 0 24px 64px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.1)",
+                backdropFilter: "blur(20px)",
               }}
             >
-              {/* Ghost Emoji */}
               <motion.div
-                animate={{
-                  scale: [1, 1.1, 1],
-                  rotate: [0, 5, -5, 0],
-                }}
-                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                className="text-9xl"
+                animate={{ y: [0, -4, 0], rotate: [0, 3, -3, 0] }}
+                transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                style={{ fontSize: "64px", lineHeight: 1 }}
               >
                 👻
               </motion.div>
 
-              {/* Electric bolts around */}
-              {[0, 45, 90, 135, 180, 225, 270, 315].map((angle, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, scale: 0 }}
-                  animate={{
-                    opacity: [0, 1, 0],
-                    scale: [0.5, 1.8, 0.5],
-                    rotate: [0, 360],
-                  }}
-                  transition={{
-                    duration: 1.5,
-                    repeat: Infinity,
-                    delay: i * 0.15,
-                    ease: "easeInOut",
-                  }}
-                  className="absolute text-4xl"
-                  style={{
-                    transform: `rotate(${angle}deg) translateY(-100px)`,
-                    filter: "drop-shadow(0 0 8px rgba(234,179,8,0.8))",
-                  }}
-                >
-                  ⚡
-                </motion.div>
-              ))}
+              {/* Live status dot */}
+              <motion.div
+                className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center"
+                style={{
+                  background: "linear-gradient(135deg, #10b981, #059669)",
+                  border: "2px solid #0a0a12",
+                  boxShadow: "0 0 12px rgba(16,185,129,0.7)",
+                }}
+                animate={{ scale: [1, 1.2, 1] }}
+                transition={{ duration: 1.5, repeat: Infinity }}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-white" />
+              </motion.div>
+            </motion.div>
+
+            {/* Title */}
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3, duration: 0.6 }}
+              className="text-center"
+            >
+              <h1
+                className="text-5xl font-black mb-2 tracking-tight"
+                style={{
+                  background: "linear-gradient(135deg, #c4b5fd 0%, #a78bfa 40%, #8b5cf6 100%)",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  backgroundClip: "text",
+                }}
+              >
+                Ghotly AI
+              </h1>
+              <p className="text-base font-medium" style={{ color: "rgba(255,255,255,0.38)" }}>
+                Stealth AI Copilot for Interviews
+              </p>
             </motion.div>
           </div>
 
-          {/* Title */}
+          {/* ── Progress ── */}
           <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3, duration: 0.6 }}
-            className="text-center"
-          >
-            <motion.h1
-              animate={{
-                textShadow: [
-                  "0 0 20px rgba(235,146,69,0.6)",
-                  "0 0 40px rgba(235,146,69,0.8)",
-                  "0 0 20px rgba(235,146,69,0.6)",
-                ],
-              }}
-              transition={{ duration: 2, repeat: Infinity }}
-              className="text-6xl font-black mb-3"
-              style={{
-                background: "linear-gradient(135deg, #eb9245, #f5a55a)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                backgroundClip: "text",
-              }}
-            >
-              Ghotly AI
-            </motion.h1>
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.5 }}
-              className="text-lg font-medium text-white/50"
-            >
-              Stealth AI Copilot for Interviews
-            </motion.p>
-          </motion.div>
-
-          {/* Progress Bar */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
+            initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.4 }}
-            className="w-96 relative"
+            transition={{ delay: 0.4, duration: 0.5 }}
+            className="w-72 flex flex-col gap-3"
           >
-            {/* Track */}
+            {/* Progress bar track */}
             <div
-              className="h-2 rounded-full overflow-hidden relative"
-              style={{
-                background: "rgba(255, 255, 255, 0.08)",
-                border: "1px solid rgba(255, 255, 255, 0.15)",
-              }}
+              className="w-full h-1.5 rounded-full overflow-hidden relative"
+              style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}
             >
-              {/* Progress fill */}
               <motion.div
-                animate={{ width: `${progress}%` }}
-                transition={{ duration: 0.1 }}
-                className="h-full relative"
+                className="h-full rounded-full relative overflow-hidden"
                 style={{
-                  background: "linear-gradient(90deg, #eb9245, #f5a55a)",
-                  boxShadow: "0 0 20px rgba(235,146,69,0.6)",
+                  width: `${progress}%`,
+                  background: "linear-gradient(90deg, #7c3aed, #8b5cf6, #a78bfa)",
+                  boxShadow: "0 0 16px rgba(139,92,246,0.6), 0 0 6px rgba(167,139,250,0.4)",
+                  transition: "width 0.1s ease",
                 }}
               >
-                {/* Shine effect */}
+                {/* Shimmer */}
                 <motion.div
-                  animate={{ x: ["-100%", "200%"] }}
-                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
                   className="absolute inset-0 w-1/2"
-                  style={{
-                    background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent)",
-                  }}
+                  style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent)" }}
+                  animate={{ x: ["-100%", "300%"] }}
+                  transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
                 />
               </motion.div>
             </div>
 
-            {/* Electric sparks */}
-            {[...Array(3)].map((_, i) => (
-              <motion.div
-                key={i}
-                animate={{
-                  opacity: [0, 1, 0],
-                  y: [-5, -25],
-                  x: [(Math.random() - 0.5) * 10, (Math.random() - 0.5) * 20],
-                }}
-                transition={{
-                  duration: 0.6,
-                  repeat: Infinity,
-                  delay: i * 0.15,
-                  ease: "easeOut",
-                }}
-                className="absolute text-sm"
-                style={{
-                  left: `${(progress / 100) * 100}%`,
-                  top: -8,
-                  filter: "drop-shadow(0 0 4px rgba(234,179,8,0.8))",
-                }}
+            {/* Status text */}
+            <div className="flex items-center justify-between">
+              <motion.span
+                key={phaseText}
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="text-xs font-medium"
+                style={{ color: phase === "ready" ? "#a78bfa" : "rgba(255,255,255,0.35)" }}
               >
-                ⚡
-              </motion.div>
-            ))}
-
-            {/* Progress text */}
-            <motion.p
-              animate={{ opacity: [0.5, 1, 0.5] }}
-              transition={{ duration: 1.5, repeat: Infinity }}
-              className="text-center mt-3 text-sm font-bold text-white/40"
-            >
-              Loading... {progress}%
-            </motion.p>
+                {phaseText}
+              </motion.span>
+              <span
+                className="text-xs font-mono font-bold tabular-nums"
+                style={{ color: "rgba(139,92,246,0.7)" }}
+              >
+                {Math.round(progress)}%
+              </span>
+            </div>
           </motion.div>
 
-          {/* Version badge */}
+          {/* ── Version badge ── */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.6 }}
-            className="absolute bottom-12 flex items-center gap-2 px-4 py-2 rounded-full"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-full"
             style={{
-              background: "rgba(235,146,69,0.1)",
-              border: "1px solid rgba(235,146,69,0.3)",
+              background: "rgba(139,92,246,0.08)",
+              border: "1px solid rgba(139,92,246,0.2)",
             }}
           >
-            <span className="text-xs font-bold text-white/40">v1.1.5</span>
-            <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-xs font-medium text-white/30">Ready</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-violet-400" style={{ boxShadow: "0 0 6px rgba(167,139,250,0.8)" }} />
+            <span className="text-xs font-bold" style={{ color: "rgba(167,139,250,0.7)" }}>
+              v{version}
+            </span>
+            <span className="text-xs" style={{ color: "rgba(255,255,255,0.2)" }}>
+              ·
+            </span>
+            <span className="text-xs font-medium" style={{ color: "rgba(255,255,255,0.25)" }}>
+              Stealth Mode
+            </span>
           </motion.div>
         </div>
       </motion.div>
