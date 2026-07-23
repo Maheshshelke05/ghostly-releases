@@ -8,6 +8,7 @@ import { TopBar } from "../components/TopBar";
 import { SettingsPanel } from "../components/SettingsPanel";
 import { SolutionCard } from "../components/SolutionCard";
 import { useInterviewAudio } from "../hooks/useInterviewAudio";
+import { compressScreenshot } from "../lib/utils/imageCompressor";
 
 const escapeHtml = (value: string) =>
   value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char] || char));
@@ -307,10 +308,25 @@ export const Home: React.FC = () => {
         maxTokens: transcriptOverride ? 2048 : 4096,
       });
 
+      let lastFlush = Date.now();
+      let pendingBuffer = "";
+
       for await (const chunk of stream) {
         if (signal.aborted) break;
         fullSolution += chunk;
-        appendToSolution(chunk);
+        pendingBuffer += chunk;
+
+        const now = Date.now();
+        if (now - lastFlush > 50) {
+          appendToSolution(pendingBuffer);
+          pendingBuffer = "";
+          lastFlush = now;
+        }
+      }
+
+      if (pendingBuffer && !signal.aborted) {
+        appendToSolution(pendingBuffer);
+        pendingBuffer = "";
       }
 
       if (signal.aborted) return;
@@ -364,17 +380,31 @@ export const Home: React.FC = () => {
     lastLiveTextRef.current = text;
 
     if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    const endsWithQuestion = text.endsWith("?") || text.includes("?");
+    const silenceDelay = endsWithQuestion ? 800 : 2200;
+
     silenceTimerRef.current = setTimeout(() => {
       const current = audio.liveText.trim();
-      if (current && !isStreaming) {
-        audio.clearLiveText();
-        setPendingTranscript(current);
-        runAIStreamRef.current([], current);
+      if (!current || isStreaming) return;
+
+      // Filter out short filler interjections (< 4 words unless ends with ?)
+      const words = current.split(/\s+/).filter(Boolean);
+      const isShortFiller = words.length < 4 && !current.endsWith("?");
+      if (isShortFiller) return;
+
+      // Auto-save previous Q&A into QA History Pages before starting new question
+      if (pendingTranscript && currentSolution) {
+        setQaPages(prev => [...prev, { question: pendingTranscript, answer: currentSolution }]);
+        setPageIndex(prev => prev + 1);
       }
-    }, 2500);
+
+      audio.clearLiveText();
+      setPendingTranscript(current);
+      runAIStreamRef.current([], current);
+    }, silenceDelay);
 
     return () => { if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current); };
-  }, [audio.liveText, liveActive, autoAI, isStreaming]);
+  }, [audio.liveText, liveActive, autoAI, isStreaming, pendingTranscript, currentSolution]);
 
   // ── Toggle Live Mode (AI Answer tab click) ──────────────────────────────────
   const handleToggleLive = useCallback(() => {
@@ -437,10 +467,11 @@ export const Home: React.FC = () => {
         setLiveActive(false);
       }
       clearSolution();
-      const b64 = await window.ghostly.captureFullscreen();
-      addScreenshot(b64);
+      const rawB64 = await window.ghostly.captureFullscreen();
+      const compressedB64 = await compressScreenshot(rawB64, 800, 0.7);
+      addScreenshot(compressedB64);
       const screenPrompt = buildPrompt(settings.interviewType, settings.language);
-      runAIStream([b64], undefined, screenPrompt);
+      runAIStream([compressedB64], undefined, screenPrompt);
     } catch { setError("Failed to capture screen."); }
   }, [runAIStream, setError, settings.interviewType, settings.language, addScreenshot, liveActive, audio, clearSolution, setIsStreaming]);
 
@@ -664,14 +695,24 @@ export const Home: React.FC = () => {
       });
 
       let full = "";
+      let lastChatFlush = Date.now();
       setChatMessages(prev => [...prev, { role: "assistant", text: "" }]);
       for await (const chunk of stream) {
         full += chunk;
-        setChatMessages(prev => [
-          ...prev.slice(0, -1),
-          { role: "assistant", text: full },
-        ]);
+        const now = Date.now();
+        if (now - lastChatFlush > 50) {
+          const currentText = full;
+          setChatMessages(prev => [
+            ...prev.slice(0, -1),
+            { role: "assistant", text: currentText },
+          ]);
+          lastChatFlush = now;
+        }
       }
+      setChatMessages(prev => [
+        ...prev.slice(0, -1),
+        { role: "assistant", text: full },
+      ]);
       // Save chat Q&A to session history
       sessionQARef.current.push({ question: text.trim(), answer: full, feature: "chat", timestamp: Date.now() });
     } catch (err) {
@@ -752,11 +793,22 @@ export const Home: React.FC = () => {
       }
     };
     
+    // Arrow Key Page Navigation (Instant Q1, Q2, Q3 switching)
+    const handleArrowNav = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === "ArrowLeft") {
+        setPageIndex(p => Math.max(0, p - 1));
+      } else if (e.key === "ArrowRight") {
+        setPageIndex(p => Math.min(Math.max(0, totalPages - 1), p + 1));
+      }
+    };
+    
     window.addEventListener('keydown', handleCtrlN);
     window.addEventListener('keydown', handleCtrl0);
     window.addEventListener('keydown', handleCtrlE);
     window.addEventListener('keydown', handleCtrl8);
     window.addEventListener('keydown', handleCtrl2);
+    window.addEventListener('keydown', handleArrowNav);
     
     return () => { 
       offScreenshot(); 
@@ -767,6 +819,7 @@ export const Home: React.FC = () => {
       window.removeEventListener('keydown', handleCtrlE);
       window.removeEventListener('keydown', handleCtrl8);
       window.removeEventListener('keydown', handleCtrl2);
+      window.removeEventListener('keydown', handleArrowNav);
     };
   }, [runAIStream, addScreenshot, handleRestart, liveActive, isStreaming, currentSolution, pendingTranscript, handleNextQuestion, handleManualSend, audio.liveText, settings.interviewType, settings.language, setError]);
 

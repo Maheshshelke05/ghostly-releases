@@ -347,8 +347,18 @@ export const TopBar: React.FC<TopBarProps> = ({
               style={{ overflowX: "auto", overflowY: "hidden", scrollbarWidth: "none", msOverflowStyle: "none" } as React.CSSProperties}
             >
               {liveText ? (
-                <span className="text-[11.5px] font-sans whitespace-nowrap" style={{ color: "rgba(255,255,255,0.75)" }}>
-                  {liveText}
+                <span className="text-[11.5px] font-sans whitespace-nowrap" style={{ color: "rgba(255,255,255,0.85)" }}>
+                  {liveText.split(" ").map((word, i) => {
+                    const clean = word.toLowerCase().replace(/[^a-z0-9()^.]/g, "");
+                    const isKey = ["array", "string", "tree", "binary", "graph", "hashmap", "queue", "stack", "heap", "dp", "recursion", "complexity", "o(n)", "o(1)", "o(log n)", "react", "python", "javascript", "typescript", "sql", "postgresql", "mongodb", "database", "api", "rest", "graphql", "docker", "redis", "kafka", "aws"].some(k => clean.includes(k));
+                    return isKey ? (
+                      <span key={i} className="px-1 py-0.5 rounded text-[11px] font-extrabold text-amber-300 bg-amber-400/15 border border-amber-400/30 mx-0.5">
+                        {word}{" "}
+                      </span>
+                    ) : (
+                      word + " "
+                    );
+                  })}
                 </span>
               ) : (
                 <span className="text-[11px] font-sans whitespace-nowrap italic" style={{ color: "rgba(255,255,255,0.18)" }}>
