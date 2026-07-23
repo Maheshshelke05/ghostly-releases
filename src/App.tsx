@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { useStore } from "./store/useStore";
 import { HomePage } from "./pages/HomePage";
 import { LoginPage } from "./pages/LoginPage";
@@ -209,35 +210,165 @@ const App: React.FC = () => {
   if (appScreen === "api-setup")       return <>{showFullScreenAnimation && <UpdateAnimation status={updateState} progress={updatePercent} version={updateVersion} error={updateError} />}<StepIndicator /><ApiSetupPage /></>;
   if (appScreen === "audio-setup")     return <>{showFullScreenAnimation && <UpdateAnimation status={updateState} progress={updatePercent} version={updateVersion} error={updateError} />}<StepIndicator /><AudioSetupPage /></>;
 
-  const updateBanner = updateState !== "idle" ? (
-    <div
-      className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-3 px-4 py-3 rounded-2xl shadow-2xl"
-      style={{ background: "linear-gradient(135deg, rgba(18,18,22,0.98), rgba(24,24,30,0.98))", border: "1px solid rgba(235,146,69,0.3)", backdropFilter: "blur(24px)", boxShadow: "0 8px 32px rgba(0,0,0,0.4)", pointerEvents: "auto", minWidth: "280px" }}
-      onMouseEnter={() => window.ghostly.enableMouse()}
-    >
-      <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 text-[16px]" style={{ background: "linear-gradient(135deg, #eb9245, #c97320)", boxShadow: "0 2px 8px rgba(235,146,69,0.4)" }}>
-        {updateState === "ready" ? "✅" : "🔄"}
-      </div>
-      <div className="flex-1 min-w-0">
-        {updateState === "available" && (<><p className="text-[12px] font-bold text-white leading-tight">Update Available — v{updateVersion}</p><p className="text-[10px] text-white/40 font-sans">New features & improvements ready</p></>)}
-        {updateState === "downloading" && (<><p className="text-[12px] font-bold text-white leading-tight">Downloading... {updatePercent}%</p><div className="mt-1 h-1 rounded-full bg-white/10 overflow-hidden"><div className="h-full rounded-full transition-all duration-300" style={{ width: `${updatePercent}%`, background: "linear-gradient(90deg, #eb9245, #c97320)" }} /></div></>)}
-        {updateState === "ready" && (<><p className="text-[12px] font-bold text-white leading-tight">Update Ready to Install</p><p className="text-[10px] text-white/40 font-sans">Restart app to apply update</p></>)}
-      </div>
-      <div className="flex items-center gap-1.5 shrink-0">
-        {updateState === "available" && (
-          <button onClick={() => { window.ghostly.downloadUpdate(); setUpdateState("downloading"); setShowFullScreenAnimation(true); }} className="px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all" style={{ background: "linear-gradient(135deg, #eb9245, #c97320)", color: "#000", boxShadow: "0 2px 8px rgba(235,146,69,0.3)" }}>Download</button>
-        )}
-        {updateState === "ready" && (
-          <button onClick={() => window.ghostly.installUpdate()} className="px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all" style={{ background: "linear-gradient(135deg, #22c55e, #16a34a)", color: "#fff", boxShadow: "0 2px 8px rgba(34,197,94,0.3)" }}>Restart & Install</button>
-        )}
-        {updateState !== "downloading" && (
-          <button onClick={() => setUpdateState("idle")} className="w-6 h-6 flex items-center justify-center rounded-lg text-white/30 hover:text-white/70 transition-colors">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-        )}
-      </div>
-    </div>
-  ) : null;
+  const updateBanner = (
+    <AnimatePresence>
+      {updateState !== "idle" && (
+        <motion.div
+          initial={{ opacity: 0, y: 40, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 40, scale: 0.95 }}
+          transition={{ type: "spring", stiffness: 350, damping: 25 }}
+          className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-3.5 px-4 py-3 rounded-2xl"
+          style={{
+            background: "linear-gradient(135deg, rgba(14,14,20,0.96) 0%, rgba(20,20,28,0.96) 100%)",
+            border: "1px solid rgba(139,92,246,0.35)",
+            backdropFilter: "blur(28px)",
+            boxShadow: "0 12px 40px rgba(0,0,0,0.6), 0 0 24px rgba(139,92,246,0.25), inset 0 1px 0 rgba(255,255,255,0.1)",
+            pointerEvents: "auto",
+            minWidth: "300px",
+          }}
+          onMouseEnter={() => window.ghostly.enableMouse()}
+        >
+          {/* Animated Icon Container */}
+          <div className="relative shrink-0">
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
+              className="absolute -inset-1 rounded-xl opacity-60"
+              style={{
+                background: updateState === "ready" 
+                  ? "conic-gradient(from 0deg, #22c55e, #10b981, transparent, #22c55e)" 
+                  : "conic-gradient(from 0deg, #8b5cf6, #eb9245, transparent, #8b5cf6)",
+                filter: "blur(4px)",
+              }}
+            />
+            <div
+              className="relative w-9 h-9 rounded-xl flex items-center justify-center text-[17px] font-black"
+              style={{
+                background: updateState === "ready"
+                  ? "linear-gradient(135deg, #22c55e, #16a34a)"
+                  : "linear-gradient(135deg, #8b5cf6, #7c3aed)",
+                boxShadow: updateState === "ready"
+                  ? "0 0 12px rgba(34,197,94,0.5)"
+                  : "0 0 12px rgba(139,92,246,0.5)",
+                color: "#fff",
+              }}
+            >
+              {updateState === "ready" ? "✨" : updateState === "downloading" ? "⚡" : "🔄"}
+            </div>
+          </div>
+
+          {/* Text & Progress Info */}
+          <div className="flex-1 min-w-0 pr-1">
+            {updateState === "available" && (
+              <>
+                <p className="text-[12px] font-extrabold text-white tracking-wide leading-tight">
+                  Update Available — v{updateVersion}
+                </p>
+                <p className="text-[10px] text-white/50 font-sans mt-0.5">
+                  New features & performance upgrades ready
+                </p>
+              </>
+            )}
+            {updateState === "downloading" && (
+              <>
+                <div className="flex items-center justify-between">
+                  <p className="text-[12px] font-extrabold text-white tracking-wide leading-tight">
+                    Downloading Update...
+                  </p>
+                  <span className="text-[10px] font-mono font-bold text-violet-400">
+                    {updatePercent}%
+                  </span>
+                </div>
+                <div className="mt-1.5 h-1.5 rounded-full bg-white/10 overflow-hidden relative border border-white/10">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${updatePercent}%` }}
+                    transition={{ duration: 0.3, ease: "easeOut" }}
+                    className="h-full rounded-full relative"
+                    style={{
+                      background: "linear-gradient(90deg, #8b5cf6, #eb9245, #10b981)",
+                      boxShadow: "0 0 10px rgba(139,92,246,0.8)",
+                    }}
+                  >
+                    <motion.div
+                      animate={{ x: ["-100%", "200%"] }}
+                      transition={{ duration: 1.2, repeat: Infinity, ease: "linear" }}
+                      className="absolute inset-0 w-1/2"
+                      style={{
+                        background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent)",
+                      }}
+                    />
+                  </motion.div>
+                </div>
+              </>
+            )}
+            {updateState === "ready" && (
+              <>
+                <p className="text-[12px] font-extrabold text-white tracking-wide leading-tight">
+                  Update Ready to Install 🎉
+                </p>
+                <p className="text-[10px] text-emerald-400/80 font-sans mt-0.5 font-medium">
+                  Restart app now to apply new features
+                </p>
+              </>
+            )}
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex items-center gap-2 shrink-0">
+            {updateState === "available" && (
+              <motion.button
+                whileHover={{ scale: 1.06, boxShadow: "0 0 20px rgba(139,92,246,0.6)" }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => {
+                  window.ghostly.downloadUpdate();
+                  setUpdateState("downloading");
+                  setShowFullScreenAnimation(true);
+                }}
+                className="px-3.5 py-1.5 rounded-xl text-[11px] font-black tracking-wide text-white transition-all cursor-pointer"
+                style={{
+                  background: "linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)",
+                  border: "1px solid rgba(255,255,255,0.2)",
+                  boxShadow: "0 4px 14px rgba(139,92,246,0.45)",
+                }}
+              >
+                ⚡ Download
+              </motion.button>
+            )}
+
+            {updateState === "ready" && (
+              <motion.button
+                whileHover={{ scale: 1.06, boxShadow: "0 0 20px rgba(34,197,94,0.6)" }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => window.ghostly.installUpdate()}
+                className="px-3.5 py-1.5 rounded-xl text-[11px] font-black tracking-wide text-white transition-all cursor-pointer"
+                style={{
+                  background: "linear-gradient(135deg, #22c55e 0%, #16a34a 100%)",
+                  border: "1px solid rgba(255,255,255,0.2)",
+                  boxShadow: "0 4px 14px rgba(34,197,94,0.45)",
+                }}
+              >
+                ✨ Restart & Install
+              </motion.button>
+            )}
+
+            {updateState !== "downloading" && (
+              <button
+                onClick={() => setUpdateState("idle")}
+                className="w-7 h-7 flex items-center justify-center rounded-xl text-white/40 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
+              >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            )}
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
 
   if (appScreen === "interview") return <>{showFullScreenAnimation && <UpdateAnimation status={updateState} progress={updatePercent} version={updateVersion} error={updateError} />}{<Home />}{updateBanner}</>;
   if (appScreen === "login") return <LoginPage />;
