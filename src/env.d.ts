@@ -42,6 +42,10 @@ interface Window {
     onScreenshot: (cb: (b64: string) => void) => () => void;
     onSolve: (cb: () => void) => () => void;
     onStartOver: (cb: () => void) => () => void;
+    onNextQuestion: (cb: () => void) => () => void;
+    onManualSend: (cb: () => void) => () => void;
+    onPrevQuestion: (cb: () => void) => () => void;
+    onNextQuestionPage: (cb: () => void) => () => void;
     onUpdateAvailable: (cb: (version: string) => void) => () => void;
     onUpdateProgress: (cb: (percent: number) => void) => () => void;
     onUpdateDownloaded: (cb: () => void) => () => void;

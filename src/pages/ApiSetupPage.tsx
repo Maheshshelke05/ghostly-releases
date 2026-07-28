@@ -1,15 +1,37 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useStore } from "../store/useStore";
+import type { ProviderName } from "../lib/ai";
 import { NVIDIA_MODELS } from "../lib/ai/nvidia";
 import { OPENROUTER_FREE_MODELS } from "../lib/ai/openrouter";
 
-const AI_PROVIDERS = [
+interface AIProviderConfig {
+  id: ProviderName;
+  label: string;
+  icon: string;
+  badge: string;
+  badgeColor: string;
+  badgeBorder: string;
+  badgeText: string;
+  url: string;
+  ph: string;
+  models: string[];
+  modelLabels: Record<string, string>;
+}
+
+// Explicitly typed as ProviderName[] — without this, `id` widens to plain
+// `string`, which meant `setActiveProv(p.id)` calls below didn't actually
+// type-check against the store's ProviderName union (caught by `tsc`, not by
+// `vite build`, so it silently worked at runtime but wasn't real type safety).
+const AI_PROVIDERS: AIProviderConfig[] = [
   {
     id: "groq", label: "Groq", icon: "⚡", badge: "FAST", badgeColor: "rgba(139,92,246,0.15)", badgeBorder: "rgba(139,92,246,0.3)", badgeText: "#a78bfa",
     url: "https://console.groq.com/keys", ph: "gsk_…",
-    models: ["meta-llama/llama-4-scout-17b-16e-instruct", "llama-3.3-70b-versatile", "llama-3.1-8b-instant"],
-    modelLabels: { "meta-llama/llama-4-scout-17b-16e-instruct": "Llama 4 Scout — FREE + VISION", "llama-3.3-70b-versatile": "Llama 3.3 70B — FREE + FAST", "llama-3.1-8b-instant": "Llama 3.1 8B — FREE + INSTANT" },
+    // Llama 4 Scout was removed from Groq's catalog (production and preview) and was
+    // erroring "model does not exist" for every user — do not re-add it. Groq has no
+    // vision model right now, so all options here are text-only.
+    models: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "openai/gpt-oss-120b", "openai/gpt-oss-20b"],
+    modelLabels: { "llama-3.3-70b-versatile": "Llama 3.3 70B — FREE + FAST", "llama-3.1-8b-instant": "Llama 3.1 8B — FREE + INSTANT", "openai/gpt-oss-120b": "GPT-OSS 120B — FREE", "openai/gpt-oss-20b": "GPT-OSS 20B — FREE + FAST" },
   },
   {
     id: "gemini", label: "Gemini", icon: "🔵", badge: "FREE", badgeColor: "rgba(59,130,246,0.12)", badgeBorder: "rgba(59,130,246,0.3)", badgeText: "#60a5fa",
@@ -511,7 +533,7 @@ export const ApiSetupPage: React.FC = () => {
                                 }}
                               >
                                 {p.models.map(m => (
-                                  <option key={m} value={m} style={{ background: "#0d0d14" }}>{(p as any).modelLabels?.[m] || m}</option>
+                                  <option key={m} value={m} style={{ background: "#0d0d14" }}>{p.modelLabels[m] || m}</option>
                                 ))}
                               </select>
                             </div>

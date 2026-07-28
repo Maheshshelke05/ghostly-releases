@@ -46,7 +46,7 @@ export const HomePage: React.FC = () => {
   const [skipCountdown, setSkipCountdown] = useState(5);
 
   useEffect(() => {
-    let timer: NodeJS.Timeout;
+    let timer: ReturnType<typeof setTimeout>;
     if (adGate) {
       setSkipCountdown(5);
       timer = setInterval(() => {

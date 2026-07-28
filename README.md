@@ -1,6 +1,17 @@
-# 👻 Ghostly AI v3.3.4 — Stealth Technical Interview Assistant
+# 👻 Ghostly AI v3.3.5 — Stealth Technical Interview Assistant
 
 Ghostly AI is an ultra-fast, stealthy AI assistant engineered specifically for live technical interviews, DSA coding rounds, and system design evaluations. It operates discreetly on your screen, featuring real-time audio transcription, instant screen capture analysis, and deep resume context injection.
+
+---
+
+## 🐛 What's Fixed in Version 3.3.5
+
+A bug-fix release addressing real user reports from v3.3.3/v3.3.4:
+
+- **"Model does not exist" / "API keys not working":** Groq's `meta-llama/llama-4-scout-17b-16e-instruct` model was removed from Groq's catalog entirely and errored for every user who had it selected (it was also the **default** Groq model, so this hit new users immediately). Removed it, replaced the default with `llama-3.3-70b-versatile`, and added `openai/gpt-oss-120b`/`20b` as additional free Groq options. If a screenshot is sent while Groq is active (which has no vision model at all now), the app tells the model to ask you to describe the screen instead of erroring or silently ignoring the image.
+- **Overlay briefly visible in Google Meet screen share after re-enabling audio:** Every audio (re)start called `getDisplayMedia()` fresh, which removed the window's capture-exclusion flag, re-enumerated screens, and reapplied it ~800ms later — visible in an *already active* screen share for that window. The resolved screen source is now cached after the first successful call, so re-enabling audio mid-interview no longer touches stealth mode at all.
+- **"Microphone is not working" with no explanation:** The Audio Setup mic test only ever showed a bare "No Signal ✗" on failure. It now detects the actual cause (OS-level mic permission blocked, no device found, or the mic already in use by another app) and shows a specific, actionable message for each.
+- **Keyboard shortcuts didn't actually work as documented:** `Ctrl+Shift+S` and `Ctrl+Shift+H` didn't exist in the code at all — pressing them did nothing. `Ctrl+N`, `Ctrl+0`, `Ctrl+8`, and `Ctrl+2` were only wired up as in-app listeners that required the (usually invisible) overlay window to have keyboard focus, so they silently didn't fire during a real interview where focus stays on Zoom/your IDE. Arrow-key Q-navigation was also registered twice, so every press double-skipped a page. Every shortcut in the table above is now a real, system-wide hotkey that works no matter which window has focus — and screenshots captured via hotkey are now compressed the same 800px/70% JPEG way as the button-triggered flow (they were previously sent uncompressed, several times larger).
 
 ---
 
@@ -54,6 +65,7 @@ Use these keyboard shortcuts for 100% stealthy, hands-free operation during your
 | `Right Arrow (→)` or `Ctrl + 2` | **Next Question Page** | Instantly navigates forward to next question page |
 | `Ctrl + Shift + S` | **Instant Screen Analysis** | Triggers instant screen capture from anywhere in system |
 | `Ctrl + Shift + H` | **Toggle Stealth Mode** | Hides/shows app window instantly from screen capture |
+| `Ctrl + G` | **Start Over** | Resets the current session — clears transcript, screenshots, and Q&A history |
 
 ---
 

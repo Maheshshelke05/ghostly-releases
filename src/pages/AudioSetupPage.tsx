@@ -10,6 +10,7 @@ export const AudioSetupPage: React.FC = () => {
   const [testDone, setTestDone]       = useState(false);
   const [micLevel, setMicLevel]       = useState(0);
   const [micStatus, setMicStatus]     = useState<"idle" | "testing" | "ok" | "error">("idle");
+  const [micError, setMicError]       = useState<string | null>(null);
   const [sysStatus, setSysStatus]     = useState<"idle" | "ok">("idle");
   const [bars, setBars]               = useState<number[]>(Array(16).fill(0));
   const [micDropOpen, setMicDropOpen] = useState(false);
@@ -40,7 +41,7 @@ export const AudioSetupPage: React.FC = () => {
 
   const handleTest = async () => {
     stopStream();
-    setTesting(true); setTestDone(false); setMicStatus("testing");
+    setTesting(true); setTestDone(false); setMicStatus("testing"); setMicError(null);
     setSysStatus("idle"); setMicLevel(0); setBars(Array(16).fill(0));
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -66,14 +67,27 @@ export const AudioSetupPage: React.FC = () => {
       };
       animRef.current = requestAnimationFrame(tick);
       setTimeout(() => { setMicStatus("ok"); setSysStatus("ok"); setTestDone(true); setTesting(false); }, 3000);
-    } catch {
-      setMicStatus("error"); setTesting(false); stopStream();
+    } catch (err) {
+      // Surface *why* it failed instead of a bare "No Signal ✗" — the three DOMException
+      // names below cover the real-world causes users hit: OS-level mic permission off,
+      // no input device at all, or the mic already claimed by another app (Zoom/Teams/
+      // Discord all lock the device while running).
+      const name = err instanceof DOMException ? err.name : "";
+      const message =
+        name === "NotAllowedError" || name === "PermissionDeniedError"
+          ? "Microphone access is blocked. Open Windows Settings → Privacy & security → Microphone, turn on \"Let apps access your microphone\", then restart Ghostly AI."
+          : name === "NotFoundError" || name === "DevicesNotFoundError"
+            ? "No microphone was found. Plug in a mic/headset and check it's enabled in Windows Sound settings."
+            : name === "NotReadableError" || name === "TrackStartError"
+              ? "Your microphone is being used by another app (Zoom, Teams, Discord, etc). Close it there and try again."
+              : `Microphone test failed${name ? ` (${name})` : ""}. Try a different microphone from the list above.`;
+      setMicStatus("error"); setMicError(message); setTesting(false); stopStream();
     }
   };
 
   const handleReset = () => {
     stopStream();
-    setSelectedMic("default"); setMicLevel(0); setMicStatus("idle");
+    setSelectedMic("default"); setMicLevel(0); setMicStatus("idle"); setMicError(null);
     setSysStatus("idle"); setTestDone(false); setTesting(false); setBars(Array(16).fill(0));
   };
 
@@ -361,6 +375,28 @@ export const AudioSetupPage: React.FC = () => {
                 </div>
               ))}
             </div>
+
+            {/* ── Mic error detail — tells the user *why* the test failed ── */}
+            <AnimatePresence>
+              {micStatus === "error" && micError && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div
+                    className="flex items-start gap-2 px-3 py-2.5 rounded-xl"
+                    style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)" }}
+                  >
+                    <span className="text-[12px] shrink-0 mt-0.5">⚠️</span>
+                    <p className="text-[9px] font-medium leading-relaxed" style={{ color: "rgba(248,113,113,0.9)" }}>
+                      {micError}
+                    </p>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* ── Test + Reset buttons ── */}
             <div className="flex gap-2">

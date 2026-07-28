@@ -195,7 +195,7 @@ export const Home: React.FC = () => {
   const {
     currentSolution, isStreaming, screenshots, error, settings,
     sessionMessages, addScreenshot, setCurrentSolution, appendToSolution,
-    setIsStreaming, setError, clearSolution, addToHistory, addSessionMessage, updateSettings, interviewSession,
+    setIsStreaming, setError, clearSolution, clearScreenshots, addToHistory, addSessionMessage, updateSettings, interviewSession,
     user, ads,
   } = useStore();
 
@@ -353,9 +353,15 @@ export const Home: React.FC = () => {
       addSessionMessage({ id: uuidv4(), role: "user", content: questionText, screenshotBase64: latestScreenshot });
       addSessionMessage({ id: uuidv4(), role: "assistant", content: fullSolution });
 
-      // Clear streaming buffer on completion to prevent duplicate pagination count
+      // Clear the streaming buffer + used screenshots on completion, WITHOUT wiping
+      // sessionMessages — that history is exactly what powers Q1/Q2/Q3 pagination for
+      // Screen Analysis and AI-answer follow-ups. This used to call clearSolution(),
+      // which also resets sessionMessages to [] — deleting the answer just added to
+      // history (lines above) a moment after adding it, which is why a completed
+      // Screen Analysis answer would flash on screen and then vanish entirely.
       if (!liveActive) {
-        clearSolution();
+        setCurrentSolution("");
+        clearScreenshots();
       }
 
     } catch (err) {
@@ -364,7 +370,7 @@ export const Home: React.FC = () => {
     } finally {
       if (!signal.aborted) { setIsStreaming(false); }
     }
-  }, [settings, sessionMessages, interviewSession, setCurrentSolution, setError, setIsStreaming, appendToSolution, addToHistory, addSessionMessage]);
+  }, [settings, sessionMessages, interviewSession, setCurrentSolution, setError, setIsStreaming, appendToSolution, addToHistory, addSessionMessage, liveActive, clearScreenshots]);
 
   // ── Auto AI: silence detection — 2.5s after last transcript change ──────────
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -466,14 +472,19 @@ export const Home: React.FC = () => {
         audio.stopInterview();
         setLiveActive(false);
       }
-      clearSolution();
+      // Reset just the streaming buffer + screenshots for the NEW capture — not
+      // sessionMessages, which would erase every previous screen-analysis page
+      // (Q1, Q2...) each time a fresh screenshot is taken.
+      setCurrentSolution("");
+      clearScreenshots();
+      setError(null);
       const rawB64 = await window.ghostly.captureFullscreen();
       const compressedB64 = await compressScreenshot(rawB64, 800, 0.7);
       addScreenshot(compressedB64);
       const screenPrompt = buildPrompt(settings.interviewType, settings.language);
       runAIStream([compressedB64], undefined, screenPrompt);
     } catch { setError("Failed to capture screen."); }
-  }, [runAIStream, setError, settings.interviewType, settings.language, addScreenshot, liveActive, audio, clearSolution, setIsStreaming]);
+  }, [runAIStream, setError, settings.interviewType, settings.language, addScreenshot, liveActive, audio, setCurrentSolution, clearScreenshots, setIsStreaming]);
 
   // ── Tab change ──────────────────────────────────────────────────────────────
   const supportAd = useMemo(() => ads.find((ad) => ad.is_active && ad.script_url && ad.container_id), [ads]);
@@ -542,11 +553,12 @@ export const Home: React.FC = () => {
     }
 
     setActiveTab(tab);
-
-    if (tab === "screen") {
-      handleScreenAnalysis();
-    }
-  }, [handleScreenAnalysis, liveActive, audio, setIsStreaming]);
+    // Note: TopBar's handleTabClick already calls onScreenAnalysis() directly when
+    // the Screen tab is clicked (same pattern as "ai" calling onToggleLive()) — this
+    // function used to ALSO trigger handleScreenAnalysis() here, so every single
+    // click fired two full capture+AI cycles back to back, racing each other and
+    // causing the just-shown answer to get wiped and replaced mid-flight.
+  }, [liveActive, audio, setIsStreaming]);
 
   // ── Normal mode QA pairs — Fix #17: only recalc when streaming done, not every chunk
   const sessionMessagesForPairs = isStreaming ? undefined : sessionMessages;
@@ -571,25 +583,33 @@ export const Home: React.FC = () => {
   }));
 
   const livePageIndex = pages.length;
+  // "screen" used to be hard-capped at a single page (always showing pages[0], the
+  // very first screen analysis ever taken) instead of accumulating Q1/Q2/Q3 pages
+  // the same way AI Answer already does. That special-casing was originally papering
+  // over a different bug — sessionMessages (which normalQaPairs is built from) was
+  // being wiped on every screen-analysis completion, so pages was always empty for
+  // this tab anyway. Now that history persists correctly, Screen uses the exact same
+  // pagination as any other non-live tab.
   const totalPages = liveActive
     ? pages.length + (audio.liveText || pendingTranscript || isStreaming || currentSolution ? 1 : 0)
-    : activeTab === "screen"
-      ? (isStreaming || currentSolution || pages.length > 0 ? 1 : 0)
-      : Math.max(1, pages.length + (isStreaming ? 1 : 0));
+    : Math.max(1, pages.length + (isStreaming ? 1 : 0));
 
-  const isOnLivePage = activeTab === "screen" ? false : pageIndex >= pages.length;
+  const isOnLivePage = pageIndex >= pages.length;
   // Fix: clamp pageIndex to prevent out-of-bounds blank screen
-  const safePageIndex = activeTab === "screen" ? 0 : Math.min(pageIndex, Math.max(0, pages.length - 1));
+  const safePageIndex = Math.min(pageIndex, Math.max(0, pages.length - 1));
   const activePage = !isOnLivePage ? (pages[safePageIndex] ?? null) : null;
 
   // In live mode: current screen = pendingTranscript + currentSolution (same screen)
   const liveQuestion = pendingTranscript || audio.liveText;
   const liveAnswer = currentSolution;
 
-  // Auto jump to live page when new question arrives — only if user hasn't manually navigated
+  // Auto jump to live page when new question arrives — only if user hasn't manually navigated.
+  // This only watched qaPages.length before, so a new Screen Analysis or AI-answer
+  // follow-up page (built from normalQaPairs/sessionMessages, not qaPages) never
+  // triggered the auto-jump — pageIndex would silently go stale after each new page.
   useEffect(() => {
     if (!userNavigated) setPageIndex(livePageIndex);
-  }, [qaPages.length, livePageIndex]);
+  }, [pages.length, livePageIndex]);
 
   useEffect(() => {
     if (normalQaPairs.length > 0 && !isStreaming && !liveActive)
@@ -601,6 +621,12 @@ export const Home: React.FC = () => {
     if (isStreaming) setUserNavigated(false);
   }, [isStreaming]);
 
+  // Bare Left/Right arrow Q-navigation — only fires while the overlay window has
+  // keyboard focus (unlike Ctrl+8/Ctrl+2 below, which work from anywhere via a
+  // global shortcut). This used to be registered a second time further down in
+  // this component with near-identical logic, which made every arrow press
+  // double-fire (advancing/rewinding two pages instead of one) — this is now the
+  // only registration.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -729,99 +755,75 @@ export const Home: React.FC = () => {
     window.ghostly.enableMouse();
   }, []);
 
-  // Hotkeys
+  // Hotkeys — all of these arrive as IPC events from Electron's system-wide
+  // globalShortcut registrations (electron/hotkeys.ts), so they work regardless
+  // of which window has OS focus (Zoom, the browser, your IDE). Renderer-side
+  // `window.addEventListener('keydown', ...)` handlers used to be registered
+  // here for Ctrl+N/Ctrl+0/Ctrl+E/Ctrl+8/Ctrl+2, which only fired while this
+  // (usually invisible) overlay window itself happened to have keyboard focus —
+  // effectively never during a real interview.
   useEffect(() => {
-    const offScreenshot = window.ghostly.onScreenshot(addScreenshot);
-    const offSolve = window.ghostly.onSolve(async () => await runAIStream(screenshotsRef.current));
+    // Ctrl+E / Ctrl+Shift+S / Ctrl+Shift+Enter (main process) both funnel through
+    // here. Compress to 800px/70% JPEG to match handleScreenAnalysis's payload
+    // size (this used to be sent uncompressed for the hotkey path only, several
+    // times larger than the button-triggered flow).
+    const offScreenshot = window.ghostly.onScreenshot(async (b64) => {
+      const compressed = await compressScreenshot(b64, 800, 0.7);
+      addScreenshot(compressed);
+    });
+    // Ctrl+Enter — solve whatever's already captured/transcribed. If it's a
+    // screenshot-driven solve, use the same interview-type/language prompt
+    // handleScreenAnalysis builds instead of an empty one.
+    const offSolve = window.ghostly.onSolve(async () => {
+      const followUp = screenshotsRef.current.length > 0
+        ? buildPrompt(settings.interviewType, settings.language)
+        : undefined;
+      await runAIStream(screenshotsRef.current, undefined, followUp);
+    });
     const offStartOver = window.ghostly.onStartOver(handleRestart);
-    
-    // Ctrl+N for Next Question (in AI Answer mode)
-    const handleCtrlN = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
-        e.preventDefault();
-        if (!liveActive) return;
-        // Save current Q&A, clear screen, keep listening — auto AI will pick up next question
-        if (currentSolution && pendingTranscript) {
-          setQaPages(prev => [...prev, { question: pendingTranscript, answer: currentSolution }]);
-        }
-        setPendingTranscript("");
-        clearSolution();
-        audio.clearLiveText();
-        lastLiveTextRef.current = "";
-        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+
+    // Ctrl+N — Next Question (only meaningful while live-listening)
+    const offNextQuestion = window.ghostly.onNextQuestion(() => {
+      if (!liveActive) return;
+      if (currentSolution && pendingTranscript) {
+        setQaPages(prev => [...prev, { question: pendingTranscript, answer: currentSolution }]);
       }
-    };
-    
-    // Ctrl+0 for Send to AI (in AI Answer mode)
-    const handleCtrl0 = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === '0') {
-        e.preventDefault();
-        if (liveActive && audio.liveText.trim() && !isStreaming) {
-          handleManualSend();
-        }
+      setPendingTranscript("");
+      clearSolution();
+      audio.clearLiveText();
+      lastLiveTextRef.current = "";
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    });
+
+    // Ctrl+0 — Manual Send (skip waiting for silence detection)
+    const offManualSend = window.ghostly.onManualSend(() => {
+      if (liveActive && audio.liveText.trim() && !isStreaming) {
+        handleManualSend();
       }
-    };
-    
-    // Ctrl+E for Auto Screenshot + Solve
-    const handleCtrlE = async (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
-        e.preventDefault();
-        try {
-          const b64 = await window.ghostly.captureFullscreen();
-          addScreenshot(b64);
-          const screenPrompt = buildPrompt(settings.interviewType, settings.language);
-          runAIStream([b64], undefined, screenPrompt);
-        } catch { setError("Failed to capture screen."); }
-      }
-    };
-    
-    // Ctrl+8 for Scroll Up
-    const handleCtrl8 = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === '8') {
-        e.preventDefault();
-        const container = document.querySelector('.overflow-y-auto');
-        if (container) container.scrollBy({ top: -200, behavior: 'smooth' });
-      }
-    };
-    
-    // Ctrl+2 for Scroll Down
-    const handleCtrl2 = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === '2') {
-        e.preventDefault();
-        const container = document.querySelector('.overflow-y-auto');
-        if (container) container.scrollBy({ top: 200, behavior: 'smooth' });
-      }
-    };
-    
-    // Arrow Key Page Navigation (Instant Q1, Q2, Q3 switching)
-    const handleArrowNav = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      if (e.key === "ArrowLeft") {
-        setPageIndex(p => Math.max(0, p - 1));
-      } else if (e.key === "ArrowRight") {
-        setPageIndex(p => Math.min(Math.max(0, totalPages - 1), p + 1));
-      }
-    };
-    
-    window.addEventListener('keydown', handleCtrlN);
-    window.addEventListener('keydown', handleCtrl0);
-    window.addEventListener('keydown', handleCtrlE);
-    window.addEventListener('keydown', handleCtrl8);
-    window.addEventListener('keydown', handleCtrl2);
-    window.addEventListener('keydown', handleArrowNav);
-    
-    return () => { 
-      offScreenshot(); 
-      offSolve(); 
+    });
+
+    // Ctrl+8 — Previous Question page
+    const offPrevQuestion = window.ghostly.onPrevQuestion(() => {
+      setUserNavigated(true);
+      setPageIndex(p => Math.max(0, p - 1));
+    });
+
+    // Ctrl+2 — Next Question page
+    const offNextQuestionPage = window.ghostly.onNextQuestionPage(() => {
+      setUserNavigated(true);
+      setPageIndex(p => Math.min(Math.max(0, totalPages - 1), p + 1));
+    });
+
+    return () => {
+      offScreenshot();
+      offSolve();
       offStartOver();
-      window.removeEventListener('keydown', handleCtrlN);
-      window.removeEventListener('keydown', handleCtrl0);
-      window.removeEventListener('keydown', handleCtrlE);
-      window.removeEventListener('keydown', handleCtrl8);
-      window.removeEventListener('keydown', handleCtrl2);
-      window.removeEventListener('keydown', handleArrowNav);
+      offNextQuestion();
+      offManualSend();
+      offPrevQuestion();
+      offNextQuestionPage();
     };
-  }, [runAIStream, addScreenshot, handleRestart, liveActive, isStreaming, currentSolution, pendingTranscript, handleNextQuestion, handleManualSend, audio.liveText, settings.interviewType, settings.language, setError]);
+  }, [runAIStream, addScreenshot, handleRestart, liveActive, isStreaming, currentSolution, pendingTranscript, handleManualSend, audio.liveText, settings.interviewType, settings.language, totalPages]);
 
   const displayLiveText = audio.liveText || pendingTranscript;
 
@@ -1107,7 +1109,7 @@ export const Home: React.FC = () => {
 
                       {/* ── Interviewer Question ── */}
                       {/* Hide question box for Screen Analysis or system prompt */}
-                      {activeTab !== "screen" && !(isOnLivePage && liveActive) &&
+                      {!(isOnLivePage && liveActive) &&
                         (isOnLivePage ? liveQuestion : activePage?.question) &&
                         activePage?.question !== "Screen Analysis" &&
                         !activePage?.question?.includes("staff engineer") && (
@@ -1128,7 +1130,7 @@ export const Home: React.FC = () => {
                       )}
 
                       {/* ── AI Answer ── clean main area ── */}
-                      {(activeTab === "screen" || (isOnLivePage ? (isStreaming || liveAnswer) : activePage?.answer)) && (
+                      {(isOnLivePage ? (isStreaming || liveAnswer) : activePage?.answer) && (
                         <div>
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-1.5">
@@ -1138,13 +1140,13 @@ export const Home: React.FC = () => {
                               )}
                             </div>
                             {!isStreaming && (
-                              <CopyButton text={activeTab === "screen" ? (currentSolution || activePage?.answer || pages[pages.length - 1]?.answer || "") : (isOnLivePage ? liveAnswer : activePage?.answer || "")} />
+                              <CopyButton text={isOnLivePage ? liveAnswer : activePage?.answer || ""} />
                             )}
                           </div>
                           <div className="rounded-xl overflow-hidden border border-violet-500/15 shadow-2xl"
                             style={{ background: "rgba(10,10,14,0.75)" }}>
                             <SolutionCard
-                              content={activeTab === "screen" ? (currentSolution || activePage?.answer || pages[pages.length - 1]?.answer || "") : (isOnLivePage ? liveAnswer : (activePage?.answer || ""))}
+                              content={isOnLivePage ? liveAnswer : (activePage?.answer || "")}
                               isStreaming={isStreaming}
                             />
                           </div>

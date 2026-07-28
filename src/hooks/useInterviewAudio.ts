@@ -77,7 +77,7 @@ export function useInterviewAudio() {
   // Fix: isMounted guard prevents setState after unmount
   const isRecordingRef = useRef(false);
   const isMountedRef = useRef(false);
-  const reconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const deepgramApiKey = useStore(
     (s) => s.settings.deepgramApiKey ?? import.meta.env.VITE_DEEPGRAM_API_KEY ?? ""

@@ -6,7 +6,7 @@ export const SplashScreen: React.FC<{ onComplete: () => void }> = ({ onComplete 
   const [phase, setPhase] = useState<"loading" | "ready">("loading");
   const version = typeof window !== "undefined" && (window as any).ghostly?.getVersion?.()
     ? (window as any).ghostly.getVersion()
-    : "3.3.3";
+    : "3.3.5";
 
   useEffect(() => {
     const interval = setInterval(() => {

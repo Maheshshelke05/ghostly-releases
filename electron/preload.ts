@@ -83,6 +83,30 @@ contextBridge.exposeInMainWorld("ghostly", {
     return () => ipcRenderer.removeListener("ghostly:start-over", listener);
   },
 
+  onNextQuestion: (cb: () => void): (() => void) => {
+    const listener = (): void => cb();
+    ipcRenderer.on("ghostly:next-question", listener);
+    return () => ipcRenderer.removeListener("ghostly:next-question", listener);
+  },
+
+  onManualSend: (cb: () => void): (() => void) => {
+    const listener = (): void => cb();
+    ipcRenderer.on("ghostly:manual-send", listener);
+    return () => ipcRenderer.removeListener("ghostly:manual-send", listener);
+  },
+
+  onPrevQuestion: (cb: () => void): (() => void) => {
+    const listener = (): void => cb();
+    ipcRenderer.on("ghostly:prev-question", listener);
+    return () => ipcRenderer.removeListener("ghostly:prev-question", listener);
+  },
+
+  onNextQuestionPage: (cb: () => void): (() => void) => {
+    const listener = (): void => cb();
+    ipcRenderer.on("ghostly:next-question-page", listener);
+    return () => ipcRenderer.removeListener("ghostly:next-question-page", listener);
+  },
+
   // Auto updater
   onUpdateAvailable: (cb: (version: string) => void): (() => void) => {
     const listener = (_: any, version: string): void => cb(version);

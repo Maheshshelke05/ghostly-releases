@@ -1,8 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
+// Matches App.tsx's UpdateState exactly — "ready" (not "complete") is what
+// actually gets sent when a downloaded update is ready to install. It used to
+// be missing from this union entirely, so TypeScript's own type error was
+// pointing at a real bug: the switch below had no case for it, so users saw a
+// generic "Ghostly AI — Ready" placeholder instead of an update-ready prompt.
 interface UpdateAnimationProps {
-  status: "checking" | "downloading" | "installing" | "complete" | "error";
+  status: "idle" | "checking" | "available" | "downloading" | "installing" | "ready" | "complete" | "error";
   progress?: number;
   version?: string;
   error?: string;
@@ -67,6 +72,14 @@ export const UpdateAnimation: React.FC<UpdateAnimationProps> = ({ status, progre
           color: "#f59e0b",
           glow: "rgba(245, 158, 11, 0.6)",
         };
+      case "ready":
+        return {
+          emoji: "✨",
+          title: "Update Ready!",
+          subtitle: `v${version} downloaded — restart to apply`,
+          color: "#10b981",
+          glow: "rgba(16, 185, 129, 0.6)",
+        };
       case "complete":
         return {
           emoji: "✨",
@@ -74,6 +87,14 @@ export const UpdateAnimation: React.FC<UpdateAnimationProps> = ({ status, progre
           subtitle: `v${version} installed successfully`,
           color: "#10b981",
           glow: "rgba(16, 185, 129, 0.6)",
+        };
+      case "available":
+        return {
+          emoji: "🎉",
+          title: "Update Available",
+          subtitle: version ? `v${version} is ready to download` : "A new version is ready to download",
+          color: "#3b82f6",
+          glow: "rgba(59, 130, 246, 0.5)",
         };
       case "error":
         return {
@@ -83,6 +104,7 @@ export const UpdateAnimation: React.FC<UpdateAnimationProps> = ({ status, progre
           color: "#ef4444",
           glow: "rgba(239, 68, 68, 0.5)",
         };
+      case "idle":
       default:
         return {
           emoji: "👻",
@@ -96,6 +118,7 @@ export const UpdateAnimation: React.FC<UpdateAnimationProps> = ({ status, progre
 
   const config = getStatusConfig();
   const isActive = status === "downloading" || status === "installing";
+  const isSuccess = status === "complete" || status === "ready";
 
   return (
     <AnimatePresence>
@@ -178,7 +201,7 @@ export const UpdateAnimation: React.FC<UpdateAnimationProps> = ({ status, progre
 
             {/* Inner solid circle */}
             <motion.div
-              animate={status === "complete" ? { scale: [1, 1.3, 1] } : {}}
+              animate={isSuccess ? { scale: [1, 1.3, 1] } : {}}
               transition={{ duration: 0.5 }}
               className="relative w-48 h-48 rounded-full flex items-center justify-center"
               style={{
@@ -192,7 +215,7 @@ export const UpdateAnimation: React.FC<UpdateAnimationProps> = ({ status, progre
                 animate={isActive ? {
                   scale: [1, 1.1, 1],
                   rotate: [0, 5, -5, 0],
-                } : status === "complete" ? {
+                } : isSuccess ? {
                   scale: [1, 1.5, 1],
                   rotate: [0, 360],
                 } : {}}
@@ -317,7 +340,7 @@ export const UpdateAnimation: React.FC<UpdateAnimationProps> = ({ status, progre
           </motion.div>
 
           {/* Completion Stars */}
-          {status === "complete" && (
+          {isSuccess && (
             <div className="absolute inset-0 pointer-events-none">
               {[...Array(20)].map((_, i) => (
                 <motion.div
