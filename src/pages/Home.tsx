@@ -195,7 +195,7 @@ export const Home: React.FC = () => {
   const {
     currentSolution, isStreaming, screenshots, error, settings,
     sessionMessages, addScreenshot, setCurrentSolution, appendToSolution,
-    setIsStreaming, setError, clearSolution, addToHistory, addSessionMessage, updateSettings, interviewSession,
+    setIsStreaming, setError, clearSolution, clearScreenshots, addToHistory, addSessionMessage, updateSettings, interviewSession,
     user, ads,
   } = useStore();
 
@@ -353,9 +353,15 @@ export const Home: React.FC = () => {
       addSessionMessage({ id: uuidv4(), role: "user", content: questionText, screenshotBase64: latestScreenshot });
       addSessionMessage({ id: uuidv4(), role: "assistant", content: fullSolution });
 
-      // Clear streaming buffer on completion to prevent duplicate pagination count
+      // Clear the streaming buffer + used screenshots on completion, WITHOUT wiping
+      // sessionMessages — that history is exactly what powers Q1/Q2/Q3 pagination for
+      // Screen Analysis and AI-answer follow-ups. This used to call clearSolution(),
+      // which also resets sessionMessages to [] — deleting the answer just added to
+      // history (lines above) a moment after adding it, which is why a completed
+      // Screen Analysis answer would flash on screen and then vanish entirely.
       if (!liveActive) {
-        clearSolution();
+        setCurrentSolution("");
+        clearScreenshots();
       }
 
     } catch (err) {
@@ -364,7 +370,7 @@ export const Home: React.FC = () => {
     } finally {
       if (!signal.aborted) { setIsStreaming(false); }
     }
-  }, [settings, sessionMessages, interviewSession, setCurrentSolution, setError, setIsStreaming, appendToSolution, addToHistory, addSessionMessage]);
+  }, [settings, sessionMessages, interviewSession, setCurrentSolution, setError, setIsStreaming, appendToSolution, addToHistory, addSessionMessage, liveActive, clearScreenshots]);
 
   // ── Auto AI: silence detection — 2.5s after last transcript change ──────────
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -466,14 +472,19 @@ export const Home: React.FC = () => {
         audio.stopInterview();
         setLiveActive(false);
       }
-      clearSolution();
+      // Reset just the streaming buffer + screenshots for the NEW capture — not
+      // sessionMessages, which would erase every previous screen-analysis page
+      // (Q1, Q2...) each time a fresh screenshot is taken.
+      setCurrentSolution("");
+      clearScreenshots();
+      setError(null);
       const rawB64 = await window.ghostly.captureFullscreen();
       const compressedB64 = await compressScreenshot(rawB64, 800, 0.7);
       addScreenshot(compressedB64);
       const screenPrompt = buildPrompt(settings.interviewType, settings.language);
       runAIStream([compressedB64], undefined, screenPrompt);
     } catch { setError("Failed to capture screen."); }
-  }, [runAIStream, setError, settings.interviewType, settings.language, addScreenshot, liveActive, audio, clearSolution, setIsStreaming]);
+  }, [runAIStream, setError, settings.interviewType, settings.language, addScreenshot, liveActive, audio, setCurrentSolution, clearScreenshots, setIsStreaming]);
 
   // ── Tab change ──────────────────────────────────────────────────────────────
   const supportAd = useMemo(() => ads.find((ad) => ad.is_active && ad.script_url && ad.container_id), [ads]);
@@ -542,11 +553,12 @@ export const Home: React.FC = () => {
     }
 
     setActiveTab(tab);
-
-    if (tab === "screen") {
-      handleScreenAnalysis();
-    }
-  }, [handleScreenAnalysis, liveActive, audio, setIsStreaming]);
+    // Note: TopBar's handleTabClick already calls onScreenAnalysis() directly when
+    // the Screen tab is clicked (same pattern as "ai" calling onToggleLive()) — this
+    // function used to ALSO trigger handleScreenAnalysis() here, so every single
+    // click fired two full capture+AI cycles back to back, racing each other and
+    // causing the just-shown answer to get wiped and replaced mid-flight.
+  }, [liveActive, audio, setIsStreaming]);
 
   // ── Normal mode QA pairs — Fix #17: only recalc when streaming done, not every chunk
   const sessionMessagesForPairs = isStreaming ? undefined : sessionMessages;
@@ -571,25 +583,33 @@ export const Home: React.FC = () => {
   }));
 
   const livePageIndex = pages.length;
+  // "screen" used to be hard-capped at a single page (always showing pages[0], the
+  // very first screen analysis ever taken) instead of accumulating Q1/Q2/Q3 pages
+  // the same way AI Answer already does. That special-casing was originally papering
+  // over a different bug — sessionMessages (which normalQaPairs is built from) was
+  // being wiped on every screen-analysis completion, so pages was always empty for
+  // this tab anyway. Now that history persists correctly, Screen uses the exact same
+  // pagination as any other non-live tab.
   const totalPages = liveActive
     ? pages.length + (audio.liveText || pendingTranscript || isStreaming || currentSolution ? 1 : 0)
-    : activeTab === "screen"
-      ? (isStreaming || currentSolution || pages.length > 0 ? 1 : 0)
-      : Math.max(1, pages.length + (isStreaming ? 1 : 0));
+    : Math.max(1, pages.length + (isStreaming ? 1 : 0));
 
-  const isOnLivePage = activeTab === "screen" ? false : pageIndex >= pages.length;
+  const isOnLivePage = pageIndex >= pages.length;
   // Fix: clamp pageIndex to prevent out-of-bounds blank screen
-  const safePageIndex = activeTab === "screen" ? 0 : Math.min(pageIndex, Math.max(0, pages.length - 1));
+  const safePageIndex = Math.min(pageIndex, Math.max(0, pages.length - 1));
   const activePage = !isOnLivePage ? (pages[safePageIndex] ?? null) : null;
 
   // In live mode: current screen = pendingTranscript + currentSolution (same screen)
   const liveQuestion = pendingTranscript || audio.liveText;
   const liveAnswer = currentSolution;
 
-  // Auto jump to live page when new question arrives — only if user hasn't manually navigated
+  // Auto jump to live page when new question arrives — only if user hasn't manually navigated.
+  // This only watched qaPages.length before, so a new Screen Analysis or AI-answer
+  // follow-up page (built from normalQaPairs/sessionMessages, not qaPages) never
+  // triggered the auto-jump — pageIndex would silently go stale after each new page.
   useEffect(() => {
     if (!userNavigated) setPageIndex(livePageIndex);
-  }, [qaPages.length, livePageIndex]);
+  }, [pages.length, livePageIndex]);
 
   useEffect(() => {
     if (normalQaPairs.length > 0 && !isStreaming && !liveActive)
@@ -1089,7 +1109,7 @@ export const Home: React.FC = () => {
 
                       {/* ── Interviewer Question ── */}
                       {/* Hide question box for Screen Analysis or system prompt */}
-                      {activeTab !== "screen" && !(isOnLivePage && liveActive) &&
+                      {!(isOnLivePage && liveActive) &&
                         (isOnLivePage ? liveQuestion : activePage?.question) &&
                         activePage?.question !== "Screen Analysis" &&
                         !activePage?.question?.includes("staff engineer") && (
@@ -1110,7 +1130,7 @@ export const Home: React.FC = () => {
                       )}
 
                       {/* ── AI Answer ── clean main area ── */}
-                      {(activeTab === "screen" || (isOnLivePage ? (isStreaming || liveAnswer) : activePage?.answer)) && (
+                      {(isOnLivePage ? (isStreaming || liveAnswer) : activePage?.answer) && (
                         <div>
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-1.5">
@@ -1120,13 +1140,13 @@ export const Home: React.FC = () => {
                               )}
                             </div>
                             {!isStreaming && (
-                              <CopyButton text={activeTab === "screen" ? (currentSolution || activePage?.answer || pages[pages.length - 1]?.answer || "") : (isOnLivePage ? liveAnswer : activePage?.answer || "")} />
+                              <CopyButton text={isOnLivePage ? liveAnswer : activePage?.answer || ""} />
                             )}
                           </div>
                           <div className="rounded-xl overflow-hidden border border-violet-500/15 shadow-2xl"
                             style={{ background: "rgba(10,10,14,0.75)" }}>
                             <SolutionCard
-                              content={activeTab === "screen" ? (currentSolution || activePage?.answer || pages[pages.length - 1]?.answer || "") : (isOnLivePage ? liveAnswer : (activePage?.answer || ""))}
+                              content={isOnLivePage ? liveAnswer : (activePage?.answer || "")}
                               isStreaming={isStreaming}
                             />
                           </div>
