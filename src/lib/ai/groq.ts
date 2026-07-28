@@ -4,36 +4,35 @@ export class GroqProvider implements AIProvider {
   name = "groq";
 
   listModels(): string[] {
+    // "meta-llama/llama-4-scout-17b-16e-instruct" was removed from Groq's catalog
+    // entirely (production and preview) — it now 400s with "model does not exist or
+    // you do not have access to it" for every user, which is what bug reports on
+    // v3.3.3/v3.3.4 were surfacing. Groq currently has no vision-capable model at all,
+    // so it's text-only until they ship a replacement.
     return [
-      "meta-llama/llama-4-scout-17b-16e-instruct",
       "llama-3.3-70b-versatile",
       "llama-3.1-8b-instant",
+      "openai/gpt-oss-120b",
+      "openai/gpt-oss-20b",
     ];
   }
 
   async *streamSolution(options: AIRequestOptions): AsyncGenerator<string> {
     const { base64Image, prompt, messages = [], model, apiKey, maxTokens = 4096 } = options;
 
-    const imageUrl = base64Image?.startsWith("data:")
-      ? base64Image
-      : base64Image
-        ? `data:image/png;base64,${base64Image}`
-        : undefined;
-
     const apiMessages: any[] = messages.map((m) => ({
       role: m.role,
       content: typeof m.content === "string" ? m.content : String(m.content),
     }));
 
-    // Groq vision models support image_url, text-only models need string content
-    const hasVision = model.includes("scout") || model.includes("vision");
-    if (imageUrl && hasVision) {
+    // Groq has no vision-capable model right now — sending an image_url part to a
+    // text-only model is itself a hard API error, so degrade gracefully instead of
+    // silently dropping the screenshot or crashing: tell the model (and by extension
+    // the user, since this becomes part of the response) that it can't see the image.
+    if (base64Image) {
       apiMessages.push({
         role: "user",
-        content: [
-          { type: "image_url", image_url: { url: imageUrl } },
-          { type: "text", text: prompt },
-        ],
+        content: `[Note: a screenshot was attached, but Groq models don't support image input yet — please ask the user to describe what's on screen, or switch to Gemini/OpenRouter for screen analysis.]\n\n${prompt}`,
       });
     } else {
       apiMessages.push({ role: "user", content: prompt });

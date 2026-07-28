@@ -1,4 +1,4 @@
-# ⌨️ Ghostly AI — Keyboard Shortcuts & Hotkeys (v3.3.4)
+# ⌨️ Ghostly AI — Keyboard Shortcuts & Hotkeys (v3.3.5)
 
 Run Ghostly AI 100% hands-free and stealthy during a live interview — every action below is mapped to a keyboard shortcut so you never need to touch the mouse or reveal the app on screen share.
 
@@ -23,4 +23,4 @@ All global hotkeys are registered in [`electron/hotkeys.ts`](electron/hotkeys.ts
 3. **Reviewing:** Use `←` / `→` (or `Ctrl + 8` / `Ctrl + 2`) to flip between saved Q&A pages without losing your place.
 4. **Screen share safety:** `Ctrl + Shift + H` instantly hides the overlay if you need to share a different window.
 
-See [README.md](README.md) for the full v3.3.4 changelog and feature walkthrough.
+See [README.md](README.md) for the full v3.3.5 changelog and feature walkthrough.
