@@ -601,6 +601,12 @@ export const Home: React.FC = () => {
     if (isStreaming) setUserNavigated(false);
   }, [isStreaming]);
 
+  // Bare Left/Right arrow Q-navigation — only fires while the overlay window has
+  // keyboard focus (unlike Ctrl+8/Ctrl+2 below, which work from anywhere via a
+  // global shortcut). This used to be registered a second time further down in
+  // this component with near-identical logic, which made every arrow press
+  // double-fire (advancing/rewinding two pages instead of one) — this is now the
+  // only registration.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -729,99 +735,75 @@ export const Home: React.FC = () => {
     window.ghostly.enableMouse();
   }, []);
 
-  // Hotkeys
+  // Hotkeys — all of these arrive as IPC events from Electron's system-wide
+  // globalShortcut registrations (electron/hotkeys.ts), so they work regardless
+  // of which window has OS focus (Zoom, the browser, your IDE). Renderer-side
+  // `window.addEventListener('keydown', ...)` handlers used to be registered
+  // here for Ctrl+N/Ctrl+0/Ctrl+E/Ctrl+8/Ctrl+2, which only fired while this
+  // (usually invisible) overlay window itself happened to have keyboard focus —
+  // effectively never during a real interview.
   useEffect(() => {
-    const offScreenshot = window.ghostly.onScreenshot(addScreenshot);
-    const offSolve = window.ghostly.onSolve(async () => await runAIStream(screenshotsRef.current));
+    // Ctrl+E / Ctrl+Shift+S / Ctrl+Shift+Enter (main process) both funnel through
+    // here. Compress to 800px/70% JPEG to match handleScreenAnalysis's payload
+    // size (this used to be sent uncompressed for the hotkey path only, several
+    // times larger than the button-triggered flow).
+    const offScreenshot = window.ghostly.onScreenshot(async (b64) => {
+      const compressed = await compressScreenshot(b64, 800, 0.7);
+      addScreenshot(compressed);
+    });
+    // Ctrl+Enter — solve whatever's already captured/transcribed. If it's a
+    // screenshot-driven solve, use the same interview-type/language prompt
+    // handleScreenAnalysis builds instead of an empty one.
+    const offSolve = window.ghostly.onSolve(async () => {
+      const followUp = screenshotsRef.current.length > 0
+        ? buildPrompt(settings.interviewType, settings.language)
+        : undefined;
+      await runAIStream(screenshotsRef.current, undefined, followUp);
+    });
     const offStartOver = window.ghostly.onStartOver(handleRestart);
-    
-    // Ctrl+N for Next Question (in AI Answer mode)
-    const handleCtrlN = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
-        e.preventDefault();
-        if (!liveActive) return;
-        // Save current Q&A, clear screen, keep listening — auto AI will pick up next question
-        if (currentSolution && pendingTranscript) {
-          setQaPages(prev => [...prev, { question: pendingTranscript, answer: currentSolution }]);
-        }
-        setPendingTranscript("");
-        clearSolution();
-        audio.clearLiveText();
-        lastLiveTextRef.current = "";
-        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+
+    // Ctrl+N — Next Question (only meaningful while live-listening)
+    const offNextQuestion = window.ghostly.onNextQuestion(() => {
+      if (!liveActive) return;
+      if (currentSolution && pendingTranscript) {
+        setQaPages(prev => [...prev, { question: pendingTranscript, answer: currentSolution }]);
       }
-    };
-    
-    // Ctrl+0 for Send to AI (in AI Answer mode)
-    const handleCtrl0 = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === '0') {
-        e.preventDefault();
-        if (liveActive && audio.liveText.trim() && !isStreaming) {
-          handleManualSend();
-        }
+      setPendingTranscript("");
+      clearSolution();
+      audio.clearLiveText();
+      lastLiveTextRef.current = "";
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    });
+
+    // Ctrl+0 — Manual Send (skip waiting for silence detection)
+    const offManualSend = window.ghostly.onManualSend(() => {
+      if (liveActive && audio.liveText.trim() && !isStreaming) {
+        handleManualSend();
       }
-    };
-    
-    // Ctrl+E for Auto Screenshot + Solve
-    const handleCtrlE = async (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
-        e.preventDefault();
-        try {
-          const b64 = await window.ghostly.captureFullscreen();
-          addScreenshot(b64);
-          const screenPrompt = buildPrompt(settings.interviewType, settings.language);
-          runAIStream([b64], undefined, screenPrompt);
-        } catch { setError("Failed to capture screen."); }
-      }
-    };
-    
-    // Ctrl+8 for Scroll Up
-    const handleCtrl8 = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === '8') {
-        e.preventDefault();
-        const container = document.querySelector('.overflow-y-auto');
-        if (container) container.scrollBy({ top: -200, behavior: 'smooth' });
-      }
-    };
-    
-    // Ctrl+2 for Scroll Down
-    const handleCtrl2 = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === '2') {
-        e.preventDefault();
-        const container = document.querySelector('.overflow-y-auto');
-        if (container) container.scrollBy({ top: 200, behavior: 'smooth' });
-      }
-    };
-    
-    // Arrow Key Page Navigation (Instant Q1, Q2, Q3 switching)
-    const handleArrowNav = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      if (e.key === "ArrowLeft") {
-        setPageIndex(p => Math.max(0, p - 1));
-      } else if (e.key === "ArrowRight") {
-        setPageIndex(p => Math.min(Math.max(0, totalPages - 1), p + 1));
-      }
-    };
-    
-    window.addEventListener('keydown', handleCtrlN);
-    window.addEventListener('keydown', handleCtrl0);
-    window.addEventListener('keydown', handleCtrlE);
-    window.addEventListener('keydown', handleCtrl8);
-    window.addEventListener('keydown', handleCtrl2);
-    window.addEventListener('keydown', handleArrowNav);
-    
-    return () => { 
-      offScreenshot(); 
-      offSolve(); 
+    });
+
+    // Ctrl+8 — Previous Question page
+    const offPrevQuestion = window.ghostly.onPrevQuestion(() => {
+      setUserNavigated(true);
+      setPageIndex(p => Math.max(0, p - 1));
+    });
+
+    // Ctrl+2 — Next Question page
+    const offNextQuestionPage = window.ghostly.onNextQuestionPage(() => {
+      setUserNavigated(true);
+      setPageIndex(p => Math.min(Math.max(0, totalPages - 1), p + 1));
+    });
+
+    return () => {
+      offScreenshot();
+      offSolve();
       offStartOver();
-      window.removeEventListener('keydown', handleCtrlN);
-      window.removeEventListener('keydown', handleCtrl0);
-      window.removeEventListener('keydown', handleCtrlE);
-      window.removeEventListener('keydown', handleCtrl8);
-      window.removeEventListener('keydown', handleCtrl2);
-      window.removeEventListener('keydown', handleArrowNav);
+      offNextQuestion();
+      offManualSend();
+      offPrevQuestion();
+      offNextQuestionPage();
     };
-  }, [runAIStream, addScreenshot, handleRestart, liveActive, isStreaming, currentSolution, pendingTranscript, handleNextQuestion, handleManualSend, audio.liveText, settings.interviewType, settings.language, setError]);
+  }, [runAIStream, addScreenshot, handleRestart, liveActive, isStreaming, currentSolution, pendingTranscript, handleManualSend, audio.liveText, settings.interviewType, settings.language, totalPages]);
 
   const displayLiveText = audio.liveText || pendingTranscript;
 
