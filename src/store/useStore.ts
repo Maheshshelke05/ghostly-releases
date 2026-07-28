@@ -146,8 +146,6 @@ interface GhostlyStore {
 const ENV = {
   groq:        import.meta.env.VITE_GROQ_API_KEY        || "",
   gemini:      import.meta.env.VITE_GEMINI_API_KEY       || "",
-  openai:      import.meta.env.VITE_OPENAI_API_KEY       || "",
-  anthropic:   import.meta.env.VITE_ANTHROPIC_API_KEY    || "",
   deepgram:    import.meta.env.VITE_DEEPGRAM_API_KEY     || "",
   openrouter:  import.meta.env.VITE_OPENROUTER_API_KEY   || "",
 };

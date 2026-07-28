@@ -1,10 +1,29 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useStore } from "../store/useStore";
+import type { ProviderName } from "../lib/ai";
 import { NVIDIA_MODELS } from "../lib/ai/nvidia";
 import { OPENROUTER_FREE_MODELS } from "../lib/ai/openrouter";
 
-const AI_PROVIDERS = [
+interface AIProviderConfig {
+  id: ProviderName;
+  label: string;
+  icon: string;
+  badge: string;
+  badgeColor: string;
+  badgeBorder: string;
+  badgeText: string;
+  url: string;
+  ph: string;
+  models: string[];
+  modelLabels: Record<string, string>;
+}
+
+// Explicitly typed as ProviderName[] — without this, `id` widens to plain
+// `string`, which meant `setActiveProv(p.id)` calls below didn't actually
+// type-check against the store's ProviderName union (caught by `tsc`, not by
+// `vite build`, so it silently worked at runtime but wasn't real type safety).
+const AI_PROVIDERS: AIProviderConfig[] = [
   {
     id: "groq", label: "Groq", icon: "⚡", badge: "FAST", badgeColor: "rgba(139,92,246,0.15)", badgeBorder: "rgba(139,92,246,0.3)", badgeText: "#a78bfa",
     url: "https://console.groq.com/keys", ph: "gsk_…",
@@ -514,7 +533,7 @@ export const ApiSetupPage: React.FC = () => {
                                 }}
                               >
                                 {p.models.map(m => (
-                                  <option key={m} value={m} style={{ background: "#0d0d14" }}>{(p as any).modelLabels?.[m] || m}</option>
+                                  <option key={m} value={m} style={{ background: "#0d0d14" }}>{p.modelLabels[m] || m}</option>
                                 ))}
                               </select>
                             </div>
