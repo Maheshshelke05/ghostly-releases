@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useStore } from "../store/useStore";
 import { OPENROUTER_FREE_MODELS } from "../lib/ai/openrouter";
+import { AudioDiagnostics } from "./AudioDiagnostics";
 
 const SHORTCUTS = [
   { label: "Ask AI",        keys: ["Ctrl", "↵"] },
@@ -28,6 +29,7 @@ interface SettingsPanelProps { onClose: () => void; }
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
   const { settings, updateSettings, setApiKey } = useStore();
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [localKeys, setLocalKeys] = useState<Record<string, string>>(() => {
     const k: Record<string, string> = { deepgram: settings.deepgramApiKey || "" };
     AI_PROVIDERS.forEach(p => { k[p.id] = settings.apiKeys[p.id] || ""; });
@@ -154,6 +156,22 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
 
           <div className="h-px" style={{ background: "rgba(255,255,255,0.07)" }} />
 
+          {/* Audio Diagnostics */}
+          <div>
+            <p className="text-[9px] font-black uppercase tracking-[0.14em] mb-2.5" style={{ color: "rgba(255,255,255,0.22)" }}>
+              Audio Diagnostics
+            </p>
+            <button onClick={() => setShowDiagnostics(true)}
+              className="w-full py-2.5 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all"
+              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.6)" }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(139,92,246,0.1)"; e.currentTarget.style.borderColor = "rgba(139,92,246,0.25)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; }}>
+              🎙️ Run Audio & Deepgram Test
+            </button>
+          </div>
+
+          <div className="h-px" style={{ background: "rgba(255,255,255,0.07)" }} />
+
           {/* API Keys */}
           <div>
             <p className="text-[9px] font-black uppercase tracking-[0.14em] mb-3" style={{ color: "rgba(255,255,255,0.22)" }}>
@@ -267,6 +285,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
           )}
         </div>
       </div>
+      {showDiagnostics && <AudioDiagnostics onClose={() => setShowDiagnostics(false)} />}
     </div>
   );
 };

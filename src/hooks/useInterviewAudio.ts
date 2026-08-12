@@ -78,6 +78,8 @@ export function useInterviewAudio() {
   const isRecordingRef = useRef(false);
   const isMountedRef = useRef(false);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectAttemptsRef = useRef(0);
+  const MAX_RECONNECT_ATTEMPTS = 6;
 
   const deepgramApiKey = useStore(
     (s) => s.settings.deepgramApiKey ?? import.meta.env.VITE_DEEPGRAM_API_KEY ?? ""
@@ -114,6 +116,7 @@ export function useInterviewAudio() {
       clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
     }
+    reconnectAttemptsRef.current = 0;
     // Close WebSocket cleanly
     if (wsRef.current) {
       wsRef.current.onmessage = null;
@@ -209,6 +212,7 @@ export function useInterviewAudio() {
 
         ws.onopen = () => {
           if (!isMountedRef.current || !isRecordingRef.current) { ws.close(); return; }
+          reconnectAttemptsRef.current = 0;
           addLog("Deepgram WebSocket connected ✔");
           for (const c of dgPendingRef.current) ws.send(c);
           dgPendingRef.current = [];
@@ -242,14 +246,23 @@ export function useInterviewAudio() {
         };
 
         ws.onclose = (ev) => {
-          if (isMountedRef.current && isRecordingRef.current && !ev.wasClean) {
-            addLog("Deepgram WebSocket closed. Retrying connection in 3s...");
-            reconnectTimerRef.current = setTimeout(() => {
-              if (isMountedRef.current && isRecordingRef.current) {
-                connectWebSocket();
-              }
-            }, 3000);
+          if (!isMountedRef.current || !isRecordingRef.current || ev.wasClean) return;
+          reconnectAttemptsRef.current += 1;
+          if (reconnectAttemptsRef.current > MAX_RECONNECT_ATTEMPTS) {
+            addLog(`[ERROR] Deepgram connection lost after ${MAX_RECONNECT_ATTEMPTS} retries. Stopping — check your network/API key and press Start again.`);
+            isRecordingRef.current = false;
+            if (isMountedRef.current) setIsRecording(false);
+            return;
           }
+          // Capped exponential backoff (3s, 6s, 12s... up to 30s) instead of a
+          // fixed 3s retry forever, which just hammered a dead connection.
+          const delay = Math.min(30000, 3000 * 2 ** (reconnectAttemptsRef.current - 1));
+          addLog(`Deepgram WebSocket closed. Retrying in ${Math.round(delay / 1000)}s (attempt ${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})...`);
+          reconnectTimerRef.current = setTimeout(() => {
+            if (isMountedRef.current && isRecordingRef.current) {
+              connectWebSocket();
+            }
+          }, delay);
         };
       };
 
