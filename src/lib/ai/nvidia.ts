@@ -1,10 +1,13 @@
 import type { AIProvider, AIRequestOptions } from "./types";
 
 export const NVIDIA_MODELS = [
-  // Top 3 Best Free Models
-  { id: "nvidia/llama-3.3-nemotron-super", name: "Llama 3.3 Nemotron Super" },
+  // Top 3 Best Free Models — IDs verified against NVIDIA's current NIM catalog.
+  // The previous IDs here were incomplete/stale (missing size suffix on the
+  // Nemotron model, missing the "-instruct-v0.1" suffix on Mixtral) and were
+  // 404ing on every call.
+  { id: "nvidia/llama-3.3-nemotron-super-49b-v1.5", name: "Llama 3.3 Nemotron Super 49B v1.5" },
   { id: "meta/llama-3.3-70b-instruct", name: "Llama 3.3 70B Instruct" },
-  { id: "mistralai/mixtral-8x7b", name: "Mixtral 8x7B" },
+  { id: "mistralai/mixtral-8x7b-instruct-v0.1", name: "Mixtral 8x7B Instruct" },
 ];
 
 export class NvidiaProvider implements AIProvider {
