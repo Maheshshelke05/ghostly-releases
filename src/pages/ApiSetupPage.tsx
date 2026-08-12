@@ -140,10 +140,13 @@ export const ApiSetupPage: React.FC = () => {
           setTestStatus(prev => ({ ...prev, deepgram: { status: "invalid", message: `Invalid Key (HTTP ${res.status})` } }));
         }
       } else if (providerId === "gemini") {
-        // Real Gemini test: actual generateContent call
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
+        // Real Gemini test: actual generateContent call. Key goes in the
+        // x-goog-api-key header, not `?key=` — the query param returns 401
+        // ACCESS_TOKEN_TYPE_UNSUPPORTED for the newer "AQ."-prefixed keys
+        // Google AI Studio now issues by default.
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", "x-goog-api-key": key },
           body: JSON.stringify({
             contents: [{ parts: [{ text: "hi" }] }]
           })
@@ -186,23 +189,15 @@ export const ApiSetupPage: React.FC = () => {
           setTestStatus(prev => ({ ...prev, openrouter: { status: "invalid", message: `Invalid Key (HTTP ${res.status})` } }));
         }
       } else if (providerId === "nvidia") {
-        // Real NVIDIA test: 1-token chat completion call
-        const res = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${key}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "meta/llama-3.3-70b-instruct",
-            messages: [{ role: "user", content: "hi" }],
-            max_tokens: 1,
-          })
-        }).catch(() => null);
-        if (res && res.ok) {
+        // NVIDIA's API blocks direct browser-origin requests (CORS) — a raw
+        // fetch() here always fails regardless of key validity, which meant
+        // this test button reported "Invalid" even for a good key. Go through
+        // the same Electron main-process proxy the real provider call uses.
+        const result = await window.ghostly.nvidiaTestKey(key);
+        if (result.ok) {
           setTestStatus(prev => ({ ...prev, nvidia: { status: "valid", message: "NVIDIA Key Valid! 🟢" } }));
         } else {
-          setTestStatus(prev => ({ ...prev, nvidia: { status: "invalid", message: "Invalid NVIDIA Key" } }));
+          setTestStatus(prev => ({ ...prev, nvidia: { status: "invalid", message: `Invalid Key (HTTP ${result.status})` } }));
         }
       } else if (providerId === "openai") {
         // Real OpenAI test: 1-token chat completion call

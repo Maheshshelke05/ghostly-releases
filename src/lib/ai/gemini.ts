@@ -27,7 +27,12 @@ export class GeminiProvider implements AIProvider {
     // Clean model name
     model = model.trim().replace(/\s+/g, "");
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
+    // Passing the key via `?key=` query param returns
+    // "401 ACCESS_TOKEN_TYPE_UNSUPPORTED" for the newer "AQ."-prefixed Auth Keys
+    // that Google AI Studio now issues by default (legacy "AIza" Standard keys
+    // are being phased out entirely by Sept 2026). The `x-goog-api-key` header
+    // is Google's current documented method and works with both key formats.
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`;
 
     // Strip data URL prefix if present
     const imageData = base64Image?.includes(",")
@@ -73,7 +78,7 @@ export class GeminiProvider implements AIProvider {
 
     const response = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
       body: JSON.stringify(body),
     });
 

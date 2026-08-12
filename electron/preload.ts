@@ -140,6 +140,8 @@ contextBridge.exposeInMainWorld("ghostly", {
   // NVIDIA API proxy
   nvidiaApiCall: (apiKey: string, body: any): Promise<{ ok: boolean; status: number; data: string }> =>
     ipcRenderer.invoke("nvidia-api-call", { apiKey, body }),
+  nvidiaTestKey: (apiKey: string): Promise<{ ok: boolean; status: number; data: string }> =>
+    ipcRenderer.invoke("nvidia-test-key", { apiKey }),
 
   // Anthropic API proxy
   anthropicApiCall: (apiKey: string, body: any): Promise<{ ok: boolean; status: number; data: string }> =>
