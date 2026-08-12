@@ -4,7 +4,7 @@ export class GrokProvider implements AIProvider {
   name = "grok";
 
   listModels(): string[] {
-    return ["grok-2-vision-1212", "grok-2-1212", "grok-beta"];
+    return ["grok-4.6", "grok-4.5", "grok-4.3"];
   }
 
   async *streamSolution(options: AIRequestOptions): AsyncGenerator<string> {
@@ -16,8 +16,9 @@ export class GrokProvider implements AIProvider {
 
     const apiMessages: any[] = messages.map(m => ({ role: m.role, content: m.content }));
 
-    const hasVision = model.includes("vision");
-    if (imageUrl && hasVision) {
+    // All current Grok chat models (4.x+) are vision-capable by default — the
+    // "-vision" suffix only existed on the retired grok-2 generation.
+    if (imageUrl) {
       apiMessages.push({ role: "user", content: [{ type: "image_url", image_url: { url: imageUrl } }, { type: "text", text: prompt }] });
     } else {
       apiMessages.push({ role: "user", content: prompt });

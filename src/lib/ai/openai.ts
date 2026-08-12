@@ -5,12 +5,10 @@ export class OpenAIProvider implements AIProvider {
 
   listModels(): string[] {
     return [
+      "gpt-5.6-sol",
+      "gpt-5.6-terra",
+      "gpt-5.6-luna",
       "gpt-4o",
-      "gpt-4o-mini",
-      "gpt-4-turbo",
-      "gpt-4",
-      "o1",
-      "o1-mini",
     ];
   }
 

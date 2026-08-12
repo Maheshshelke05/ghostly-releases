@@ -247,9 +247,8 @@ export const Home: React.FC = () => {
     transcriptOverride?: string,
     followUpQuery?: string,
   ) => {
-    const useGroq = !!transcriptOverride && !!settings.apiKeys["groq"];
-    const providerName = useGroq ? "groq" : settings.activeProvider;
-    const activeKey = useGroq ? settings.apiKeys["groq"] : settings.apiKeys[settings.activeProvider];
+    const providerName = settings.activeProvider;
+    const activeKey = settings.apiKeys[settings.activeProvider];
 
     if (!activeKey) {
       setError(`No API key for ${providerName}. Open Settings to add one.`);
@@ -302,7 +301,7 @@ export const Home: React.FC = () => {
 
       const stream = provider.streamSolution({
         base64Image: latestScreenshot, prompt, messages: historyContext,
-        model: useGroq ? "llama-3.3-70b-versatile" : settings.activeModel,
+        model: settings.activeModel,
         apiKey: activeKey,
         mimeType: latestScreenshot?.includes("image/jpeg") ? "image/jpeg" : "image/png",
         maxTokens: transcriptOverride ? 2048 : 4096,

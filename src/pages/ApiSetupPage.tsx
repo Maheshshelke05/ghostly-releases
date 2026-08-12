@@ -51,6 +51,24 @@ const AI_PROVIDERS: AIProviderConfig[] = [
     models: NVIDIA_MODELS.map(m => m.id),
     modelLabels: Object.fromEntries(NVIDIA_MODELS.map(m => [m.id, `${m.name} — FREE`])),
   },
+  {
+    id: "openai", label: "OpenAI", icon: "🟣", badge: "PAID", badgeColor: "rgba(168,85,247,0.12)", badgeBorder: "rgba(168,85,247,0.3)", badgeText: "#c084fc",
+    url: "https://platform.openai.com/api-keys", ph: "sk-…",
+    models: ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-4o"],
+    modelLabels: { "gpt-5.6-sol": "GPT-5.6 Sol — Flagship", "gpt-5.6-terra": "GPT-5.6 Terra — Balanced", "gpt-5.6-luna": "GPT-5.6 Luna — Fast", "gpt-4o": "GPT-4o — Legacy" },
+  },
+  {
+    id: "anthropic", label: "Anthropic", icon: "🟠", badge: "PAID", badgeColor: "rgba(217,119,6,0.12)", badgeBorder: "rgba(217,119,6,0.3)", badgeText: "#f59e0b",
+    url: "https://console.anthropic.com/settings/keys", ph: "sk-ant-…",
+    models: ["claude-sonnet-5", "claude-opus-5", "claude-haiku-4-5-20251001", "claude-sonnet-4-5-20250929"],
+    modelLabels: { "claude-sonnet-5": "Claude Sonnet 5 — Balanced", "claude-opus-5": "Claude Opus 5 — Most Capable", "claude-haiku-4-5-20251001": "Claude Haiku 4.5 — Fastest", "claude-sonnet-4-5-20250929": "Claude Sonnet 4.5 — Legacy" },
+  },
+  {
+    id: "grok", label: "Grok (xAI)", icon: "⬛", badge: "PAID", badgeColor: "rgba(255,255,255,0.1)", badgeBorder: "rgba(255,255,255,0.25)", badgeText: "#e5e7eb",
+    url: "https://console.x.ai/", ph: "xai-…",
+    models: ["grok-4.6", "grok-4.5", "grok-4.3"],
+    modelLabels: { "grok-4.6": "Grok 4.6 — Latest", "grok-4.5": "Grok 4.5", "grok-4.3": "Grok 4.3" },
+  },
 ];
 
 export const ApiSetupPage: React.FC = () => {
@@ -185,6 +203,57 @@ export const ApiSetupPage: React.FC = () => {
           setTestStatus(prev => ({ ...prev, nvidia: { status: "valid", message: "NVIDIA Key Valid! 🟢" } }));
         } else {
           setTestStatus(prev => ({ ...prev, nvidia: { status: "invalid", message: "Invalid NVIDIA Key" } }));
+        }
+      } else if (providerId === "openai") {
+        // Real OpenAI test: 1-token chat completion call
+        const res = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${key}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "gpt-4o",
+            messages: [{ role: "user", content: "hi" }],
+            max_tokens: 1,
+          })
+        });
+        if (res.ok) {
+          setTestStatus(prev => ({ ...prev, openai: { status: "valid", message: "OpenAI Key Valid! 🟣" } }));
+        } else {
+          setTestStatus(prev => ({ ...prev, openai: { status: "invalid", message: `Invalid Key (HTTP ${res.status})` } }));
+        }
+      } else if (providerId === "anthropic") {
+        // Anthropic blocks direct browser calls (no CORS) — go through the same
+        // Electron main-process proxy the real provider uses.
+        const result = await window.ghostly.anthropicApiCall(key, {
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 1,
+          messages: [{ role: "user", content: "hi" }],
+        });
+        if (result.ok) {
+          setTestStatus(prev => ({ ...prev, anthropic: { status: "valid", message: "Anthropic Key Valid! 🟠" } }));
+        } else {
+          setTestStatus(prev => ({ ...prev, anthropic: { status: "invalid", message: `Invalid Key (HTTP ${result.status})` } }));
+        }
+      } else if (providerId === "grok") {
+        // Real Grok test: 1-token chat completion call
+        const res = await fetch("https://api.x.ai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${key}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "grok-4.6",
+            messages: [{ role: "user", content: "hi" }],
+            max_tokens: 1,
+          })
+        });
+        if (res.ok) {
+          setTestStatus(prev => ({ ...prev, grok: { status: "valid", message: "Grok Key Valid! ⬛" } }));
+        } else {
+          setTestStatus(prev => ({ ...prev, grok: { status: "invalid", message: `Invalid Key (HTTP ${res.status})` } }));
         }
       }
     } catch (err: any) {
@@ -582,9 +651,6 @@ export const ApiSetupPage: React.FC = () => {
                 })}
               </div>
 
-              <p className="text-[8px] text-center" style={{ color: "rgba(255,255,255,0.2)" }}>
-                OpenAI · Anthropic · Grok — coming soon
-              </p>
             </div>
           </div>
 
