@@ -10,6 +10,43 @@ let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let authServer: http.Server | null = null;
 
+// Populated by warmScreenSource() well before the user ever enables audio, so the
+// live setDisplayMediaRequestHandler below almost always hits the cache instead of
+// running the remove-stealth -> enumerate -> reapply-after-800ms dance while the
+// user may already be mid screen-share (that live dance was the "overlay briefly
+// visible in Google Meet" leak). Kept at module scope so both the pre-warm call and
+// the request handler share the same cache.
+let cachedScreenSource: Electron.DesktopCapturerSource | null = null;
+let screenSourceWarmupPromise: Promise<void> | null = null;
+
+function warmScreenSource(): Promise<void> {
+  if (cachedScreenSource) return Promise.resolve();
+  if (screenSourceWarmupPromise) return screenSourceWarmupPromise;
+
+  // desktopCapturer.getSources() runs a Windows desktop-duplication capture session.
+  // If our own window is WDA_EXCLUDEFROMCAPTURE at that exact moment, Windows' DWM
+  // can stop compositing that window to the real screen too (not just to capture
+  // streams) — the whole app, TopBar included, goes invisible on the user's own
+  // monitor. Drop the exclusion for the duration of the enumeration, then restore
+  // it once the capture session has actually torn down.
+  if (mainWindow) removeStealthMode(mainWindow);
+  screenSourceWarmupPromise = desktopCapturer
+    .getSources({ types: ["screen"] })
+    .then((sources) => {
+      cachedScreenSource = sources[0] ?? null;
+    })
+    .catch(() => {
+      cachedScreenSource = null;
+    })
+    .finally(() => {
+      // Reapplying immediately can retrigger the same glitch — give the capture
+      // session's teardown a moment to finish first.
+      setTimeout(() => { if (mainWindow) applyStealthMode(mainWindow); }, 800);
+      screenSourceWarmupPromise = null;
+    });
+  return screenSourceWarmupPromise;
+}
+
 function startAuthServer() {
   authServer = http.createServer((req, res) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -212,39 +249,27 @@ if (!gotTheLock) {
     );
     // useInterviewAudio's startInterview() calls getDisplayMedia() fresh every time the
     // user (re)enables audio — including mid-interview, after disabling and re-enabling
-    // while already screen-sharing in Zoom/Meet/Teams. Re-running the full
-    // remove-stealth -> enumerate -> reapply-after-800ms dance on every one of those
-    // toggles meant the overlay lost its capture exclusion for ~800ms-3s in the middle
-    // of an active screen share, which is exactly the "window briefly visible in Google
-    // Meet" bug users reported. The video track is stopped immediately after this
-    // resolves anyway (only the loopback audio is used), so the resolved screen source
-    // is safe to cache and reuse — only the very first call needs to touch stealth mode
-    // at all.
-    let cachedScreenSource: Electron.DesktopCapturerSource | null = null;
+    // while already screen-sharing in Zoom/Meet/Teams. warmScreenSource() is kicked off
+    // proactively (see setTimeout below) well before this normally fires, so this is
+    // almost always just a cache read — no live remove-stealth/enumerate/reapply dance
+    // in the middle of an active screen share, which is exactly the "window briefly
+    // visible in Google Meet" bug users reported. The video track is stopped
+    // immediately after this resolves anyway (only the loopback audio is used), so the
+    // resolved screen source is safe to cache and reuse for the rest of the app session.
     mainWindow.webContents.session.setDisplayMediaRequestHandler((_req, cb) => {
-      if (cachedScreenSource) {
-        cb({ video: cachedScreenSource, audio: "loopback" });
-        return;
-      }
-
-      // desktopCapturer.getSources() runs a Windows desktop-duplication capture session.
-      // If our own window is WDA_EXCLUDEFROMCAPTURE at that exact moment, Windows' DWM
-      // can stop compositing that window to the real screen too (not just to capture
-      // streams) — the whole app, TopBar included, goes invisible on the user's own
-      // monitor. Drop the exclusion for the duration of the enumeration, then restore
-      // it once the capture session has actually torn down.
-      if (mainWindow) removeStealthMode(mainWindow);
-      desktopCapturer.getSources({ types: ["screen"] }).then((sources) => {
-        cachedScreenSource = sources[0] ?? null;
+      warmScreenSource().then(() => {
         // audio: "loopback" — captures ALL system audio including Zoom, Meet, Teams
         // This is the key flag that makes cross-app audio capture work on Windows
-        cb(sources[0] ? { video: sources[0], audio: "loopback" } : { video: sources[0] });
-      }).catch(() => cb({})).finally(() => {
-        // Reapplying immediately can retrigger the same glitch — give the capture
-        // session's teardown a moment to finish first.
-        setTimeout(() => { if (mainWindow) applyStealthMode(mainWindow); }, 800);
+        cb(cachedScreenSource ? { video: cachedScreenSource, audio: "loopback" } : {});
       });
     }, { useSystemPicker: false });
+
+    // Pre-warm the screen source now, while the user is very unlikely to already be
+    // mid screen-share (app just launched) — by the time they actually join a call and
+    // enable audio, the handler above should already have a cache hit. The delay lets
+    // the window finish its initial show + first applyStealthMode() from
+    // "ready-to-show" so the two stealth toggles don't race each other.
+    setTimeout(() => warmScreenSource(), 2000);
 
     // IPC handlers
     ipcMain.on("ghostly:open-external", (_event, url: string) => {
