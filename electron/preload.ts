@@ -144,4 +144,11 @@ contextBridge.exposeInMainWorld("ghostly", {
   // Anthropic API proxy
   anthropicApiCall: (apiKey: string, body: any): Promise<{ ok: boolean; status: number; data: string }> =>
     ipcRenderer.invoke("anthropic-api-call", { apiKey, body }),
+
+  // Keyboard shortcuts
+  getShortcuts: (): Promise<Record<string, string>> => ipcRenderer.invoke("ghostly:get-shortcuts"),
+  updateShortcuts: (bindings: Record<string, string>): Promise<{ ok: boolean; failed: string[] }> =>
+    ipcRenderer.invoke("ghostly:update-shortcuts", bindings),
+  resetShortcuts: (): Promise<{ ok: boolean; failed: string[] }> =>
+    ipcRenderer.invoke("ghostly:reset-shortcuts"),
 });

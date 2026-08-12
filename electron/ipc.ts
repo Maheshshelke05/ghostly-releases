@@ -1,5 +1,6 @@
 import { ipcMain, desktopCapturer } from "electron";
 import { captureFullScreen } from "./capture";
+import { updateHotkeys, DEFAULT_SHORTCUTS, type ShortcutBindings } from "./hotkeys";
 import Store from "electron-store";
 import https from "https";
 import http from "http";
@@ -25,8 +26,15 @@ const store = new Store({
     user: null,
     subscription: { plan: "free", status: "active", expires_at: null },
     ads: [],
+    shortcuts: DEFAULT_SHORTCUTS,
   },
 });
+
+export function getStoredShortcuts(): ShortcutBindings {
+  // Merge over defaults so a store saved before a new action existed still
+  // gets that action's default binding instead of `undefined`.
+  return { ...DEFAULT_SHORTCUTS, ...(store.get("shortcuts") as Partial<ShortcutBindings> | undefined) };
+}
 
 export function registerIpcHandlers(): void {
   // User / Auth
@@ -74,6 +82,23 @@ export function registerIpcHandlers(): void {
       console.error("Failed to capture screen:", error);
       throw error;
     }
+  });
+
+  // Keyboard shortcuts
+  ipcMain.handle("ghostly:get-shortcuts", () => getStoredShortcuts());
+
+  ipcMain.handle("ghostly:update-shortcuts", (_event, bindings: ShortcutBindings) => {
+    if (!bindings || typeof bindings !== "object") return { ok: false, failed: [] };
+    const merged = { ...DEFAULT_SHORTCUTS, ...bindings };
+    const result = updateHotkeys(merged);
+    if (result.ok) store.set("shortcuts", merged);
+    return result;
+  });
+
+  ipcMain.handle("ghostly:reset-shortcuts", () => {
+    const result = updateHotkeys(DEFAULT_SHORTCUTS);
+    store.set("shortcuts", DEFAULT_SHORTCUTS);
+    return result;
   });
 
   // Settings

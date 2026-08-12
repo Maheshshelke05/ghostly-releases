@@ -4,6 +4,32 @@ import { safeguardVisibility } from "./stealth";
 
 const MOVE_STEP = 25;
 
+export type ShortcutAction =
+  | "captureAndSolve"
+  | "solve"
+  | "toggleVisibility"
+  | "startOver"
+  | "nextQuestion"
+  | "manualSend"
+  | "prevQuestion"
+  | "nextQuestionPage";
+
+export type ShortcutBindings = Record<ShortcutAction, string>;
+
+export const DEFAULT_SHORTCUTS: ShortcutBindings = {
+  captureAndSolve: "CommandOrControl+E",
+  solve: "CommandOrControl+Return",
+  toggleVisibility: "CommandOrControl+B",
+  startOver: "CommandOrControl+G",
+  nextQuestion: "CommandOrControl+N",
+  manualSend: "CommandOrControl+0",
+  prevQuestion: "CommandOrControl+8",
+  nextQuestionPage: "CommandOrControl+2",
+};
+
+let currentWin: BrowserWindow | null = null;
+let currentBindings: ShortcutBindings = { ...DEFAULT_SHORTCUTS };
+
 // Every hotkey below is registered via Electron's globalShortcut, so it fires
 // regardless of which window has OS focus (Zoom, the browser, your IDE) — that's
 // the whole point of a stealth overlay. Renderer-side `window.addEventListener
@@ -12,7 +38,7 @@ const MOVE_STEP = 25;
 // itself happened to have keyboard focus, which is rarely true during a real
 // interview. They've been removed from Home.tsx in favor of the IPC events sent
 // here, so every documented shortcut now genuinely works from anywhere.
-export function registerHotkeys(win: BrowserWindow): void {
+function buildActionHandlers(win: BrowserWindow): Record<ShortcutAction, () => void> {
   const captureAndSolve = async () => {
     try {
       const wasVisible = win.getOpacity() > 0;
@@ -42,7 +68,7 @@ export function registerHotkeys(win: BrowserWindow): void {
     }
   };
 
-  const toggleStealthVisibility = () => {
+  const toggleVisibility = () => {
     const isCurrentlyHidden = win.getOpacity() === 0 || !win.isVisible();
     if (isCurrentlyHidden) {
       win.setOpacity(1);
@@ -59,18 +85,7 @@ export function registerHotkeys(win: BrowserWindow): void {
     }
   };
 
-  // Auto Screen Capture — captures, compresses, and runs the AI solution in one
-  // action. Ctrl+Shift+S is the "instant screen analysis" alias for the same thing.
-  const regE = globalShortcut.register("CommandOrControl+E", captureAndSolve);
-  console.log("[Ghostly] Ctrl+E registered:", regE);
-  const regShiftS = globalShortcut.register("CommandOrControl+Shift+S", captureAndSolve);
-  console.log("[Ghostly] Ctrl+Shift+S registered:", regShiftS);
-  // Legacy combo, kept working for anyone used to it.
-  globalShortcut.register("CommandOrControl+Shift+Return", captureAndSolve);
-
-  // Solve / Ask AI — re-runs the AI on whatever's already captured/transcribed,
-  // without taking a fresh screenshot.
-  const regEnter = globalShortcut.register("CommandOrControl+Return", () => {
+  const solve = () => {
     if (win.getOpacity() === 0) {
       win.setOpacity(1);
       win.setIgnoreMouseEvents(true, { forward: true });
@@ -78,53 +93,33 @@ export function registerHotkeys(win: BrowserWindow): void {
     }
     win.focus();
     win.webContents.send("ghostly:solve");
-  });
-  console.log("[Ghostly] Ctrl+Enter registered:", regEnter);
+  };
 
-  // Toggle Stealth Mode — Ctrl+B and Ctrl+Shift+H both do the same show/hide toggle.
-  const regB = globalShortcut.register("CommandOrControl+B", toggleStealthVisibility);
-  console.log("[Ghostly] Ctrl+B registered:", regB);
-  const regShiftH = globalShortcut.register("CommandOrControl+Shift+H", toggleStealthVisibility);
-  console.log("[Ghostly] Ctrl+Shift+H registered:", regShiftH);
-
-  // Start Over
-  const regG = globalShortcut.register("CommandOrControl+G", () => {
+  const startOver = () => {
     win.webContents.send("ghostly:start-over");
     setTimeout(() => {
       win.setIgnoreMouseEvents(false);
       win.webContents.send("ghostly:show");
     }, 200);
-  });
-  console.log("[Ghostly] Ctrl+G registered:", regG);
+  };
 
-  // Next Question — saves the current Q&A to history and clears the screen for
-  // the next question (only meaningful in live listening mode; the renderer
-  // guards on that itself).
-  const regN = globalShortcut.register("CommandOrControl+N", () => {
-    win.webContents.send("ghostly:next-question");
-  });
-  console.log("[Ghostly] Ctrl+N registered:", regN);
+  return {
+    captureAndSolve,
+    solve,
+    toggleVisibility,
+    startOver,
+    nextQuestion: () => win.webContents.send("ghostly:next-question"),
+    manualSend: () => win.webContents.send("ghostly:manual-send"),
+    prevQuestion: () => win.webContents.send("ghostly:prev-question"),
+    nextQuestionPage: () => win.webContents.send("ghostly:next-question-page"),
+  };
+}
 
-  // Manual Send — sends the current live transcript immediately, without
-  // waiting for silence detection.
-  const reg0 = globalShortcut.register("CommandOrControl+0", () => {
-    win.webContents.send("ghostly:manual-send");
-  });
-  console.log("[Ghostly] Ctrl+0 registered:", reg0);
-
-  // Previous Question / Next Question Page — flips between saved Q&A pages.
-  const reg8 = globalShortcut.register("CommandOrControl+8", () => {
-    win.webContents.send("ghostly:prev-question");
-  });
-  console.log("[Ghostly] Ctrl+8 registered:", reg8);
-  const reg2 = globalShortcut.register("CommandOrControl+2", () => {
-    win.webContents.send("ghostly:next-question-page");
-  });
-  console.log("[Ghostly] Ctrl+2 registered:", reg2);
-
-  // Move Up/Down/Left/Right (Ctrl + arrow keys) — repositions the overlay window.
+function registerMoveKeys(win: BrowserWindow): void {
   // Bare arrow keys (no modifier) are deliberately NOT registered here: doing so
-  // would hijack Left/Right/Up/Down system-wide in every other app.
+  // would hijack Left/Right/Up/Down system-wide in every other app. Not exposed
+  // in the remapping UI either — a directional group doesn't fit the "one
+  // action -> one combo" remap flow.
   globalShortcut.register("CommandOrControl+Up", () => {
     const [x, y] = win.getPosition();
     win.setPosition(x, y - MOVE_STEP);
@@ -141,8 +136,55 @@ export function registerHotkeys(win: BrowserWindow): void {
     const [x, y] = win.getPosition();
     win.setPosition(x + MOVE_STEP, y);
   });
+}
+
+function registerLegacyAliases(handlers: Record<ShortcutAction, () => void>): void {
+  // Kept working unconditionally (not remappable, not shown in Settings) for
+  // anyone already used to them, regardless of how the primary combo above is
+  // remapped.
+  globalShortcut.register("CommandOrControl+Shift+S", handlers.captureAndSolve);
+  globalShortcut.register("CommandOrControl+Shift+Return", handlers.captureAndSolve);
+  globalShortcut.register("CommandOrControl+Shift+H", handlers.toggleVisibility);
+}
+
+export function registerHotkeys(win: BrowserWindow, bindings: ShortcutBindings = DEFAULT_SHORTCUTS): void {
+  currentWin = win;
+  currentBindings = bindings;
+  const handlers = buildActionHandlers(win);
+
+  for (const [action, accelerator] of Object.entries(bindings) as [ShortcutAction, string][]) {
+    const ok = globalShortcut.register(accelerator, handlers[action]);
+    console.log(`[Ghostly] ${accelerator} (${action}) registered:`, ok);
+  }
+
+  registerLegacyAliases(handlers);
+  registerMoveKeys(win);
 
   console.log("[Ghostly] All hotkeys registered");
+}
+
+// Called when the user remaps a shortcut in Settings — unregisters everything
+// and re-registers from the new bindings map so the change takes effect
+// immediately, without restarting the app.
+export function updateHotkeys(newBindings: ShortcutBindings): { ok: boolean; failed: ShortcutAction[] } {
+  if (!currentWin) return { ok: false, failed: [] };
+  globalShortcut.unregisterAll();
+  const handlers = buildActionHandlers(currentWin);
+  const failed: ShortcutAction[] = [];
+
+  for (const [action, accelerator] of Object.entries(newBindings) as [ShortcutAction, string][]) {
+    const ok = globalShortcut.register(accelerator, handlers[action]);
+    if (!ok) failed.push(action);
+  }
+
+  registerLegacyAliases(handlers);
+  registerMoveKeys(currentWin);
+  currentBindings = newBindings;
+  return { ok: failed.length === 0, failed };
+}
+
+export function getCurrentBindings(): ShortcutBindings {
+  return currentBindings;
 }
 
 export function unregisterHotkeys(): void {

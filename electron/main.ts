@@ -3,7 +3,7 @@ import path from "path";
 import http from "http";
 import { autoUpdater } from "electron-updater";
 import { registerHotkeys, unregisterHotkeys } from "./hotkeys";
-import { registerIpcHandlers } from "./ipc";
+import { registerIpcHandlers, getStoredShortcuts } from "./ipc";
 import { applyStealthMode, removeStealthMode, safeguardVisibility } from "./stealth";
 
 let mainWindow: BrowserWindow | null = null;
@@ -238,7 +238,7 @@ if (!gotTheLock) {
     registerIpcHandlers();
     mainWindow = createMainWindow();
     tray = createTray();
-    registerHotkeys(mainWindow);
+    registerHotkeys(mainWindow, getStoredShortcuts());
 
     // Permissions
     mainWindow.webContents.session.setPermissionRequestHandler((_wc, permission, cb) => {

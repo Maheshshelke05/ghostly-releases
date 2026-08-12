@@ -56,5 +56,8 @@ interface Window {
     installUpdate: () => void;
     nvidiaApiCall: (apiKey: string, body: any) => Promise<{ ok: boolean; status: number; data: string }>;
     anthropicApiCall: (apiKey: string, body: any) => Promise<{ ok: boolean; status: number; data: string }>;
+    getShortcuts: () => Promise<Record<string, string>>;
+    updateShortcuts: (bindings: Record<string, string>) => Promise<{ ok: boolean; failed: string[] }>;
+    resetShortcuts: () => Promise<{ ok: boolean; failed: string[] }>;
   };
 }

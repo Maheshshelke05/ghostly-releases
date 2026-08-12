@@ -3,17 +3,44 @@ import { useStore } from "../store/useStore";
 import { OPENROUTER_FREE_MODELS } from "../lib/ai/openrouter";
 import { AudioDiagnostics } from "./AudioDiagnostics";
 
-const SHORTCUTS = [
-  { label: "Ask AI",        keys: ["Ctrl", "↵"] },
-  { label: "Screenshot",    keys: ["Ctrl", "E"] },
-  { label: "Send to AI",    keys: ["Ctrl", "0"] },
-  { label: "Next Question", keys: ["Ctrl", "N"] },
-  { label: "Show / Hide",   keys: ["Ctrl", "B"] },
-  { label: "Start Over",    keys: ["Ctrl", "G"] },
-  { label: "Scroll Up",     keys: ["Ctrl", "8"] },
-  { label: "Scroll Down",   keys: ["Ctrl", "2"] },
-  { label: "Move Window",   keys: ["Ctrl", "↑↓←→"] },
+// action must match a key in electron/hotkeys.ts's ShortcutBindings — these are
+// the ones remappable from Settings. "Move Window" stays fixed (4-key group
+// doesn't fit a single-combo remap UI) and is shown for reference only.
+const REMAPPABLE_SHORTCUTS: { label: string; action: string }[] = [
+  { label: "Ask AI",        action: "solve" },
+  { label: "Screenshot",    action: "captureAndSolve" },
+  { label: "Send to AI",    action: "manualSend" },
+  { label: "Next Question", action: "nextQuestion" },
+  { label: "Show / Hide",   action: "toggleVisibility" },
+  { label: "Start Over",    action: "startOver" },
+  { label: "Scroll Up",     action: "prevQuestion" },
+  { label: "Scroll Down",   action: "nextQuestionPage" },
 ];
+
+// Formats an Electron accelerator string ("CommandOrControl+Shift+E") into the
+// short display form used elsewhere in this panel ("Ctrl+Shift+E").
+function formatAccelerator(accelerator: string): string {
+  return accelerator
+    .split("+")
+    .map((part) => (part === "CommandOrControl" ? "Ctrl" : part === "Return" ? "↵" : part))
+    .join(" + ");
+}
+
+// Builds an accelerator string from a keydown event, or null while the user is
+// still only holding modifier keys (caller should keep listening).
+function keyEventToAccelerator(e: KeyboardEvent): string | null {
+  const mods: string[] = [];
+  if (e.ctrlKey || e.metaKey) mods.push("CommandOrControl");
+  if (e.altKey) mods.push("Alt");
+  if (e.shiftKey) mods.push("Shift");
+
+  const key = e.key;
+  if (["Control", "Meta", "Alt", "Shift"].includes(key)) return null;
+  if (mods.length === 0) return null; // require at least one modifier — avoids hijacking bare keys system-wide
+
+  const mainKey = key === "Enter" ? "Return" : key.length === 1 ? key.toUpperCase() : key;
+  return [...mods, mainKey].join("+");
+}
 
 const AI_PROVIDERS = [
   { id: "gemini",      label: "Gemini",       ph: "AIza...",       url: "https://aistudio.google.com/app/apikey" },
@@ -30,6 +57,47 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
   const { settings, updateSettings, setApiKey } = useStore();
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [shortcuts, setShortcuts] = useState<Record<string, string>>({});
+  const [recordingAction, setRecordingAction] = useState<string | null>(null);
+  const [shortcutError, setShortcutError] = useState<string | null>(null);
+
+  useEffect(() => {
+    window.ghostly.getShortcuts().then(setShortcuts);
+  }, []);
+
+  useEffect(() => {
+    if (!recordingAction) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      e.preventDefault();
+      if (e.key === "Escape") { setRecordingAction(null); return; }
+      const accelerator = keyEventToAccelerator(e);
+      if (!accelerator) return; // still just modifiers — keep listening
+      const action = recordingAction;
+      setRecordingAction(null);
+
+      const clash = Object.entries(shortcuts).find(([a, combo]) => a !== action && combo === accelerator);
+      if (clash) {
+        const clashLabel = REMAPPABLE_SHORTCUTS.find((s) => s.action === clash[0])?.label || clash[0];
+        setShortcutError(`"${formatAccelerator(accelerator)}" is already used by "${clashLabel}" — pick a different combo.`);
+        return;
+      }
+      setShortcutError(null);
+      const next = { ...shortcuts, [action]: accelerator };
+      window.ghostly.updateShortcuts(next).then((result) => {
+        if (result.ok) {
+          setShortcuts(next);
+        } else {
+          setShortcutError(`"${formatAccelerator(accelerator)}" couldn't be registered (already in use by another app?)`);
+        }
+      });
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [recordingAction, shortcuts]);
+
+  const handleResetShortcuts = () => {
+    window.ghostly.resetShortcuts().then(() => window.ghostly.getShortcuts().then(setShortcuts));
+  };
   const [localKeys, setLocalKeys] = useState<Record<string, string>>(() => {
     const k: Record<string, string> = { deepgram: settings.deepgramApiKey || "" };
     AI_PROVIDERS.forEach(p => { k[p.id] = settings.apiKeys[p.id] || ""; });
@@ -130,27 +198,47 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
 
           {/* Keyboard Shortcuts */}
           <div>
-            <p className="text-[9px] font-black uppercase tracking-[0.14em] mb-2.5" style={{ color: "rgba(255,255,255,0.22)" }}>
-              Keyboard Shortcuts
-            </p>
+            <div className="flex items-center justify-between mb-2.5">
+              <p className="text-[9px] font-black uppercase tracking-[0.14em]" style={{ color: "rgba(255,255,255,0.22)" }}>
+                Keyboard Shortcuts
+              </p>
+              <button onClick={handleResetShortcuts}
+                className="text-[9px] font-bold transition-colors" style={{ color: "rgba(255,255,255,0.3)" }}>
+                Reset
+              </button>
+            </div>
+            {shortcutError && (
+              <p className="text-[9px] mb-2 leading-relaxed" style={{ color: "#f87171" }}>{shortcutError}</p>
+            )}
             <div className="flex flex-col gap-1">
-              {SHORTCUTS.map((s) => (
-                <div key={s.label} className="flex items-center justify-between py-1.5 px-2 rounded-lg transition-all"
-                  style={{ background: "transparent" }}
-                  onMouseEnter={(e) => (e.currentTarget as HTMLDivElement).style.background = "rgba(255,255,255,0.04)"}
-                  onMouseLeave={(e) => (e.currentTarget as HTMLDivElement).style.background = "transparent"}>
-                  <span className="text-[11px] font-medium" style={{ color: "rgba(255,255,255,0.55)" }}>{s.label}</span>
-                  <div className="flex items-center gap-1">
-                    {s.keys.map((k, i) => (
-                      <kbd key={`${k}-${i}`}
-                        className="px-1.5 py-0.5 rounded-md text-[9px] font-bold font-mono"
-                        style={{ background: "rgba(139,92,246,0.12)", border: "1px solid rgba(139,92,246,0.25)", color: "#a78bfa" }}>
-                        {k}
-                      </kbd>
-                    ))}
+              {REMAPPABLE_SHORTCUTS.map((s) => {
+                const isRecording = recordingAction === s.action;
+                return (
+                  <div key={s.action} className="flex items-center justify-between py-1.5 px-2 rounded-lg transition-all"
+                    style={{ background: isRecording ? "rgba(139,92,246,0.1)" : "transparent" }}
+                    onMouseEnter={(e) => { if (!isRecording) (e.currentTarget as HTMLDivElement).style.background = "rgba(255,255,255,0.04)"; }}
+                    onMouseLeave={(e) => { if (!isRecording) (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}>
+                    <span className="text-[11px] font-medium" style={{ color: "rgba(255,255,255,0.55)" }}>{s.label}</span>
+                    <button
+                      onClick={() => { setShortcutError(null); setRecordingAction(isRecording ? null : s.action); }}
+                      className="px-2 py-0.5 rounded-md text-[9px] font-bold font-mono transition-all"
+                      style={{
+                        background: isRecording ? "rgba(139,92,246,0.25)" : "rgba(139,92,246,0.12)",
+                        border: `1px solid ${isRecording ? "rgba(139,92,246,0.6)" : "rgba(139,92,246,0.25)"}`,
+                        color: "#a78bfa",
+                      }}>
+                      {isRecording ? "Press keys… (Esc to cancel)" : formatAccelerator(shortcuts[s.action] || "")}
+                    </button>
                   </div>
-                </div>
-              ))}
+                );
+              })}
+              <div className="flex items-center justify-between py-1.5 px-2 rounded-lg" style={{ opacity: 0.5 }}>
+                <span className="text-[11px] font-medium" style={{ color: "rgba(255,255,255,0.55)" }}>Move Window</span>
+                <kbd className="px-1.5 py-0.5 rounded-md text-[9px] font-bold font-mono"
+                  style={{ background: "rgba(139,92,246,0.12)", border: "1px solid rgba(139,92,246,0.25)", color: "#a78bfa" }}>
+                  Ctrl + ↑↓←→
+                </kbd>
+              </div>
             </div>
           </div>
 
