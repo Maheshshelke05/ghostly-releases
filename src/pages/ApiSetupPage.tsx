@@ -30,14 +30,19 @@ const AI_PROVIDERS: AIProviderConfig[] = [
     // Llama 4 Scout was removed from Groq's catalog (production and preview) and was
     // erroring "model does not exist" for every user — do not re-add it. Groq has no
     // vision model right now, so all options here are text-only.
-    models: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "openai/gpt-oss-120b", "openai/gpt-oss-20b"],
-    modelLabels: { "llama-3.3-70b-versatile": "Llama 3.3 70B — FREE + FAST", "llama-3.1-8b-instant": "Llama 3.1 8B — FREE + INSTANT", "openai/gpt-oss-120b": "GPT-OSS 120B — FREE", "openai/gpt-oss-20b": "GPT-OSS 20B — FREE + FAST" },
+    // llama-3.3-70b-versatile / llama-3.1-8b-instant shut down 08/16/26 (Groq's
+    // own deprecation schedule) — removed rather than left in to start failing.
+    models: ["openai/gpt-oss-120b", "openai/gpt-oss-20b"],
+    modelLabels: { "openai/gpt-oss-120b": "GPT-OSS 120B — FREE", "openai/gpt-oss-20b": "GPT-OSS 20B — FREE + FAST" },
   },
   {
     id: "gemini", label: "Gemini", icon: "🔵", badge: "FREE", badgeColor: "rgba(59,130,246,0.12)", badgeBorder: "rgba(59,130,246,0.3)", badgeText: "#60a5fa",
     url: "https://aistudio.google.com/app/apikey", ph: "AIza…",
-    models: ["gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-3.1-flash-lite"],
-    modelLabels: { "gemini-3.5-flash": "Gemini 3.5 Flash — FREE", "gemini-2.5-flash": "Gemini 2.5 Flash — FREE", "gemini-2.5-pro": "Gemini 2.5 Pro — FREE", "gemini-2.0-flash": "Gemini 2.0 Flash — FREE", "gemini-3.1-flash-lite": "Gemini 3.1 Lite — FREE" },
+    // gemini-2.5-flash/2.5-pro/2.0-flash all 404 ("no longer available to
+    // new users") on a current "AQ."-format key — verified live. Only ship
+    // model IDs that actually work for the key format Google issues now.
+    models: ["gemini-3.5-flash", "gemini-pro-latest", "gemini-3.1-flash-lite"],
+    modelLabels: { "gemini-3.5-flash": "Gemini 3.5 Flash — FREE", "gemini-pro-latest": "Gemini Pro — FREE", "gemini-3.1-flash-lite": "Gemini 3.1 Lite — FREE" },
   },
   {
     id: "openrouter", label: "OpenRouter", icon: "🔀", badge: "16 FREE", badgeColor: "rgba(34,197,94,0.1)", badgeBorder: "rgba(34,197,94,0.28)", badgeText: "#4ade80",
@@ -144,7 +149,7 @@ export const ApiSetupPage: React.FC = () => {
         // x-goog-api-key header, not `?key=` — the query param returns 401
         // ACCESS_TOKEN_TYPE_UNSUPPORTED for the newer "AQ."-prefixed keys
         // Google AI Studio now issues by default.
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`, {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "x-goog-api-key": key },
           body: JSON.stringify({
@@ -167,7 +172,7 @@ export const ApiSetupPage: React.FC = () => {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: "llama-3.3-70b-versatile",
+            model: "openai/gpt-oss-120b",
             messages: [{ role: "user", content: "hi" }],
             max_tokens: 1,
           })

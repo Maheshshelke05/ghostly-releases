@@ -167,7 +167,8 @@ export const useStore = create<GhostlyStore>((set) => ({
   ads: [],
   settings: {
     activeProvider: "groq",
-    activeModel: "llama-3.3-70b-versatile",
+    // llama-3.3-70b-versatile shuts down 08/16/26 (Groq's deprecation schedule)
+    activeModel: "openai/gpt-oss-120b",
     interviewType: "dsa",
     language: "python",
     apiKeys: {

@@ -11,7 +11,9 @@ const store = new Store({
   defaults: {
     settings: {
       activeProvider: "gemini",
-      activeModel: "gemini-2.0-flash",
+      // gemini-2.0-flash 404s ("no longer available") on current "AQ."-
+      // format Auth Keys — this was the default for every brand-new user.
+      activeModel: "gemini-3.5-flash",
       interviewType: "dsa",
       language: "python",
       apiKeys: {
@@ -102,8 +104,26 @@ export function registerIpcHandlers(): void {
   });
 
   // Settings
+  // Model IDs Google has since pulled for the "AQ."-format Auth Keys it now
+  // issues by default — 404s on every call, looked exactly like "Invalid API
+  // key" to users. New installs get the fixed default (see above), but
+  // existing users already have one of these saved in their store, which the
+  // `defaults` block above only applies when no value exists at all — so
+  // migrate it forward here instead.
+  const DEAD_GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-pro", "gemini-2.5-flash-lite"];
+  // Groq shuts these two down 08/16/26 (console.groq.com/docs/deprecations).
+  const DEAD_GROQ_MODELS = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"];
   ipcMain.handle("get-settings", () => {
-    return store.get("settings");
+    const settings = store.get("settings") as any;
+    if (settings?.activeProvider === "gemini" && DEAD_GEMINI_MODELS.includes(settings.activeModel)) {
+      settings.activeModel = "gemini-3.5-flash";
+      store.set("settings", settings);
+    }
+    if (settings?.activeProvider === "groq" && DEAD_GROQ_MODELS.includes(settings.activeModel)) {
+      settings.activeModel = "openai/gpt-oss-120b";
+      store.set("settings", settings);
+    }
+    return settings;
   });
 
   ipcMain.handle("save-settings", (_event, settings: any) => {

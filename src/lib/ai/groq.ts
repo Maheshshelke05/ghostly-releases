@@ -9,9 +9,11 @@ export class GroqProvider implements AIProvider {
     // you do not have access to it" for every user, which is what bug reports on
     // v3.3.3/v3.3.4 were surfacing. Groq currently has no vision-capable model at all,
     // so it's text-only until they ship a replacement.
+    //
+    // llama-3.3-70b-versatile and llama-3.1-8b-instant are BOTH being shut down by
+    // Groq on 08/16/26 (per console.groq.com/docs/deprecations) — removed entirely
+    // rather than left in as an option that's about to start failing for everyone.
     return [
-      "llama-3.3-70b-versatile",
-      "llama-3.1-8b-instant",
       "openai/gpt-oss-120b",
       "openai/gpt-oss-20b",
     ];
