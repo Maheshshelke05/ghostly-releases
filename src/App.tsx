@@ -104,7 +104,7 @@ const App: React.FC = () => {
   }, [appScreen]);
 
   useEffect(() => {
-    const offAuth = window.ghostly.onAuthToken(async ({ token, user }) => {
+    const handleAuthToken = async ({ token, user }: { token: string; user: any }) => {
       try {
         const res = await fetch(`${import.meta.env.VITE_API_URL}/subscription`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -122,7 +122,17 @@ const App: React.FC = () => {
         await applyAccountPayload(data);
         setAppScreen("home");
       } catch { /* ignore */ }
+    };
+
+    // Covers the case where Google OAuth (completed in the system browser, via
+    // the website's AuthCallback page) posts the token to this app's local
+    // auth server before this listener has even mounted — that message would
+    // otherwise be lost and login would look permanently stuck.
+    window.ghostly.getPendingAuthToken().then((pending) => {
+      if (pending) handleAuthToken(pending);
     });
+
+    const offAuth = window.ghostly.onAuthToken(handleAuthToken);
     return () => offAuth();
   }, []);
 

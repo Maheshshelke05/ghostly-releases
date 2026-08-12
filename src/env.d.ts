@@ -38,6 +38,7 @@ interface Window {
     getAds: () => Promise<any[]>;
     saveAds: (ads: any[]) => Promise<void>;
     onAuthToken: (cb: (data: { token: string; user: any }) => void) => () => void;
+    getPendingAuthToken: () => Promise<{ token: string; user: any } | null>;
     onDeepLink: (cb: (url: string) => void) => () => void;
     onScreenshot: (cb: (b64: string) => void) => () => void;
     onSolve: (cb: () => void) => () => void;

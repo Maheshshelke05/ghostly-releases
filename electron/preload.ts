@@ -56,6 +56,8 @@ contextBridge.exposeInMainWorld("ghostly", {
     ipcRenderer.on("ghostly:auth-token", listener);
     return () => ipcRenderer.removeListener("ghostly:auth-token", listener);
   },
+  getPendingAuthToken: (): Promise<{ token: string; user: any } | null> =>
+    ipcRenderer.invoke("ghostly:get-pending-auth-token"),
 
   // Deep link callback (Google OAuth)
   onDeepLink: (cb: (url: string) => void): (() => void) => {

@@ -10,6 +10,15 @@ let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let authServer: http.Server | null = null;
 
+// The website's AuthCallback page posts here after Google OAuth completes, in a
+// system-browser tab entirely separate from this window. webContents.send() is
+// fire-and-forget — if this fires before the renderer has mounted and called
+// onAuthToken() (a real possibility: this HTTP server is listening as soon as
+// app.whenReady() resolves, well before the React bundle finishes loading), the
+// message is just lost and login looks "stuck" even though the website says it
+// succeeded. Buffering it here lets the renderer pick it up on mount too.
+let pendingAuthToken: { token: string; user: any } | null = null;
+
 // Populated by warmScreenSource() well before the user ever enables audio, so the
 // live setDisplayMediaRequestHandler below almost always hits the cache instead of
 // running the remove-stealth -> enumerate -> reapply-after-800ms dance while the
@@ -59,6 +68,7 @@ function startAuthServer() {
       req.on("end", () => {
         try {
           const { token, user } = JSON.parse(body);
+          pendingAuthToken = { token, user };
           mainWindow?.webContents.send("ghostly:auth-token", { token, user });
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ ok: true }));
@@ -272,6 +282,11 @@ if (!gotTheLock) {
     setTimeout(() => warmScreenSource(), 2000);
 
     // IPC handlers
+    ipcMain.handle("ghostly:get-pending-auth-token", () => {
+      const pending = pendingAuthToken;
+      pendingAuthToken = null;
+      return pending;
+    });
     ipcMain.on("ghostly:open-external", (_event, url: string) => {
       try {
         const parsed = new URL(url);
