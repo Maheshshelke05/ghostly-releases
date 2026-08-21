@@ -14,6 +14,6 @@
 
 To report a security vulnerability or bug in Ghostly AI Desktop App:
 
-📧 Email: **support.ghotlyai@gmail.com** or contact [@Maheshshelke05](https://github.com/Maheshshelke05) on GitHub.
+📧 Email: **support@ghotlyai.in** or contact [@Maheshshelke05](https://github.com/Maheshshelke05) on GitHub.
 
 We review all security reports promptly and coordinate fixes before public release.
