@@ -348,6 +348,95 @@ export const HomePage: React.FC = () => {
                 )}
               </motion.button>
             </div>
+
+            {/* Quick Links Row: Blog, Support, Demo Video */}
+            <div className="grid grid-cols-3 gap-1.5 pt-0.5">
+              {/* Blog */}
+              <motion.button
+                whileTap={{ scale: 0.96 }}
+                onClick={() => window.ghostly.openExternal("https://www.ghotlyai.in/blog/")}
+                className="py-2 px-1 rounded-[10px] text-[9.5px] font-bold flex items-center justify-center gap-1 transition-all"
+                style={{
+                  background: "rgba(249,115,22,0.06)",
+                  border: "1px solid rgba(249,115,22,0.2)",
+                  color: "#fdba74",
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = "rgba(249,115,22,0.14)";
+                  e.currentTarget.style.borderColor = "rgba(249,115,22,0.35)";
+                  e.currentTarget.style.color = "#ffedd5";
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = "rgba(249,115,22,0.06)";
+                  e.currentTarget.style.borderColor = "rgba(249,115,22,0.2)";
+                  e.currentTarget.style.color = "#fdba74";
+                }}
+                title="Read latest updates & guides"
+              >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                </svg>
+                <span>Latest Blog</span>
+              </motion.button>
+
+              {/* Support */}
+              <motion.button
+                whileTap={{ scale: 0.96 }}
+                onClick={() => window.ghostly.openExternal("https://www.ghotlyai.in/support/")}
+                className="py-2 px-1 rounded-[10px] text-[9.5px] font-bold flex items-center justify-center gap-1 transition-all"
+                style={{
+                  background: "rgba(59,130,246,0.06)",
+                  border: "1px solid rgba(59,130,246,0.2)",
+                  color: "#93c5fd",
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = "rgba(59,130,246,0.14)";
+                  e.currentTarget.style.borderColor = "rgba(59,130,246,0.35)";
+                  e.currentTarget.style.color = "#dbeafe";
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = "rgba(59,130,246,0.06)";
+                  e.currentTarget.style.borderColor = "rgba(59,130,246,0.2)";
+                  e.currentTarget.style.color = "#93c5fd";
+                }}
+                title="Get help or report a bug"
+              >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                  <path d="M3 18v-6a9 9 0 0 1 18 0v6"/>
+                  <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/>
+                </svg>
+                <span>Support</span>
+              </motion.button>
+
+              {/* Watch Demo */}
+              <motion.button
+                whileTap={{ scale: 0.96 }}
+                onClick={() => window.ghostly.openExternal("https://www.ghotlyai.in/#demo")}
+                className="py-2 px-1 rounded-[10px] text-[9.5px] font-bold flex items-center justify-center gap-1 transition-all"
+                style={{
+                  background: "rgba(168,85,247,0.06)",
+                  border: "1px solid rgba(168,85,247,0.2)",
+                  color: "#d8b4fe",
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = "rgba(168,85,247,0.14)";
+                  e.currentTarget.style.borderColor = "rgba(168,85,247,0.35)";
+                  e.currentTarget.style.color = "#f3e8ff";
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = "rgba(168,85,247,0.06)";
+                  e.currentTarget.style.borderColor = "rgba(168,85,247,0.2)";
+                  e.currentTarget.style.color = "#d8b4fe";
+                }}
+                title="Watch app demo video"
+              >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+                  <polygon points="5 3 19 12 5 21 5 3"/>
+                </svg>
+                <span>Demo Video</span>
+              </motion.button>
+            </div>
           </div>
 
           {/* ── Divider ── */}

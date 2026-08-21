@@ -172,6 +172,27 @@ const App: React.FC = () => {
       .catch(() => {});
   }, [appReady, user?.idToken]);
 
+  // Periodic heartbeat every 60s to track user screen time and active status
+  useEffect(() => {
+    if (!user?.idToken) return;
+    const appVersion = window.ghostly?.getVersion ? window.ghostly.getVersion() : "v3.4.0";
+    
+    const sendHeartbeat = () => {
+      fetch(`${import.meta.env.VITE_API_URL}/heartbeat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${user.idToken}`,
+        },
+        body: JSON.stringify({ duration_seconds: 60, app_version: appVersion, platform: "windows" }),
+      }).catch(() => {});
+    };
+
+    sendHeartbeat();
+    const interval = setInterval(sendHeartbeat, 60000);
+    return () => clearInterval(interval);
+  }, [user?.idToken]);
+
   if (showSplash || !appReady) return <SplashScreen onComplete={() => setShowSplash(false)} />;
   if (!user && appScreen !== "login") return <LoginPage />;
 
