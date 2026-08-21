@@ -46,7 +46,7 @@ fi
 curl -s -X PATCH "https://api.github.com/repos/Maheshshelke05/ghostly-releases/releases/$RELEASE" \
   -H "Authorization: token $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"draft":false}' > /dev/null
+  -d '{"draft":false,"name":"Ghostly v'"$VERSION"'","body":"Bug fixes, performance improvements, and stability enhancements."}' > /dev/null
 
 echo ""
 echo "✅ Ghostly AI v$VERSION published successfully!"
