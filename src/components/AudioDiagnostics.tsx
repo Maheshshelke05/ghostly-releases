@@ -8,16 +8,31 @@ interface StepState {
   message?: string;
 }
 
+const INK = "#15162b";
+const SUBTLE = "#6b7280";
+const FAINT = "#9ca3af";
+const BORDER = "#e8e8ee";
+const SURFACE = "#f7f7fa";
+const ACCENT = "#5b5da8";
+const ACCENT_BG = "#f0f0fb";
+const ACCENT_BORDER = "#c7c9f0";
+const GREEN = "#16a34a";
+const RED = "#dc2626";
+
 interface AudioDiagnosticsProps {
   onClose: () => void;
 }
 
 // Mirrors the real capture path in useInterviewAudio.ts: this app listens to
 // system-audio LOOPBACK via getDisplayMedia (what the interviewer says through
-// Zoom/Meet/Teams), not the physical microphone. Most "mic not working" reports
-// turn out to be this step failing silently — usually because "Share system
-// audio" wasn't checked in the OS share picker, or there's no audio playing at
-// all. This panel makes that failure visible instead of a blank transcript.
+// Zoom/Meet/Teams), not the physical microphone — main.ts's
+// setDisplayMediaRequestHandler resolves this automatically (useSystemPicker:
+// false), so there is no OS share dialog to interact with. Most "mic not
+// working" reports turn out to be this step failing silently — usually
+// because the interviewer's app is outputting through a device (e.g. a
+// headset) that isn't Windows' current DEFAULT playback device, so loopback
+// captures a device with nothing playing on it. This panel makes that
+// failure visible instead of a blank transcript.
 export const AudioDiagnostics: React.FC<AudioDiagnosticsProps> = ({ onClose }) => {
   const deepgramApiKey = useStore(
     (s) => s.settings.deepgramApiKey || (import.meta as any).env?.VITE_DEEPGRAM_API_KEY || ""
@@ -55,6 +70,12 @@ export const AudioDiagnostics: React.FC<AudioDiagnosticsProps> = ({ onClose }) =
   };
 
   useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  useEffect(() => {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
@@ -78,7 +99,7 @@ export const AudioDiagnostics: React.FC<AudioDiagnosticsProps> = ({ onClose }) =
       if (!audioTracks.length) {
         setCaptureStep({
           status: "fail",
-          message: "No audio track received. When the share picker opens, make sure \"Share system/tab audio\" is checked — this is the #1 cause of silent transcripts.",
+          message: "No audio track available at all — check Windows Sound Settings for a working default playback device.",
         });
         return;
       }
@@ -163,79 +184,91 @@ export const AudioDiagnostics: React.FC<AudioDiagnosticsProps> = ({ onClose }) =
     };
   };
 
-  const statusColor = (s: StepStatus) =>
-    s === "pass" ? "#4ade80" : s === "fail" ? "#f87171" : s === "running" ? "#a78bfa" : "rgba(255,255,255,0.3)";
-  const statusIcon = (s: StepStatus) => (s === "pass" ? "✔" : s === "fail" ? "✕" : s === "running" ? "…" : "○");
+  const statusColor = (st: StepStatus) =>
+    st === "pass" ? GREEN : st === "fail" ? RED : st === "running" ? ACCENT : FAINT;
+  const statusIcon = (st: StepStatus) => (st === "pass" ? "✔" : st === "fail" ? "✕" : st === "running" ? "…" : "○");
 
+  const testBtn = (busy: boolean): React.CSSProperties => ({
+    background: ACCENT_BG,
+    border: `1px solid ${ACCENT_BORDER}`,
+    color: ACCENT,
+    opacity: busy ? 0.7 : 1,
+    cursor: busy ? "default" : "pointer",
+  });
+
+  // No dimmed backdrop: the window is transparent and click-through everywhere
+  // except over the card, so whatever is underneath stays visible and clickable.
   return (
     <div
-      className="fixed inset-0 flex justify-center items-center z-[60]"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      style={{ pointerEvents: "auto", background: "rgba(0,0,0,0.5)", backdropFilter: "blur(6px)" }}
+      className="fixed inset-0 flex justify-center items-center z-[60] p-4"
+      style={{ pointerEvents: "none", fontFamily: "'Inter', -apple-system, sans-serif" }}
     >
       <div
-        className="rounded-[22px] w-[320px] max-h-[80vh] overflow-y-auto flex flex-col shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-label="Audio diagnostics"
+        className="rounded-[22px] w-[340px] max-h-[86vh] overflow-y-auto flex flex-col"
+        onMouseEnter={() => window.ghostly.enableMouse()}
+        onMouseLeave={() => window.ghostly.disableMouse()}
         style={{
-          background: "rgba(13,13,20,0.96)",
-          backdropFilter: "blur(32px)",
-          border: "1px solid rgba(255,255,255,0.09)",
-          boxShadow: "0 32px 80px rgba(0,0,0,0.7), 0 1px 0 rgba(255,255,255,0.06) inset",
-          fontFamily: "'Inter', -apple-system, sans-serif",
+          background: "#ffffff",
+          border: `1px solid ${BORDER}`,
+          boxShadow: "0 32px 80px rgba(20,20,40,0.28), 0 2px 8px rgba(20,20,40,0.08)",
           pointerEvents: "auto",
         }}
       >
-        <div className="h-0.5 w-full shrink-0" style={{ background: "linear-gradient(90deg, transparent, rgba(139,92,246,0.7), rgba(99,102,241,0.5), transparent)" }} />
-        <div className="p-5 flex flex-col gap-4">
+        <div className="p-5 flex flex-col gap-3.5">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-[15px]">🎙️</span>
-              <span className="text-[14px] font-black tracking-tight" style={{ color: "rgba(255,255,255,0.9)" }}>Audio Diagnostics</span>
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="w-9 h-9 rounded-xl flex items-center justify-center text-[16px] shrink-0" style={{ background: ACCENT_BG, border: `1px solid ${ACCENT_BORDER}` }}>🎙️</span>
+              <div className="min-w-0">
+                <p className="text-[14px] font-extrabold leading-tight" style={{ color: INK }}>Audio Diagnostics</p>
+                <p className="text-[10px] font-semibold mt-0.5" style={{ color: FAINT }}>Check interview audio &amp; Deepgram</p>
+              </div>
             </div>
-            <button onClick={onClose}
-              className="w-7 h-7 flex items-center justify-center rounded-lg text-[11px]"
-              style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.4)" }}>
-              ✕
+            <button onClick={onClose} aria-label="Close" title="Close (Esc)"
+              className="w-8 h-8 flex items-center justify-center rounded-xl shrink-0 transition-colors hover:bg-white"
+              style={{ background: SURFACE, border: `1px solid ${BORDER}`, color: SUBTLE }}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
             </button>
           </div>
 
           {/* Step 1: capture test */}
-          <div className="p-3 rounded-[14px]" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+          <div className="p-3.5 rounded-2xl" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-bold" style={{ color: "rgba(255,255,255,0.7)" }}>1. System Audio Capture</span>
-              <span className="text-[12px] font-black" style={{ color: statusColor(captureStep.status) }}>{statusIcon(captureStep.status)}</span>
+              <span className="text-[11.5px] font-bold" style={{ color: INK }}>1. System audio capture</span>
+              <span className="text-[13px] font-black" style={{ color: statusColor(captureStep.status) }}>{statusIcon(captureStep.status)}</span>
             </div>
             {captureStep.message && (
-              <p className="text-[10px] mb-2 leading-relaxed" style={{ color: statusColor(captureStep.status) }}>{captureStep.message}</p>
+              <p className="text-[10.5px] mb-2 leading-relaxed font-medium" style={{ color: statusColor(captureStep.status) }}>{captureStep.message}</p>
             )}
             {captureStep.status === "pass" && (
-              <div className="w-full h-2 rounded-full overflow-hidden mb-2" style={{ background: "rgba(255,255,255,0.08)" }}>
-                <div className="h-full rounded-full transition-all" style={{ width: `${Math.round(level * 100)}%`, background: level > 0.05 ? "#4ade80" : "rgba(255,255,255,0.15)" }} />
+              <div className="w-full h-2 rounded-full overflow-hidden mb-2" style={{ background: BORDER }}>
+                <div className="h-full rounded-full transition-all" style={{ width: `${Math.round(level * 100)}%`, background: level > 0.05 ? GREEN : FAINT }} />
               </div>
             )}
             <button onClick={runCaptureTest} disabled={captureStep.status === "running"}
-              className="w-full py-2 rounded-xl text-[10px] font-bold transition-all"
-              style={{ background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.3)", color: "#a78bfa" }}>
-              {captureStep.status === "running" ? "Select a screen/tab to share…" : "Run Capture Test"}
+              className="w-full py-2.5 rounded-xl text-[11px] font-bold transition-all hover:brightness-95"
+              style={testBtn(captureStep.status === "running")}>
+              {captureStep.status === "running" ? "Select a screen/tab to share…" : "Run capture test"}
             </button>
-            <p className="text-[9px] mt-1.5" style={{ color: "rgba(255,255,255,0.25)" }}>
+            <p className="text-[9.5px] mt-2 font-medium leading-relaxed" style={{ color: FAINT }}>
               Play some audio (e.g. a YouTube video) while testing — the bar above should move.
             </p>
           </div>
 
           {/* Step 2: deepgram connectivity */}
-          <div className="p-3 rounded-[14px]" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+          <div className="p-3.5 rounded-2xl" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-bold" style={{ color: "rgba(255,255,255,0.7)" }}>2. Deepgram Connection</span>
-              <span className="text-[12px] font-black" style={{ color: statusColor(deepgramStep.status) }}>{statusIcon(deepgramStep.status)}</span>
+              <span className="text-[11.5px] font-bold" style={{ color: INK }}>2. Deepgram connection</span>
+              <span className="text-[13px] font-black" style={{ color: statusColor(deepgramStep.status) }}>{statusIcon(deepgramStep.status)}</span>
             </div>
             {deepgramStep.message && (
-              <p className="text-[10px] mb-2 leading-relaxed" style={{ color: statusColor(deepgramStep.status) }}>{deepgramStep.message}</p>
+              <p className="text-[10.5px] mb-2 leading-relaxed font-medium" style={{ color: statusColor(deepgramStep.status) }}>{deepgramStep.message}</p>
             )}
             <button onClick={runDeepgramTest} disabled={deepgramStep.status === "running"}
-              className="w-full py-2 rounded-xl text-[10px] font-bold transition-all"
-              style={{ background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.3)", color: "#a78bfa" }}>
-              {deepgramStep.status === "running" ? "Connecting…" : "Test Deepgram Connection"}
+              className="w-full py-2.5 rounded-xl text-[11px] font-bold transition-all hover:brightness-95"
+              style={testBtn(deepgramStep.status === "running")}>
+              {deepgramStep.status === "running" ? "Connecting…" : "Test Deepgram connection"}
             </button>
           </div>
         </div>

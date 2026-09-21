@@ -110,8 +110,8 @@ export const UpdateAnimation: React.FC<UpdateAnimationProps> = ({ status, progre
           emoji: "👻",
           title: "Ghostly AI",
           subtitle: "Ready",
-          color: "#eb9245",
-          glow: "rgba(235, 146, 69, 0.5)",
+          color: "#15162b",
+          glow: "rgba(21, 22, 43, 0.18)",
         };
     }
   };
@@ -128,7 +128,7 @@ export const UpdateAnimation: React.FC<UpdateAnimationProps> = ({ status, progre
         exit={{ opacity: 0 }}
         className="fixed inset-0 z-[9999] flex items-center justify-center"
         style={{
-          background: "rgba(0, 0, 0, 0.95)",
+          background: "rgba(251, 251, 253, 0.97)",
           backdropFilter: "blur(20px)",
           pointerEvents: "auto",
         }}
@@ -262,8 +262,8 @@ export const UpdateAnimation: React.FC<UpdateAnimationProps> = ({ status, progre
               <div
                 className="h-3 rounded-full overflow-hidden"
                 style={{
-                  background: "rgba(255, 255, 255, 0.1)",
-                  border: "1px solid rgba(255, 255, 255, 0.2)",
+                  background: "#e8e8ee",
+                  border: "1px solid #d7d8e0",
                 }}
               >
                 {/* Progress fill */}
@@ -334,7 +334,7 @@ export const UpdateAnimation: React.FC<UpdateAnimationProps> = ({ status, progre
             >
               {config.title}
             </motion.h2>
-            <p className="text-lg font-medium text-white/60">
+            <p className="text-lg font-medium" style={{ color: "#6b7280" }}>
               {config.subtitle}
             </p>
           </motion.div>
@@ -370,7 +370,7 @@ export const UpdateAnimation: React.FC<UpdateAnimationProps> = ({ status, progre
           className="absolute bottom-8 flex items-center gap-2"
         >
           <span className="text-2xl">👻</span>
-          <span className="text-sm font-bold text-white/40">Ghostly AI</span>
+          <span className="text-sm font-bold" style={{ color: "#9ca3af" }}>Ghostly AI</span>
         </motion.div>
       </motion.div>
     </AnimatePresence>

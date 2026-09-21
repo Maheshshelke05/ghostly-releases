@@ -1,4 +1,5 @@
 import type { AIProvider, AIRequestOptions } from "./types";
+import { rateLimitError, extractApiErrorMessage } from "./types";
 
 export const NVIDIA_MODELS = [
   // Top 3 Best Free Models — IDs verified against NVIDIA's current NIM catalog.
@@ -14,7 +15,7 @@ export class NvidiaProvider implements AIProvider {
   name = "NVIDIA";
 
   async *streamSolution(options: AIRequestOptions): AsyncGenerator<string> {
-    let { prompt, messages = [], model, apiKey, base64Image } = options;
+    let { prompt, messages = [], model, apiKey, base64Image, maxTokens = 4096 } = options;
 
     // Clean model name
     model = model.trim().replace(/\s+/g, "");
@@ -33,7 +34,7 @@ export class NvidiaProvider implements AIProvider {
         ],
         temperature: 0.7,
         top_p: 0.9,
-        max_tokens: 4096,
+        max_tokens: maxTokens,
         stream: false,
       };
 
@@ -46,7 +47,9 @@ export class NvidiaProvider implements AIProvider {
 
       if (!result.ok) {
         console.error("[NVIDIA] API error:", result.data);
-        throw new Error(`NVIDIA API failed (${result.status}): ${result.data.slice(0, 300)}`);
+        const message = extractApiErrorMessage(result.data, "NVIDIA", result.status);
+        if (result.status === 429) throw rateLimitError(message);
+        throw new Error(message);
       }
 
       const response = JSON.parse(result.data);

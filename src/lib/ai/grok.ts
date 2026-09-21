@@ -1,4 +1,5 @@
 import type { AIProvider, AIRequestOptions } from "./types";
+import { rateLimitError } from "./types";
 
 export class GrokProvider implements AIProvider {
   name = "grok";
@@ -8,7 +9,7 @@ export class GrokProvider implements AIProvider {
   }
 
   async *streamSolution(options: AIRequestOptions): AsyncGenerator<string> {
-    const { base64Image, prompt, messages = [], model, apiKey, maxTokens = 4096 } = options;
+    const { base64Image, prompt, messages = [], model, apiKey, maxTokens = 4096, signal } = options;
 
     const imageUrl = base64Image?.startsWith("data:")
       ? base64Image
@@ -28,11 +29,14 @@ export class GrokProvider implements AIProvider {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({ model, max_tokens: maxTokens, temperature: 0.6, stream: true, messages: apiMessages }),
+      signal,
     });
 
     if (!response.ok) {
       const err = await response.json().catch(() => ({ error: { message: response.statusText } }));
-      throw new Error(`Grok API error: ${err.error?.message || response.statusText}`);
+      const message = `Grok API error: ${err.error?.message || response.statusText}`;
+      if (response.status === 429) throw rateLimitError(message);
+      throw new Error(message);
     }
 
     const reader = response.body!.getReader();

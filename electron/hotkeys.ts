@@ -40,8 +40,11 @@ let currentBindings: ShortcutBindings = { ...DEFAULT_SHORTCUTS };
 // here, so every documented shortcut now genuinely works from anywhere.
 function buildActionHandlers(win: BrowserWindow): Record<ShortcutAction, () => void> {
   const captureAndSolve = async () => {
+    // Declared outside the try so the catch block can also read it — it used
+    // to be try-scoped, so the catch fell back to re-reading live opacity
+    // instead (see the comment down there for why that was wrong).
+    const wasVisible = win.getOpacity() > 0;
     try {
-      const wasVisible = win.getOpacity() > 0;
       if (wasVisible) {
         win.setOpacity(0);
         win.blur();
@@ -59,12 +62,21 @@ function buildActionHandlers(win: BrowserWindow): Record<ShortcutAction, () => v
       setTimeout(() => win.webContents.send("ghostly:solve"), 100);
     } catch (err) {
       console.error("[Ghostly] Capture+Solve failed:", err);
-      if (win.getOpacity() === 0) {
+      // Restore visibility only if THIS call was the one that hid the window
+      // (wasVisible) — re-reading live opacity here instead used to force a
+      // deliberately-hidden overlay (Ctrl+B) back to fully visible/focused
+      // whenever a capture failed, popping it up in front of a shared screen.
+      if (wasVisible) {
         win.setOpacity(1);
         win.setIgnoreMouseEvents(true, { forward: true });
         win.focus();
         safeguardVisibility(win);
       }
+      // This used to only log to the terminal — a packaged app's user never
+      // sees that, so a failed capture (e.g. desktopCapturer erroring) looked
+      // exactly like the Ctrl+E hotkey silently doing nothing at all.
+      const message = err instanceof Error ? err.message : "Screenshot capture failed";
+      win.webContents.send("ghostly:capture-error", message);
     }
   };
 
@@ -147,20 +159,29 @@ function registerLegacyAliases(handlers: Record<ShortcutAction, () => void>): vo
   globalShortcut.register("CommandOrControl+Shift+H", handlers.toggleVisibility);
 }
 
-export function registerHotkeys(win: BrowserWindow, bindings: ShortcutBindings = DEFAULT_SHORTCUTS): void {
+// globalShortcut.register() returns false — with no exception and no OS-level
+// dialog — when another already-running app holds the exact same accelerator
+// (Ctrl+E is a common one: browsers, Discord, various IDEs/utilities). That
+// used to fail completely silently: the shortcut just never fired and nothing
+// told the user why. Callers now get back which actions failed so the
+// renderer can tell the user instead of leaving them guessing.
+export function registerHotkeys(win: BrowserWindow, bindings: ShortcutBindings = DEFAULT_SHORTCUTS): { ok: boolean; failed: ShortcutAction[] } {
   currentWin = win;
   currentBindings = bindings;
   const handlers = buildActionHandlers(win);
+  const failed: ShortcutAction[] = [];
 
   for (const [action, accelerator] of Object.entries(bindings) as [ShortcutAction, string][]) {
     const ok = globalShortcut.register(accelerator, handlers[action]);
     console.log(`[Ghostly] ${accelerator} (${action}) registered:`, ok);
+    if (!ok) failed.push(action);
   }
 
   registerLegacyAliases(handlers);
   registerMoveKeys(win);
 
   console.log("[Ghostly] All hotkeys registered");
+  return { ok: failed.length === 0, failed };
 }
 
 // Called when the user remaps a shortcut in Settings — unregisters everything

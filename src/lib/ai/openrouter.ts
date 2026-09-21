@@ -1,4 +1,5 @@
 import type { AIProvider, AIRequestOptions } from "./types";
+import { rateLimitError } from "./types";
 
 export const OPENROUTER_FREE_MODELS = [
   { id: "openrouter/auto", name: "Auto (Best Free)", desc: "Automatically selects best free model" },
@@ -17,7 +18,7 @@ export class OpenRouterProvider implements AIProvider {
   }
 
   async *streamSolution(options: AIRequestOptions): AsyncGenerator<string> {
-    const { base64Image, prompt, messages = [], model, apiKey, maxTokens = 8192 } = options;
+    const { base64Image, prompt, messages = [], model, apiKey, maxTokens = 8192, signal } = options;
 
     if (!apiKey || !apiKey.trim()) {
       throw new Error("OpenRouter API key missing. Get a free API key at openrouter.ai/keys");
@@ -25,6 +26,14 @@ export class OpenRouterProvider implements AIProvider {
 
     const requestedModel = model || "openrouter/auto";
     const safeModel = OPENROUTER_FREE_MODELS.some((m) => m.id === requestedModel) ? requestedModel : "openrouter/auto";
+    if (safeModel !== requestedModel) {
+      // Used to substitute silently — a saved model that no longer matches
+      // the current OPENROUTER_FREE_MODELS catalog (this list has already
+      // been renamed/replaced between versions once, per nvidia.ts's own
+      // history) got rerouted to "auto" with zero indication to the user
+      // that their selected model wasn't actually used for this answer.
+      console.warn(`[OpenRouter] "${requestedModel}" isn't in the current free-model list — using "openrouter/auto" instead.`);
+    }
 
     const imageUrl = base64Image?.startsWith("data:")
       ? base64Image
@@ -65,6 +74,7 @@ export class OpenRouterProvider implements AIProvider {
         max_tokens: maxTokens,
         temperature: 0.7,
       }),
+      signal,
     });
 
     if (!response.ok) {
@@ -72,7 +82,9 @@ export class OpenRouterProvider implements AIProvider {
       if (response.status === 401) {
         throw new Error("Invalid OpenRouter API key. Get a free API key at openrouter.ai/keys");
       }
-      throw new Error(`OpenRouter API error: ${err.error?.message || response.statusText}`);
+      const message = `OpenRouter API error: ${err.error?.message || response.statusText}`;
+      if (response.status === 429) throw rateLimitError(message);
+      throw new Error(message);
     }
 
     const reader = response.body!.getReader();

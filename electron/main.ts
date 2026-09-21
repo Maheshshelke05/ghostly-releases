@@ -2,9 +2,23 @@ import { app, BrowserWindow, Tray, Menu, nativeImage, screen, ipcMain, desktopCa
 import path from "path";
 import http from "http";
 import { autoUpdater } from "electron-updater";
-import { registerHotkeys, unregisterHotkeys } from "./hotkeys";
+import { registerHotkeys, unregisterHotkeys, type ShortcutAction } from "./hotkeys";
 import { registerIpcHandlers, getStoredShortcuts } from "./ipc";
 import { applyStealthMode, removeStealthMode, safeguardVisibility } from "./stealth";
+import { captureFullScreen } from "./capture";
+
+// No such safety net existed anywhere in the main process before — any
+// unhandled error (a stray EADDRINUSE, a destroyed-window call, a rejected
+// promise) was fatal to the whole app by default with zero log/diagnostic.
+// This doesn't fix the underlying bugs (each specific one is handled at its
+// source elsewhere), it's a last-resort backstop so a future unforeseen one
+// logs and survives instead of silently killing the app.
+process.on("uncaughtException", (err) => {
+  console.error("[Ghostly] Uncaught exception (recovered):", err);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("[Ghostly] Unhandled rejection (recovered):", reason);
+});
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -19,6 +33,20 @@ let authServer: http.Server | null = null;
 // succeeded. Buffering it here lets the renderer pick it up on mount too.
 let pendingAuthToken: { token: string; user: any } | null = null;
 
+// Same race as pendingAuthToken above, for a different event: registerHotkeys()
+// runs right after createMainWindow(), well before the renderer's React app has
+// mounted a listener — so a live webContents.send() here can be lost too.
+let pendingHotkeyConflict: ShortcutAction[] | null = null;
+
+// startAuthServer() previously had zero error handling — an EADDRINUSE/EACCES
+// on port 7842 (a second app instance, a leftover process) was an unhandled
+// Node 'error' event with no top-level uncaughtException handler anywhere in
+// this file, which is fatal to the whole process by default. If it somehow
+// didn't crash the app, login was silently, undiagnosably dead forever (the
+// website's POST to 127.0.0.1:7842/auth just gets ECONNREFUSED). Buffered the
+// same way as pendingAuthToken/pendingHotkeyConflict for the same mount race.
+let pendingAuthServerError: string | null = null;
+
 // Populated by warmScreenSource() well before the user ever enables audio, so the
 // live setDisplayMediaRequestHandler below almost always hits the cache instead of
 // running the remove-stealth -> enumerate -> reapply-after-800ms dance while the
@@ -27,17 +55,39 @@ let pendingAuthToken: { token: string; user: any } | null = null;
 // the request handler share the same cache.
 let cachedScreenSource: Electron.DesktopCapturerSource | null = null;
 let screenSourceWarmupPromise: Promise<void> | null = null;
+// Distinguishes "never attempted" from "attempted, genuinely came back empty"
+// — cachedScreenSource alone can't tell those apart (a resolved-but-empty
+// getSources() call sets it to null via .then, identical to the .catch path).
+// Without this, every later live getDisplayMedia() call (i.e. every audio
+// enable/re-enable, possibly mid screen-share) would re-run the risky
+// remove-stealth -> enumerate -> reapply-after-800ms dance forever whenever
+// the very first attempt happened to return zero sources — a real, observed
+// possibility right after launch before display/GPU state has settled.
+let screenSourceWarmupAttempted = false;
 
 function warmScreenSource(): Promise<void> {
   if (cachedScreenSource) return Promise.resolve();
   if (screenSourceWarmupPromise) return screenSourceWarmupPromise;
+
+  if (screenSourceWarmupAttempted) {
+    // Already tried the stealth-removing dance once this session and it came
+    // back empty. Don't repeat it live — that's the leak. Best-effort retry
+    // the enumeration alone (no stealth touched) so a transient failure can
+    // still self-heal by the next call, without ever risking a live capture
+    // window during an actual screen share.
+    desktopCapturer.getSources({ types: ["screen"] })
+      .then((sources) => { if (sources[0]) cachedScreenSource = sources[0]; })
+      .catch(() => {});
+    return Promise.resolve();
+  }
 
   // desktopCapturer.getSources() runs a Windows desktop-duplication capture session.
   // If our own window is WDA_EXCLUDEFROMCAPTURE at that exact moment, Windows' DWM
   // can stop compositing that window to the real screen too (not just to capture
   // streams) — the whole app, TopBar included, goes invisible on the user's own
   // monitor. Drop the exclusion for the duration of the enumeration, then restore
-  // it once the capture session has actually torn down.
+  // it once the capture session has actually torn down. This whole dance runs at
+  // most ONCE per app session — see screenSourceWarmupAttempted above.
   if (mainWindow) removeStealthMode(mainWindow);
   screenSourceWarmupPromise = desktopCapturer
     .getSources({ types: ["screen"] })
@@ -48,6 +98,7 @@ function warmScreenSource(): Promise<void> {
       cachedScreenSource = null;
     })
     .finally(() => {
+      screenSourceWarmupAttempted = true;
       // Reapplying immediately can retrigger the same glitch — give the capture
       // session's teardown a moment to finish first.
       setTimeout(() => { if (mainWindow) applyStealthMode(mainWindow); }, 800);
@@ -79,6 +130,14 @@ function startAuthServer() {
     } else {
       res.writeHead(404); res.end();
     }
+  });
+  authServer.on("error", (err: NodeJS.ErrnoException) => {
+    const message = err.code === "EADDRINUSE"
+      ? "Login server couldn't start — port 7842 is already in use by another program (maybe another copy of Ghostly?). Close it and restart the app."
+      : `Login server failed to start: ${err.message}`;
+    console.error("[Ghostly] Auth server error:", err);
+    pendingAuthServerError = message;
+    mainWindow?.webContents.send("ghostly:auth-server-error", message);
   });
   authServer.listen(7842, "127.0.0.1");
 }
@@ -130,6 +189,12 @@ function createMainWindow(): BrowserWindow {
   win.setIgnoreMouseEvents(false);
 
   enforceStealthOnWindow(win);
+
+  // mainWindow was never nulled on destroy — deferred timers (warmScreenSource's
+  // 800ms reapply, the 2s startup kickoff) could still fire against a stale,
+  // destroyed reference. applyStealthMode/removeStealthMode now guard on
+  // isDestroyed() too, but this closes the gap at the source.
+  win.on("closed", () => { if (mainWindow === win) mainWindow = null; });
 
   // Surface renderer failures to the terminal instead of leaving a silently blank
   // window — a transparent frameless window that fails to paint looks identical to
@@ -204,7 +269,21 @@ function createTray(): Tray {
   t.setToolTip("Ghostly — Stealth AI Assistant");
   t.setContextMenu(Menu.buildFromTemplate([
     { label: "Show/Hide Ghostly", click: toggleWindowVisibility },
-    { label: "Capture Screen", click: () => mainWindow?.webContents.send("ghostly:screenshot") },
+    {
+      label: "Capture Screen",
+      click: async () => {
+        // Used to send the screenshot IPC event with no payload at all —
+        // Home.tsx's listener assumed it always gets a real base64 image, so
+        // the AI silently answered with no visual context and no error shown.
+        try {
+          const base64 = await captureFullScreen();
+          mainWindow?.webContents.send("ghostly:screenshot", base64);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Screenshot capture failed";
+          mainWindow?.webContents.send("ghostly:capture-error", message);
+        }
+      },
+    },
     { type: "separator" },
     { label: "Quit Ghostly", click: () => app.quit() },
   ]));
@@ -248,7 +327,11 @@ if (!gotTheLock) {
     registerIpcHandlers();
     mainWindow = createMainWindow();
     tray = createTray();
-    registerHotkeys(mainWindow, getStoredShortcuts());
+    const hotkeyResult = registerHotkeys(mainWindow, getStoredShortcuts());
+    if (!hotkeyResult.ok) {
+      pendingHotkeyConflict = hotkeyResult.failed;
+      mainWindow.webContents.send("ghostly:hotkey-conflict", hotkeyResult.failed);
+    }
 
     // Permissions
     mainWindow.webContents.session.setPermissionRequestHandler((_wc, permission, cb) => {
@@ -287,6 +370,16 @@ if (!gotTheLock) {
       pendingAuthToken = null;
       return pending;
     });
+    ipcMain.handle("ghostly:get-pending-hotkey-conflict", () => {
+      const pending = pendingHotkeyConflict;
+      pendingHotkeyConflict = null;
+      return pending;
+    });
+    ipcMain.handle("ghostly:get-pending-auth-server-error", () => {
+      const pending = pendingAuthServerError;
+      pendingAuthServerError = null;
+      return pending;
+    });
     ipcMain.on("ghostly:open-external", (_event, url: string) => {
       try {
         const parsed = new URL(url);
@@ -296,7 +389,14 @@ if (!gotTheLock) {
       } catch { /* invalid URL — ignore */ }
     });
     ipcMain.on("ghostly:enable-mouse", () => mainWindow?.setIgnoreMouseEvents(false));
-    ipcMain.on("ghostly:disable-mouse", () => mainWindow?.setIgnoreMouseEvents(false));
+    // Used to be byte-identical to enable-mouse above (also just (false)) instead
+    // of restoring click-through — after any hotkey capture puts the window into
+    // click-through mode (setIgnoreMouseEvents(true, {forward:true})) so the
+    // meeting app underneath stays clickable, the moment the pointer entered ANY
+    // button (every onMouseEnter across the renderer calls enableMouse()) this
+    // never correctly went back, permanently breaking click-through for the rest
+    // of that visible session.
+    ipcMain.on("ghostly:disable-mouse", () => mainWindow?.setIgnoreMouseEvents(true, { forward: true }));
     ipcMain.on("ghostly:set-opacity", (_event, value: number) => {
       if (mainWindow) mainWindow.setOpacity(Math.min(1, Math.max(0.1, value)));
     });
@@ -321,12 +421,10 @@ if (!gotTheLock) {
     });
     ipcMain.on("ghostly:quit", () => app.quit());
     ipcMain.on("ghostly:get-version", (event) => { event.returnValue = app.getVersion(); });
-    ipcMain.on("ghostly:move", (_event, dx: number, dy: number) => {
-      if (mainWindow) {
-        const [x, y] = mainWindow.getPosition();
-        mainWindow.setPosition(x + dx, y + dy);
-      }
-    });
+    // Removed dead "ghostly:move" handler — preload.ts never exposed a sender
+    // for it (unreachable from the renderer), and window repositioning is
+    // already fully covered by hotkeys.ts's registerMoveKeys()
+    // (Ctrl+Up/Down/Left/Right global shortcuts).
 
     // ── Auto Updater ────────────────────────────────────────────────────────
     autoUpdater.autoDownload = false;

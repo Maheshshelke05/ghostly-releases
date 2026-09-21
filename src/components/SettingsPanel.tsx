@@ -2,45 +2,8 @@ import React, { useEffect, useState } from "react";
 import { useStore } from "../store/useStore";
 import { OPENROUTER_FREE_MODELS } from "../lib/ai/openrouter";
 import { AudioDiagnostics } from "./AudioDiagnostics";
-
-// action must match a key in electron/hotkeys.ts's ShortcutBindings — these are
-// the ones remappable from Settings. "Move Window" stays fixed (4-key group
-// doesn't fit a single-combo remap UI) and is shown for reference only.
-const REMAPPABLE_SHORTCUTS: { label: string; action: string }[] = [
-  { label: "Ask AI",        action: "solve" },
-  { label: "Screenshot",    action: "captureAndSolve" },
-  { label: "Send to AI",    action: "manualSend" },
-  { label: "Next Question", action: "nextQuestion" },
-  { label: "Show / Hide",   action: "toggleVisibility" },
-  { label: "Start Over",    action: "startOver" },
-  { label: "Scroll Up",     action: "prevQuestion" },
-  { label: "Scroll Down",   action: "nextQuestionPage" },
-];
-
-// Formats an Electron accelerator string ("CommandOrControl+Shift+E") into the
-// short display form used elsewhere in this panel ("Ctrl+Shift+E").
-function formatAccelerator(accelerator: string): string {
-  return accelerator
-    .split("+")
-    .map((part) => (part === "CommandOrControl" ? "Ctrl" : part === "Return" ? "↵" : part))
-    .join(" + ");
-}
-
-// Builds an accelerator string from a keydown event, or null while the user is
-// still only holding modifier keys (caller should keep listening).
-function keyEventToAccelerator(e: KeyboardEvent): string | null {
-  const mods: string[] = [];
-  if (e.ctrlKey || e.metaKey) mods.push("CommandOrControl");
-  if (e.altKey) mods.push("Alt");
-  if (e.shiftKey) mods.push("Shift");
-
-  const key = e.key;
-  if (["Control", "Meta", "Alt", "Shift"].includes(key)) return null;
-  if (mods.length === 0) return null; // require at least one modifier — avoids hijacking bare keys system-wide
-
-  const mainKey = key === "Enter" ? "Return" : key.length === 1 ? key.toUpperCase() : key;
-  return [...mods, mainKey].join("+");
-}
+import { REMAPPABLE_SHORTCUTS, formatAccelerator, keyEventToAccelerator } from "../lib/shortcuts";
+import { isProviderDisabled, withoutDisabled } from "../lib/providerState";
 
 const AI_PROVIDERS = [
   { id: "gemini",      label: "Gemini",       ph: "AIza...",       url: "https://aistudio.google.com/app/apikey" },
@@ -135,11 +98,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
         className="rounded-[22px] w-[320px] max-h-[72vh] overflow-y-auto flex flex-col shadow-2xl"
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: "rgba(13,13,20,0.96)",
+          // Kept high — backdrop-filter can't blur whatever real window sits behind
+          // this transparent Electron overlay, so a lower alpha exposes unblurred
+          // background content bleeding through and overlapping this panel's text.
+          background: "rgba(13,13,20,0.94)",
           backdropFilter: "blur(32px)",
           WebkitBackdropFilter: "blur(32px)",
           border: "1px solid rgba(255,255,255,0.09)",
-          boxShadow: "0 32px 80px rgba(0,0,0,0.7), 0 1px 0 rgba(255,255,255,0.06) inset",
+          boxShadow: "0 32px 80px rgba(0,0,0,0.55), 0 1px 0 rgba(255,255,255,0.06) inset",
           fontFamily: "'Inter', -apple-system, sans-serif",
           pointerEvents: "auto",
         }}
@@ -168,9 +134,48 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
             style={{ background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.25)" }}>
             <div>
               <p className="text-[9px] font-black uppercase tracking-widest" style={{ color: "rgba(167,139,250,0.7)" }}>Active AI Provider</p>
-              <p className="text-[13px] font-extrabold mt-0.5 capitalize" style={{ color: "rgba(255,255,255,0.9)" }}>{settings.activeProvider}</p>
+              <p className="text-[13px] font-extrabold mt-0.5 capitalize" style={{ color: "rgba(255,255,255,0.9)" }}>
+                {isProviderDisabled(settings, settings.activeProvider) ? `${settings.activeProvider} (deactivated)` : settings.activeProvider}
+              </p>
             </div>
             <span className="text-[20px]">🤖</span>
+          </div>
+
+          {/* Auto-switch provider on quota — only ever triggers on a real 429
+              rate-limit from the ACTIVE provider, and only ever falls back to
+              a provider you've already put your own key into below. Never
+              changes Active AI Provider above — it's a one-off retry for
+              that single answer, so the next question tries your chosen
+              provider again first. */}
+          <div className="p-3 rounded-[14px] flex items-center justify-between gap-3"
+            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+            <div>
+              <p className="text-[11px] font-bold" style={{ color: (settings.autoSwitchProvider ?? true) ? "#a78bfa" : "rgba(255,255,255,0.6)" }}>
+                Auto-switch on quota limit
+              </p>
+              <p className="text-[9px] mt-0.5 leading-relaxed" style={{ color: "rgba(255,255,255,0.3)" }}>
+                If {settings.activeProvider} hits a rate limit, retry with another provider you've added a key for below — just for that one answer.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                const next = !(settings.autoSwitchProvider ?? true);
+                updateSettings({ autoSwitchProvider: next });
+                setTimeout(() => window.ghostly.saveSettings(useStore.getState().settings), 200);
+              }}
+              style={{
+                width: "36px", height: "20px", flexShrink: 0,
+                background: (settings.autoSwitchProvider ?? true) ? "linear-gradient(135deg, #8b5cf6, #7c3aed)" : "rgba(255,255,255,0.08)",
+                borderRadius: "999px", border: "none", cursor: "pointer", position: "relative", transition: "background 0.2s",
+              }}
+            >
+              <span style={{
+                position: "absolute", top: "3px",
+                left: (settings.autoSwitchProvider ?? true) ? "19px" : "3px",
+                width: "14px", height: "14px", borderRadius: "50%", background: "#fff",
+                boxShadow: "0 1px 4px rgba(0,0,0,0.4)", transition: "left 0.2s",
+              }} />
+            </button>
           </div>
 
           {/* Opacity Slider */}
@@ -293,6 +298,25 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
                     {showKeys["deepgram"] ? "🙈" : "👁"}
                   </button>
                 </div>
+                {/* Interviewer speaking Hindi/another language mixed with English?
+                    Deepgram's default only transcribes English well — this lets
+                    someone whose Deepgram plan supports it opt into a different
+                    language or code-switching ("multi") without touching the
+                    default for everyone else. */}
+                <input
+                  type="text"
+                  value={settings.deepgramLanguage || ""}
+                  onChange={(e) => {
+                    updateSettings({ deepgramLanguage: e.target.value.trim() });
+                    setTimeout(() => window.ghostly.saveSettings(useStore.getState().settings), 200);
+                  }}
+                  placeholder="Language code (optional) — e.g. multi, hi, en"
+                  className="w-full rounded-xl px-3 py-1.5 text-[10px] font-mono focus:outline-none transition-all"
+                  style={{ border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.03)", color: "rgba(255,255,255,0.6)" }}
+                />
+                <p className="text-[8.5px] leading-relaxed" style={{ color: "rgba(255,255,255,0.25)" }}>
+                  Leave blank for default (English). For Hindi/English mixed interviews, try "multi" — requires Deepgram plan support.
+                </p>
               </div>
               {/* AI Providers */}
               {AI_PROVIDERS.map(p => (
@@ -344,7 +368,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
                     <button
                       key={m.id}
                       onClick={() => {
-                        updateSettings({ activeProvider: "openrouter", activeModel: m.id });
+                        updateSettings({ activeProvider: "openrouter", activeModel: m.id, disabledProviders: withoutDisabled(settings, "openrouter") });
                         setTimeout(() => window.ghostly.saveSettings(useStore.getState().settings), 200);
                       }}
                       className="flex items-center justify-between px-3 py-2.5 rounded-[11px] text-left transition-all"

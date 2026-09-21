@@ -1,24 +1,151 @@
-import React, { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { useStore } from "../store/useStore";
+import { MinimizedLogo } from "../components/MinimizedLogo";
+import { useMinimizedClickThrough } from "../hooks/useMinimizedClickThrough";
 
-export const LoginPage: React.FC = () => {
+interface LoginPageProps {
+  // A known, real failure (auth server down, backend error, timeout) reported
+  // by App.tsx — shown immediately instead of the generic "still waiting"
+  // message, since we actually know what went wrong here.
+  externalError?: string | null;
+  onClearExternalError?: () => void;
+}
+
+// Light-theme palette for this screen (shared with the Home screen).
+const INK = "#15162b";
+const SUBTLE = "#6b7280";
+const FAINT = "#9ca3af";
+const CARD_BG = "#ffffff";
+const BORDER = "#e8e8ee";
+const SURFACE = "#f7f7fa";
+
+const LOGIN_URL = "https://www.ghotlyai.in/electron-login";
+const SUPPORT_URL = "https://www.ghotlyai.in/support/";
+
+// Give the "opening your browser" state a beat to register before the card shrinks away.
+const MINIMIZE_DELAY_MS = 450;
+
+const ShieldIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={INK} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+  </svg>
+);
+const SlidersIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={INK} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="6" y1="21" x2="6" y2="14" /><line x1="6" y1="10" x2="6" y2="3" />
+    <line x1="12" y1="21" x2="12" y2="12" /><line x1="12" y1="8" x2="12" y2="3" />
+    <line x1="18" y1="21" x2="18" y2="16" /><line x1="18" y1="12" x2="18" y2="3" />
+    <line x1="3" y1="14" x2="9" y2="14" /><line x1="9" y1="8" x2="15" y2="8" /><line x1="15" y1="16" x2="21" y2="16" />
+  </svg>
+);
+const DocIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={INK} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" />
+    <line x1="8" y1="13" x2="16" y2="13" /><line x1="8" y1="17" x2="13" y2="17" />
+  </svg>
+);
+const MoveIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8b8fa3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="5 9 2 12 5 15" /><polyline points="9 5 12 2 15 5" /><polyline points="15 19 12 22 9 19" /><polyline points="19 9 22 12 19 15" />
+    <line x1="2" y1="12" x2="22" y2="12" /><line x1="12" y1="2" x2="12" y2="22" />
+  </svg>
+);
+const MinimizeIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8b8fa3" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="18 15 12 9 6 15" />
+  </svg>
+);
+const CloseIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+  </svg>
+);
+const PowerIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M18.36 6.64a9 9 0 1 1-12.73 0" /><line x1="12" y1="2" x2="12" y2="12" />
+  </svg>
+);
+
+const CONTAINER = { hidden: {}, show: { transition: { staggerChildren: 0.06, delayChildren: 0.12 } } };
+const ITEM = { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0, transition: { duration: 0.34, ease: [0.16, 1, 0.3, 1] as any } } };
+
+export const LoginPage: React.FC<LoginPageProps> = ({ externalError, onClearExternalError }) => {
   const { setAppScreen, user } = useStore();
   const [status, setStatus] = useState<"idle" | "waiting">("idle");
+  // No way back if the browser tab is closed, the local auth callback (port
+  // 7842) gets blocked by a firewall/antivirus, or anything else in the OAuth
+  // handoff fails silently — this screen used to just say "Waiting..." forever
+  // with no retry, so a user in that state had to force-quit the whole app.
+  const [timedOut, setTimedOut] = useState(false);
+  // Bumped on every handleLogin() call (including "Try Again"). The failsafe
+  // timer effect below used to key only on [status] — since status is already
+  // "waiting" when Try Again is clicked, React saw no dependency change and
+  // never re-armed the timer, so a second stall left the user permanently
+  // stuck with no banner and no way out except Quit.
+  const [attempt, setAttempt] = useState(0);
+
+  // Minimized = the card has shrunk into the logo so the browser (where the login
+  // happens) is fully visible. Nothing is unmounted, so the wait keeps running.
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [collapsed, setCollapsed] = useState(false);
+  const [fullyHidden, setFullyHidden] = useState(false);
+  const [pillPos, setPillPos] = useState({ left: 12, top: 8 });
+  const minimizeTimer = useRef<number | undefined>(undefined);
+
+  const minimize = useCallback(() => {
+    window.clearTimeout(minimizeTimer.current);
+    const r = cardRef.current?.getBoundingClientRect();
+    // Land the logo exactly where the card's own logo is, so the card visibly shrinks into it.
+    if (r && r.width > 0) setPillPos({ left: Math.round(r.left + 8), top: Math.round(r.top + 2) });
+    setCollapsed(true);
+  }, []);
+
+  const expand = useCallback(() => {
+    window.clearTimeout(minimizeTimer.current);
+    setFullyHidden(false);
+    setCollapsed(false);
+    window.ghostly.enableMouse();
+  }, []);
+
+  useEffect(() => () => window.clearTimeout(minimizeTimer.current), []);
+
+  useMinimizedClickThrough(collapsed);
 
   useEffect(() => {
     if (user) setAppScreen("home");
   }, [user]);
 
+  useEffect(() => {
+    if (status !== "waiting") { setTimedOut(false); return; }
+    const t = setTimeout(() => setTimedOut(true), 20000);
+    return () => clearTimeout(t);
+  }, [status, attempt]);
+
+  // A real failure reported by the app: bring the card back so the user sees what
+  // went wrong, and drop the "waiting" state so Login works as a retry.
+  useEffect(() => {
+    if (!externalError) return;
+    setStatus("idle");
+    expand();
+  }, [externalError, expand]);
+
   const handleLogin = () => {
     setStatus("waiting");
-    window.ghostly.openExternal("https://www.ghotlyai.in/electron-login");
+    setTimedOut(false);
+    onClearExternalError?.();
+    setAttempt((a) => a + 1);
+    window.ghostly.openExternal(LOGIN_URL);
+    window.clearTimeout(minimizeTimer.current);
+    minimizeTimer.current = window.setTimeout(minimize, MINIMIZE_DELAY_MS);
   };
 
+  const handleCancel = () => { setStatus("idle"); setTimedOut(false); };
+
   const features = [
-    { icon: "⚡", text: "Sync access across devices", color: "rgba(139,92,246,0.15)", border: "rgba(139,92,246,0.3)", iconColor: "#a78bfa" },
-    { icon: "🎁", text: "Free forever — no subscription", color: "rgba(34,197,94,0.12)", border: "rgba(34,197,94,0.28)", iconColor: "#4ade80" },
-    { icon: "🔒", text: "Secure Google login", color: "rgba(59,130,246,0.1)", border: "rgba(59,130,246,0.25)", iconColor: "#60a5fa" },
+    { Icon: ShieldIcon, title: "Screenshare protection", desc: "Hidden from screen sharing" },
+    { Icon: SlidersIcon, title: "Customizable AI responses", desc: "Your style, your keys" },
+    { Icon: DocIcon, title: "Screen-analyze coding help", desc: "Solves what is on screen" },
   ];
 
   return (
@@ -31,239 +158,227 @@ export const LoginPage: React.FC = () => {
         userSelect: "none",
       }}
     >
-      {/* Drag region */}
-      <div
-        className="fixed top-0 left-0 right-0 h-6 z-50"
-        style={{ WebkitAppRegion: "drag", pointerEvents: "auto" } as React.CSSProperties}
-        onMouseEnter={() => window.ghostly.enableMouse()}
-      />
-
-      {/* Ambient glow */}
-      <div
-        className="fixed inset-0 pointer-events-none"
-        style={{
-          background: "radial-gradient(ellipse 70% 60% at 50% 0%, rgba(139,92,246,0.1) 0%, transparent 65%)",
-        }}
-      />
-
       <motion.div
-        initial={{ opacity: 0, y: 14, scale: 0.95 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-        className="w-full max-w-[272px] flex flex-col gap-2.5"
-        style={{ pointerEvents: "auto" }}
+        ref={cardRef}
+        initial={{ opacity: 0, y: 14, scale: 0.96 }}
+        animate={collapsed ? { opacity: 0, y: 0, scale: 0.16 } : { opacity: 1, y: 0, scale: 1 }}
+        transition={collapsed ? { duration: 0.38, ease: [0.5, 0, 0.75, 0] } : { duration: 0.42, ease: [0.16, 1, 0.3, 1] }}
+        onAnimationComplete={() => { if (collapsed) setFullyHidden(true); }}
+        className="w-full max-w-[380px] flex flex-col"
+        style={{
+          pointerEvents: "auto",
+          background: CARD_BG,
+          borderRadius: "22px",
+          border: `1px solid ${BORDER}`,
+          boxShadow: "0 24px 60px rgba(20,20,40,0.28), 0 2px 8px rgba(20,20,40,0.08)",
+          overflow: "hidden",
+          transformOrigin: "24px 22px",
+          visibility: fullyHidden ? "hidden" : "visible",
+        }}
         onMouseEnter={() => window.ghostly.enableMouse()}
       >
-        {/* ── Main Card ── */}
+        {/* ── Header: logo + name (click to minimize), move / minimize / close ── */}
         <div
-          className="w-full rounded-[24px] overflow-hidden"
-          style={{
-            background: "rgba(13, 13, 20, 0.92)",
-            backdropFilter: "blur(28px)",
-            WebkitBackdropFilter: "blur(28px)",
-            border: "1px solid rgba(255,255,255,0.09)",
-            boxShadow: "0 24px 64px rgba(0,0,0,0.65), 0 1px 0 rgba(255,255,255,0.06) inset",
-          }}
+          className="flex items-center justify-between px-3.5 py-2.5"
+          style={{ WebkitAppRegion: "drag", borderBottom: `1px solid ${BORDER}` } as React.CSSProperties}
         >
-          {/* ── Top accent bar ── */}
-          <div
-            className="h-0.5 w-full"
-            style={{ background: "linear-gradient(90deg, transparent, rgba(139,92,246,0.6), rgba(99,102,241,0.4), transparent)" }}
-          />
-
-          <div className="px-5 pt-6 pb-5 flex flex-col gap-5">
-            {/* ── Logo section ── */}
-            <div className="flex flex-col items-center gap-3">
-              {/* Ghost icon */}
-              <motion.div
-                animate={{ y: [0, -3, 0] }}
-                transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-                className="relative w-16 h-16 rounded-[20px] flex items-center justify-center"
-                style={{
-                  background: "linear-gradient(135deg, rgba(139,92,246,0.2) 0%, rgba(99,102,241,0.12) 100%)",
-                  border: "1.5px solid rgba(139,92,246,0.35)",
-                  boxShadow: "0 0 32px rgba(139,92,246,0.25), 0 8px 24px rgba(0,0,0,0.4)",
-                }}
-              >
-                <span style={{ fontSize: "30px", lineHeight: 1 }}>👻</span>
-                {/* Online dot */}
-                <span
-                  className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full"
-                  style={{
-                    background: "linear-gradient(135deg, #22c55e, #16a34a)",
-                    border: "2px solid #0d0d14",
-                    boxShadow: "0 0 10px rgba(34,197,94,0.6)",
-                  }}
-                />
-              </motion.div>
-
-              {/* Text */}
-              <div className="text-center">
-                <h1
-                  className="text-lg font-black tracking-tight leading-none"
-                  style={{
-                    background: "linear-gradient(135deg, #fff 0%, rgba(255,255,255,0.8) 100%)",
-                    WebkitBackgroundClip: "text",
-                    WebkitTextFillColor: "transparent",
-                  }}
-                >
-                  Ghotly AI
-                </h1>
-                <p className="text-[10px] font-medium mt-1" style={{ color: "rgba(255,255,255,0.35)" }}>
-                  Stealth AI Copilot for Interviews
-                </p>
-              </div>
-            </div>
-
-            {/* ── Divider ── */}
-            <div className="h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
-
-            {/* ── Feature list ── */}
-            <div className="flex flex-col gap-2">
-              {features.map((item) => (
-                <div
-                  key={item.text}
-                  className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl"
-                  style={{
-                    background: item.color,
-                    border: `1px solid ${item.border}`,
-                  }}
-                >
-                  <span
-                    className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0 text-sm"
-                    style={{ background: "rgba(0,0,0,0.2)" }}
-                  >
-                    {item.icon}
-                  </span>
-                  <span className="text-[11px] font-semibold" style={{ color: "rgba(255,255,255,0.78)" }}>
-                    {item.text}
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            {/* ── Permissions note ── */}
-            <div
-              className="rounded-xl px-3 py-2.5"
-              style={{
-                background: "rgba(139,92,246,0.06)",
-                border: "1px solid rgba(139,92,246,0.2)",
-                borderLeft: "3px solid rgba(139,92,246,0.6)",
-              }}
-            >
-              <p className="text-[9px] font-black uppercase tracking-[0.12em] mb-1.5" style={{ color: "rgba(167,139,250,0.7)" }}>
-                ⚙️ Permissions needed
-              </p>
-              <div className="flex flex-col gap-1">
-                {[
-                  { icon: "🎤", label: "Microphone", desc: "For live transcription" },
-                  { icon: "🖥️", label: "Screen", desc: "For screenshot solving" },
-                ].map((p) => (
-                  <div key={p.label} className="flex items-center gap-2">
-                    <span className="text-[10px] shrink-0">{p.icon}</span>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-[9px] font-bold" style={{ color: "rgba(255,255,255,0.65)" }}>{p.label}</span>
-                      <span className="text-[8.5px]" style={{ color: "rgba(255,255,255,0.3)" }}>— {p.desc}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* ── Divider ── */}
-            <div className="h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
-
-            {/* ── CTA ── */}
-            <div className="flex flex-col gap-2">
-              {status === "waiting" ? (
-                <div className="flex flex-col gap-2">
-                  <div
-                    className="w-full py-3 rounded-xl flex items-center justify-center gap-2.5"
-                    style={{
-                      background: "rgba(34,197,94,0.08)",
-                      border: "1px solid rgba(34,197,94,0.25)",
-                    }}
-                  >
-                    <motion.span
-                      className="w-2 h-2 rounded-full bg-green-400"
-                      animate={{ opacity: [1, 0.4, 1], scale: [1, 1.3, 1] }}
-                      transition={{ duration: 1.2, repeat: Infinity }}
-                    />
-                    <span className="text-[11px] font-bold text-green-400">Waiting for browser login...</span>
-                  </div>
-                  <div
-                    className="flex items-center gap-2 px-3 py-2 rounded-xl"
-                    style={{ background: "rgba(139,92,246,0.06)", border: "1px solid rgba(139,92,246,0.15)" }}
-                  >
-                    <span className="text-[10px] shrink-0">💡</span>
-                    <p className="text-[9px] font-semibold leading-relaxed" style={{ color: "rgba(167,139,250,0.65)" }}>
-                      Allow Microphone & Screen access when prompted.
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <motion.button
-                  whileHover={{ scale: 1.02, y: -1 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={handleLogin}
-                  className="w-full py-3 rounded-xl flex items-center justify-center gap-2.5 relative overflow-hidden outline-none border-none"
-                  style={{
-                    background: "linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)",
-                    color: "#fff",
-                    boxShadow: "0 4px 20px rgba(139,92,246,0.45), 0 1px 0 rgba(255,255,255,0.18) inset",
-                  }}
-                >
-                  {/* Shimmer overlay */}
-                  <motion.div
-                    className="absolute inset-0 w-1/3"
-                    style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent)" }}
-                    animate={{ x: ["-100%", "400%"] }}
-                    transition={{ duration: 2.5, repeat: Infinity, ease: "linear" }}
-                  />
-                  {/* Google icon */}
-                  <div
-                    className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0"
-                    style={{ background: "rgba(255,255,255,0.2)" }}
-                  >
-                    <svg width="13" height="13" viewBox="0 0 24 24">
-                      <path fill="#fff" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                      <path fill="#fff" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                      <path fill="#fff" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
-                      <path fill="#fff" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                    </svg>
-                  </div>
-                  <span className="text-[12px] font-bold relative z-10">Continue with Google</span>
-                </motion.button>
-              )}
-            </div>
+          <motion.button
+            onClick={minimize}
+            whileHover="hover"
+            whileTap={{ scale: 0.96 }}
+            title="Minimize — shrink to the logo (click the logo to reopen)"
+            aria-label="Minimize Ghotly AI"
+            className="group flex items-center gap-1.5 -ml-1 pl-1 pr-2 h-7 rounded-[9px] outline-none transition-colors hover:bg-[#f2f3f6]"
+            style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+          >
+            <motion.span variants={{ hover: { rotate: [0, -10, 8, 0], scale: 1.1, transition: { duration: 0.5 } } }} style={{ fontSize: "15px", lineHeight: 1, display: "inline-block" }}>👻</motion.span>
+            <span className="text-[12px] font-bold" style={{ color: INK }}>Ghotly AI</span>
+          </motion.button>
+          <div className="flex items-center gap-1.5" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
+            <span className="w-6 h-6 rounded-[7px] flex items-center justify-center cursor-move" style={{ background: "#f2f3f6" }} title="Drag to move">
+              <MoveIcon />
+            </span>
+            <button onClick={minimize} className="w-6 h-6 rounded-[7px] flex items-center justify-center transition-colors hover:bg-[#e8e8ee]" style={{ background: "#f2f3f6" }} title="Minimize">
+              <MinimizeIcon />
+            </button>
+            <button onClick={() => window.ghostly.quit()} className="w-6 h-6 rounded-[7px] flex items-center justify-center transition-colors hover:brightness-95" style={{ background: "#ef4444" }} title="Quit">
+              <CloseIcon />
+            </button>
           </div>
         </div>
 
-        {/* ── Quit button ── */}
-        <div className="flex justify-center">
-          <button
-            onClick={() => window.ghostly.quit()}
-            className="text-[10px] font-semibold px-4 py-1.5 rounded-lg transition-all outline-none"
-            style={{
-              color: "rgba(255,255,255,0.2)",
-              background: "rgba(255,255,255,0.03)",
-              border: "1px solid rgba(255,255,255,0.06)",
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.color = "#f87171";
-              e.currentTarget.style.background = "rgba(239,68,68,0.1)";
-              e.currentTarget.style.borderColor = "rgba(239,68,68,0.25)";
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.color = "rgba(255,255,255,0.2)";
-              e.currentTarget.style.background = "rgba(255,255,255,0.03)";
-              e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)";
-            }}
-          >
-            Quit App
-          </button>
-        </div>
+        {/* ── Body ── */}
+        <motion.div variants={CONTAINER} initial="hidden" animate="show" className="px-7 pt-5 pb-4 flex flex-col items-center gap-3.5">
+          {/* Mascot */}
+          <motion.div variants={ITEM} className="relative flex items-center justify-center">
+            <motion.span
+              aria-hidden
+              className="absolute w-[84px] h-[84px] rounded-full"
+              style={{ background: "radial-gradient(circle, rgba(109,111,176,0.16), transparent 70%)" }}
+              animate={{ scale: [1, 1.18, 1], opacity: [0.9, 0.4, 0.9] }}
+              transition={{ duration: 3.2, repeat: Infinity, ease: "easeInOut" }}
+            />
+            <motion.div
+              animate={{ y: [0, -4, 0] }}
+              transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+              className="relative w-[64px] h-[64px] rounded-full flex items-center justify-center"
+              style={{ background: "#f2f3f6", boxShadow: "inset 0 0 0 1px rgba(20,20,40,0.04)" }}
+            >
+              <span style={{ fontSize: "34px", lineHeight: 1 }}>👻</span>
+              <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full" style={{ background: "#22c55e", border: "2.5px solid #ffffff" }} />
+            </motion.div>
+          </motion.div>
+
+          <motion.div variants={ITEM} className="text-center">
+            <h1 className="text-[19px] font-extrabold leading-none tracking-tight" style={{ color: INK }}>Welcome to Ghotly AI</h1>
+            <p className="text-[11.5px] font-medium mt-2 leading-snug" style={{ color: SUBTLE }}>
+              Log in to your Ghotly AI account<br />to start your interview.
+            </p>
+          </motion.div>
+
+          {externalError && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
+              className="w-full flex items-start gap-2 px-3 py-2.5 rounded-xl"
+              style={{ background: "#fef2f2", border: "1px solid #fecaca" }}
+              role="alert"
+            >
+              <span className="text-[10px] shrink-0">⚠️</span>
+              <p className="text-[10.5px] font-semibold leading-relaxed" style={{ color: "#b91c1c" }}>{externalError}</p>
+            </motion.div>
+          )}
+
+          <motion.div variants={ITEM} className="w-full">
+            {status === "waiting" ? (
+              <div className="w-full flex flex-col gap-2">
+                <div
+                  className="w-full h-[50px] rounded-full flex items-center justify-center gap-2.5"
+                  style={{ background: "#f0fdf4", border: "1px solid #bbf7d0" }}
+                >
+                  <motion.span
+                    className="w-2 h-2 rounded-full"
+                    style={{ background: "#22c55e" }}
+                    animate={{ opacity: [1, 0.4, 1], scale: [1, 1.3, 1] }}
+                    transition={{ duration: 1.2, repeat: Infinity }}
+                  />
+                  <span className="text-[12.5px] font-bold" style={{ color: "#16a34a" }}>Waiting for browser login...</span>
+                </div>
+                <div className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ background: SURFACE }}>
+                  <span className="text-[10px] shrink-0">💡</span>
+                  <p className="text-[10px] font-semibold leading-relaxed" style={{ color: SUBTLE }}>
+                    Finish signing in on the website — this window opens by itself once you are logged in.
+                  </p>
+                </div>
+                {timedOut && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
+                    className="flex flex-col gap-2 px-3 py-2.5 rounded-xl"
+                    style={{ background: "#fffbeb", border: "1px solid #fde68a" }}
+                  >
+                    <p className="text-[10px] font-semibold leading-relaxed" style={{ color: "#92400e" }}>
+                      Taking longer than expected. If the browser tab was closed or login didn't finish, try again below.
+                    </p>
+                    <div className="flex gap-1.5">
+                      <button onClick={handleLogin} className="flex-1 py-1.5 rounded-lg text-[10.5px] font-bold transition-all hover:brightness-110" style={{ background: INK, color: "#fff" }}>
+                        Try Again
+                      </button>
+                      <button onClick={handleCancel} className="flex-1 py-1.5 rounded-lg text-[10.5px] font-bold transition-all hover:bg-white" style={{ background: "#f2f3f6", border: `1px solid ${BORDER}`, color: SUBTLE }}>
+                        Cancel
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </div>
+            ) : (
+              <>
+                <motion.button
+                  whileHover={{ scale: 1.015, y: -1 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={handleLogin}
+                  className="relative w-full h-[50px] rounded-full flex items-center justify-center gap-2 outline-none border-none overflow-hidden"
+                  style={{ background: INK, color: "#fff", boxShadow: "0 8px 22px rgba(21,22,43,0.30)" }}
+                >
+                  <motion.span
+                    aria-hidden
+                    className="absolute top-0 bottom-0 w-16 pointer-events-none"
+                    style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.16), transparent)", skewX: -20 }}
+                    initial={{ x: "-150%" }}
+                    animate={{ x: ["-150%", "650%"] }}
+                    transition={{ duration: 1.6, ease: "easeInOut", repeat: Infinity, repeatDelay: 3.5 }}
+                  />
+                  <span className="text-[13.5px] font-bold">Login with Ghotly AI</span>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M7 17 17 7M8 7h9v9" /></svg>
+                </motion.button>
+                <p className="text-center text-[9.5px] font-medium mt-2" style={{ color: FAINT }}>
+                  Opens your browser · this window shrinks to the logo.
+                </p>
+              </>
+            )}
+          </motion.div>
+
+          {/* ── Feature list — folds away while waiting / on an error so the card never outgrows the window ── */}
+          <motion.div variants={ITEM} className="w-full">
+          <AnimatePresence initial={false}>
+            {status !== "waiting" && !externalError && (
+              <motion.div
+                key="features"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+                className="w-full"
+                style={{ overflow: "hidden" }}
+              >
+                <div className="w-full flex flex-col gap-1.5 pt-0.5">
+                  {features.map(({ Icon, title, desc }) => (
+                    <div key={title} className="flex items-center gap-3 rounded-xl px-3 h-[38px]" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
+                      <span className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0" style={{ background: "#fff", border: `1px solid ${BORDER}` }}><Icon /></span>
+                      <span className="min-w-0 leading-tight">
+                        <span className="block text-[11.5px] font-bold" style={{ color: INK }}>{title}</span>
+                        <span className="block text-[9px] font-medium" style={{ color: FAINT }}>{desc}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+          </motion.div>
+
+          {/* ── Footer: quit + help ── */}
+          <motion.div variants={ITEM} className="w-full flex items-center justify-between pt-2" style={{ borderTop: `1px solid ${BORDER}` }}>
+            <button
+              onClick={() => window.ghostly.quit()}
+              className="flex items-center gap-1.5 px-2.5 h-8 -ml-2.5 rounded-lg text-[11px] font-bold outline-none transition-colors hover:bg-[#fef2f2] hover:text-[#dc2626]"
+              style={{ color: SUBTLE }}
+            >
+              <PowerIcon /> Quit
+            </button>
+            <button
+              onClick={() => window.ghostly.openExternal(SUPPORT_URL)}
+              className="px-2.5 h-8 -mr-2.5 rounded-lg text-[11px] font-bold outline-none transition-colors hover:bg-[#f2f3f6]"
+              style={{ color: SUBTLE }}
+            >
+              Need help? ↗
+            </button>
+          </motion.div>
+        </motion.div>
       </motion.div>
+
+      {/* ── Minimized: the logo, where the card's own logo was ── */}
+      <AnimatePresence>
+        {collapsed && (
+          <MinimizedLogo
+            key="login-logo"
+            onExpand={expand}
+            busy={status === "waiting" && !timedOut}
+            warn={status === "waiting" && timedOut}
+            left={pillPos.left}
+            top={pillPos.top}
+            title={status === "waiting" ? (timedOut ? "Login is taking longer than expected — click to see" : "Waiting for browser login — click to see") : "Open Ghotly AI"}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 };

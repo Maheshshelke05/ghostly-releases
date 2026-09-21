@@ -1,13 +1,21 @@
 /**
  * Image compressor utility for Ghostly AI.
- * Downscales full-res screenshots to max 800px width @ 70% JPEG quality,
- * reducing payload sizes from ~4MB to ~40KB for 3x-5x faster AI Vision API calls.
+ * Downscales full-res screenshots and re-encodes them as JPEG so the AI Vision
+ * call isn't sending a multi-megabyte PNG.
+ *
+ * The old 800px / 70% setting was a big win for payload size but made small
+ * on-screen text (code, constraints, MCQ options) blurry enough that the model
+ * misread or guessed at it — on a 1920px-wide screen that's a 0.42x scale, so
+ * 12px code lands at ~5px. 1600px keeps typical code/text crisp (about 2x the
+ * linear resolution) while still cutting a ~4MB PNG to a few hundred KB.
  */
+export const SCREENSHOT_MAX_WIDTH = 1600;
+export const SCREENSHOT_QUALITY = 0.82;
 
 export async function compressScreenshot(
   base64Data: string,
-  maxWidth = 800,
-  quality = 0.7
+  maxWidth = SCREENSHOT_MAX_WIDTH,
+  quality = SCREENSHOT_QUALITY
 ): Promise<string> {
   return new Promise((resolve) => {
     if (!base64Data) return resolve(base64Data);

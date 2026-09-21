@@ -45,7 +45,10 @@ export interface Solution {
   provider: ProviderName;
   model: string;
   interviewType: string;
-  language: string;
+  // No longer populated from a "Code Language" setting (removed — it forced
+  // every user, technical or not, through a programming-language picker).
+  // Left optional for backward compatibility with older saved history entries.
+  language?: string;
   // Rich session data
   companyName?: string;
   position?: string;
@@ -87,11 +90,24 @@ export interface InterviewSession {
 export interface Settings {
   activeProvider: ProviderName;
   activeModel: string;
-  interviewType: "dsa" | "system_design" | "frontend" | "sql" | "behavioral";
-  language: "python" | "javascript" | "typescript" | "java" | "cpp" | "go";
   apiKeys: Record<string, string>;
+  // Providers the user switched off (double-click on "Active" in Settings).
+  // Their key stays saved but they're never used — see lib/providerState.ts.
+  disabledProviders?: string[];
   deepgramApiKey: string;
+  // Optional Deepgram `language` query param override — left blank by default
+  // (Deepgram's own default, English). Power users on a Deepgram plan that
+  // supports it can type "multi" here for code-switched Hindi/English
+  // ("Hinglish") interviews, or any other Deepgram language code, without
+  // changing the default behavior for everyone else.
+  deepgramLanguage?: string;
   customInstructions?: string;
+  // When the active provider hits a real rate-limit/quota (429) — not any
+  // other kind of error — automatically retry the same answer with the next
+  // provider the user has already configured a key for. Defaults on since
+  // this exists specifically to stop quota errors from blocking an answer;
+  // can be turned off in Settings to always stick to the chosen provider.
+  autoSwitchProvider?: boolean;
   micDeviceId?: string;
   transcriptionEngine: "deepgram";
   opacity?: number;
@@ -115,6 +131,11 @@ interface GhostlyStore {
   user: AppUser | null;
   subscription: Subscription;
   ads: Ad[];
+  // A known, real login/account failure (blocked account, server error) —
+  // shared across App.tsx and HomePage.tsx (both can trigger a forced
+  // logout-to-login) so LoginPage can show what actually went wrong instead
+  // of either component falling back to a blocking native alert().
+  loginError: string | null;
 
   setAppScreen: (screen: "home" | "login" | "interview-setup" | "api-setup" | "audio-setup" | "interview") => void;
   setInterviewSession: (session: InterviewSession) => void;
@@ -141,6 +162,7 @@ interface GhostlyStore {
   setUser: (user: AppUser | null) => void;
   setSubscription: (sub: Subscription) => void;
   setAds: (ads: Ad[]) => void;
+  setLoginError: (err: string | null) => void;
 }
 
 const ENV = {
@@ -165,20 +187,21 @@ export const useStore = create<GhostlyStore>((set) => ({
   user: null,
   subscription: { plan: "free", status: "active", expires_at: null },
   ads: [],
+  loginError: null,
   settings: {
     activeProvider: "groq",
     // llama-3.3-70b-versatile shuts down 08/16/26 (Groq's deprecation schedule)
     activeModel: "openai/gpt-oss-120b",
-    interviewType: "dsa",
-    language: "python",
     apiKeys: {
       groq: ENV.groq,
       gemini: ENV.gemini,
       openrouter: ENV.openrouter,
       nvidia: "",
     },
+    disabledProviders: [],
     deepgramApiKey: ENV.deepgram,
     customInstructions: "",
+    autoSwitchProvider: true,
     micDeviceId: "default",
     transcriptionEngine: "deepgram",
     opacity: 1,
@@ -216,4 +239,5 @@ export const useStore = create<GhostlyStore>((set) => ({
   setUser: (user) => set({ user }),
   setSubscription: (subscription) => set({ subscription }),
   setAds: (ads) => set({ ads }),
+  setLoginError: (loginError) => set({ loginError }),
 }));

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface QAPair {
@@ -15,7 +15,7 @@ interface InterviewRecord {
   provider: string;
   model: string;
   interviewType: string;
-  language: string;
+  language?: string;
   companyName?: string;
   position?: string;
   durationSeconds?: number;
@@ -24,32 +24,42 @@ interface InterviewRecord {
 }
 
 /* ─── Design system ─── */
+const INK = "#15162b";
+const MUTED = "#6b7280";
+const SUBTLE = "#9ca3af";
+const BORDER = "#e8e8ee";
+const SURFACE = "#f7f7fa";
+const ACCENT = "#6d6fb0";
+
 const GLASS: React.CSSProperties = {
-  background: "rgba(10,10,18,0.97)",
-  backdropFilter: "blur(32px)",
-  WebkitBackdropFilter: "blur(32px)",
-  border: "1px solid rgba(255,255,255,0.08)",
-  boxShadow: "0 32px 80px rgba(0,0,0,0.75), 0 1px 0 rgba(255,255,255,0.06) inset",
+  background: "#ffffff",
+  border: `1px solid ${BORDER}`,
+  boxShadow: "0 32px 80px rgba(20,20,40,0.28), 0 2px 8px rgba(20,20,40,0.08)",
 };
 
-const FEATURE_LABELS: Record<string, { icon: string; label: string; color: string; bg: string; border: string }> = {
-  "ai-answer": { icon: "🎙️", label: "AI Answer", color: "#a78bfa", bg: "rgba(139,92,246,0.12)", border: "rgba(139,92,246,0.3)" },
-  "screen":    { icon: "🖥️", label: "Screen AI",  color: "#60a5fa", bg: "rgba(96,165,250,0.12)", border: "rgba(96,165,250,0.3)"  },
-  "chat":      { icon: "💬", label: "AI Chat",    color: "#4ade80", bg: "rgba(74,222,128,0.12)", border: "rgba(74,222,128,0.3)"  },
-  "follow-up": { icon: "🔄", label: "Follow-up",  color: "#fb923c", bg: "rgba(251,146,60,0.12)", border: "rgba(251,146,60,0.3)"  },
+type Tone = { label: string; color: string; bg: string; border: string };
+
+const FEATURE_LABELS: Record<string, Tone & { icon: string }> = {
+  "ai-answer": { icon: "🎙️", label: "AI Answer", color: "#6d6fb0", bg: "#f0f0fb", border: "#c7c9f0" },
+  "screen":    { icon: "🖥️", label: "Screen AI",  color: "#2563eb", bg: "#eff6ff", border: "#bfdbfe" },
+  "chat":      { icon: "💬", label: "AI Chat",    color: "#16a34a", bg: "#f0fdf4", border: "#bbf7d0" },
+  "follow-up": { icon: "🔄", label: "Follow-up",  color: "#b45309", bg: "#fffbeb", border: "#fde68a" },
 };
 
-const TYPE_STYLES: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  "dsa":           { label: "DSA",           color: "#a78bfa", bg: "rgba(139,92,246,0.12)", border: "rgba(139,92,246,0.28)" },
-  "system_design": { label: "System Design", color: "#60a5fa", bg: "rgba(96,165,250,0.12)", border: "rgba(96,165,250,0.28)"  },
-  "frontend":      { label: "Frontend",      color: "#4ade80", bg: "rgba(74,222,128,0.12)", border: "rgba(74,222,128,0.28)"  },
-  "sql":           { label: "SQL",           color: "#fbbf24", bg: "rgba(251,191,36,0.12)", border: "rgba(251,191,36,0.28)"  },
-  "behavioral":    { label: "Behavioral",    color: "#fb923c", bg: "rgba(251,146,60,0.12)", border: "rgba(251,146,60,0.28)"  },
-  "live-interview":{ label: "Live Interview",color: "#f472b6", bg: "rgba(244,114,182,0.12)",border: "rgba(244,114,182,0.28)" },
+const TYPE_STYLES: Record<string, Tone> = {
+  "general":       { label: "Screen Analysis", color: "#6d6fb0", bg: "#f0f0fb", border: "#c7c9f0" },
+  // Older saved sessions may still carry one of these from before the
+  // Code Language / Interview Type setting was removed — kept for display.
+  "dsa":           { label: "DSA",           color: "#6d6fb0", bg: "#f0f0fb", border: "#c7c9f0" },
+  "system_design": { label: "System Design", color: "#2563eb", bg: "#eff6ff", border: "#bfdbfe" },
+  "frontend":      { label: "Frontend",      color: "#16a34a", bg: "#f0fdf4", border: "#bbf7d0" },
+  "sql":           { label: "SQL",           color: "#b45309", bg: "#fffbeb", border: "#fde68a" },
+  "behavioral":    { label: "Behavioral",    color: "#c2410c", bg: "#fff7ed", border: "#fed7aa" },
+  "live-interview":{ label: "Live Interview",color: "#db2777", bg: "#fdf2f8", border: "#fbcfe8" },
 };
 
-function typeStyle(type: string) {
-  return TYPE_STYLES[type] || { label: type, color: "#a78bfa", bg: "rgba(139,92,246,0.12)", border: "rgba(139,92,246,0.28)" };
+function typeStyle(type: string): Tone {
+  return TYPE_STYLES[type] || { label: type, color: "#6d6fb0", bg: "#f0f0fb", border: "#c7c9f0" };
 }
 
 function formatDate(ts: number) {
@@ -60,24 +70,53 @@ function formatTime(ts: number) {
 }
 function formatDuration(secs?: number) {
   if (!secs) return null;
-  const m = Math.floor(secs / 60), s = secs % 60;
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = secs % 60;
+  if (h > 0) return `${h}h ${m}m`;
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
-/* ─── Company initials avatar ─── */
-function CompanyAvatar({ name }: { name?: string }) {
-  const initials = name ? name.slice(0, 2).toUpperCase() : "IN";
+/* Sessions are already newest-first, so grouping keeps that order. */
+function dayLabel(ts: number) {
+  const startOfDay = (d: Date) => { const c = new Date(d); c.setHours(0, 0, 0, 0); return c.getTime(); };
+  const diffDays = Math.round((startOfDay(new Date()) - startOfDay(new Date(ts))) / 86_400_000);
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  return formatDate(ts);
+}
+
+function groupByDay(records: InterviewRecord[]) {
+  const groups: { label: string; items: InterviewRecord[] }[] = [];
+  for (const rec of records) {
+    const label = dayLabel(rec.timestamp);
+    const last = groups[groups.length - 1];
+    if (last && last.label === label) last.items.push(rec);
+    else groups.push({ label, items: [rec] });
+  }
+  return groups;
+}
+
+/* ─── Small building blocks ─── */
+function CompanyAvatar({ name, tone }: { name?: string; tone: Tone }) {
+  const initials = name ? name.trim().slice(0, 2).toUpperCase() : "IN";
   return (
     <div
-      className="w-11 h-11 rounded-[14px] flex items-center justify-center text-[14px] font-black shrink-0 relative"
-      style={{
-        background: "linear-gradient(135deg, rgba(139,92,246,0.2), rgba(99,102,241,0.15))",
-        border: "1px solid rgba(139,92,246,0.3)",
-        color: "#c4b5fd",
-        boxShadow: "0 0 14px rgba(139,92,246,0.15)",
-      }}
+      className="w-10 h-10 rounded-[13px] flex items-center justify-center text-[13px] font-black shrink-0"
+      style={{ background: tone.bg, border: `1px solid ${tone.border}`, color: tone.color }}
     >
       {initials}
+    </div>
+  );
+}
+
+function StatTile({ icon, label, value, valueColor }: { icon: string; label: string; value: React.ReactNode; valueColor?: string }) {
+  return (
+    <div className="rounded-[14px] px-3 py-2.5 flex flex-col gap-0.5 min-w-0" style={{ background: "#ffffff", border: `1px solid ${BORDER}` }}>
+      <span className="text-[8.5px] font-black uppercase tracking-[0.12em] flex items-center gap-1" style={{ color: SUBTLE }}>
+        <span>{icon}</span> {label}
+      </span>
+      <span className="text-[14px] font-extrabold leading-tight truncate" style={{ color: valueColor || INK }}>{value}</span>
     </div>
   );
 }
@@ -85,17 +124,24 @@ function CompanyAvatar({ name }: { name?: string }) {
 interface Props { open: boolean; onClose: () => void; }
 
 export const InterviewHistoryModal: React.FC<Props> = ({ open, onClose }) => {
-  const [records, setRecords]     = useState<InterviewRecord[]>([]);
-  const [selected, setSelected]   = useState<InterviewRecord | null>(null);
+  const [records, setRecords]       = useState<InterviewRecord[]>([]);
+  const [selected, setSelected]     = useState<InterviewRecord | null>(null);
   const [expandedQA, setExpandedQA] = useState<number | null>(null);
-  const [loading, setLoading]     = useState(false);
+  const [loading, setLoading]       = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [query, setQuery]           = useState("");
+
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const listScrollTop = useRef(0);
 
   useEffect(() => {
     if (!open) return;
     setLoading(true);
     setSelected(null);
     setExpandedQA(null);
+    setQuery("");
+    setConfirmClear(false);
+    listScrollTop.current = 0;
     try {
       window.ghostly.getHistory().then((h: InterviewRecord[]) => {
         setRecords(Array.isArray(h) ? h.sort((a, b) => b.timestamp - a.timestamp) : []);
@@ -104,268 +150,319 @@ export const InterviewHistoryModal: React.FC<Props> = ({ open, onClose }) => {
     } catch { setLoading(false); }
   }, [open]);
 
+  // Opening a session should start at its top; going back should land where
+  // the list was scrolled to instead of jumping to the first row.
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    el.scrollTop = selected ? 0 : listScrollTop.current;
+  }, [selected]);
+
+  const openRecord = (rec: InterviewRecord) => {
+    listScrollTop.current = bodyRef.current?.scrollTop || 0;
+    setSelected(rec);
+    setExpandedQA(rec.qaHistory && rec.qaHistory.length > 0 ? 0 : null);
+  };
+  const closeRecord = () => { setSelected(null); setExpandedQA(null); };
+
+  // Escape steps back: clears an active search, then leaves a session, then
+  // closes the modal. (There's no dimmed backdrop to click any more, so this
+  // is the keyboard equivalent of clicking outside.)
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (selected) closeRecord();
+      else if (query) setQuery("");
+      else onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, selected, query, onClose]);
+
   const handleClearAll = async () => {
     await window.ghostly.saveHistory([]).catch(() => {});
-    setRecords([]); setSelected(null); setConfirmClear(false);
+    setRecords([]); setSelected(null); setConfirmClear(false); setQuery("");
   };
 
   const handleDeleteOne = async (id: string) => {
     const next = records.filter(r => r.id !== id);
     await window.ghostly.saveHistory(next).catch(() => {});
     setRecords(next);
-    if (selected?.id === id) setSelected(null);
+    if (selected?.id === id) closeRecord();
   };
 
+  const q = query.trim().toLowerCase();
+  const filtered = useMemo(() => {
+    if (!q) return records;
+    return records.filter(r =>
+      [r.companyName, r.position, typeStyle(r.interviewType).label, r.model, r.provider, ...(r.qaHistory || []).map(x => x.question)]
+        .filter(Boolean).join(" ").toLowerCase().includes(q)
+    );
+  }, [records, q]);
+  const groups = useMemo(() => groupByDay(filtered), [filtered]);
+  const totals = useMemo(() => ({
+    seconds: records.reduce((n, r) => n + (r.durationSeconds || 0), 0),
+    qa: records.reduce((n, r) => n + (r.qaHistory?.length || 0), 0),
+  }), [records]);
+
+  let cardIndex = 0;
+
   return (
-    <>
-      {/* Backdrop */}
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            key="backdrop"
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[9998]"
-            style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)" }}
-            onClick={onClose}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Modal */}
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            key="modal"
-            initial={{ opacity: 0, scale: 0.94, y: 24 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.94, y: 24 }}
-            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-            className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
-            style={{ pointerEvents: "none", fontFamily: "'Inter', -apple-system, sans-serif" }}
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          key="modal"
+          initial={{ opacity: 0, scale: 0.94, y: 24 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.94, y: 24 }}
+          transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+          style={{ pointerEvents: "none", fontFamily: "'Inter', -apple-system, sans-serif" }}
+        >
+          <div
+            role="dialog"
+            aria-label="Interview history"
+            className="w-full flex flex-col rounded-[26px] overflow-hidden relative"
+            style={{
+              ...GLASS,
+              maxWidth: selected ? "740px" : "450px",
+              maxHeight: "84vh",
+              pointerEvents: "auto",
+              transition: "max-width 0.4s cubic-bezier(0.16, 1, 0.3, 1)",
+            }}
+            onMouseEnter={() => window.ghostly.enableMouse()}
+            onMouseLeave={() => window.ghostly.disableMouse()}
           >
-            <div
-              className="w-full flex flex-col rounded-[26px] overflow-hidden relative"
-              style={{
-                ...GLASS,
-                maxWidth: selected ? "740px" : "450px",
-                maxHeight: "84vh",
-                pointerEvents: "auto",
-                transition: "max-width 0.4s cubic-bezier(0.16, 1, 0.3, 1)",
-              }}
-              onMouseEnter={() => window.ghostly.enableMouse()}
-            >
-              {/* Violet accent top bar */}
-              <div className="h-0.5 w-full shrink-0" style={{ background: "linear-gradient(90deg, transparent, rgba(139,92,246,0.8), rgba(99,102,241,0.6), transparent)" }} />
-
-              {/* ── Header ── */}
-              <div
-                className="flex items-center justify-between px-5 py-4 shrink-0"
-                style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
-              >
-                <div className="flex items-center gap-3">
-                  {selected && (
-                    <button
-                      onClick={() => { setSelected(null); setExpandedQA(null); }}
-                      className="w-8 h-8 flex items-center justify-center rounded-xl transition-all"
-                      style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.4)" }}
-                      onMouseEnter={e => { e.currentTarget.style.background = "rgba(139,92,246,0.12)"; e.currentTarget.style.color = "#a78bfa"; e.currentTarget.style.borderColor = "rgba(139,92,246,0.3)"; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; e.currentTarget.style.color = "rgba(255,255,255,0.4)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; }}
-                    >
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-                    </button>
-                  )}
-                  <div>
-                    <h2 className="text-[16px] font-black leading-tight" style={{ color: "rgba(255,255,255,0.92)" }}>
-                      {selected ? (selected.companyName || "Interview Session") : "Last Interviews"}
-                    </h2>
-                    <p className="text-[10.5px] font-semibold mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>
-                      {selected
-                        ? `${formatDate(selected.timestamp)} · ${formatTime(selected.timestamp)}`
-                        : `${records.length} session${records.length !== 1 ? "s" : ""} saved`}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  {!selected && records.length > 0 && (
-                    confirmClear ? (
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] font-semibold" style={{ color: "rgba(255,255,255,0.4)" }}>Sure?</span>
-                        <button
-                          onClick={handleClearAll}
-                          className="px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all"
-                          style={{ background: "rgba(239,68,68,0.15)", color: "#f87171", border: "1px solid rgba(239,68,68,0.3)" }}
-                        >Yes, Clear</button>
-                        <button
-                          onClick={() => setConfirmClear(false)}
-                          className="px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all"
-                          style={{ background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.5)", border: "1px solid rgba(255,255,255,0.08)" }}
-                        >Cancel</button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => setConfirmClear(true)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all"
-                        style={{ background: "rgba(239,68,68,0.08)", color: "#f87171", border: "1px solid rgba(239,68,68,0.2)" }}
-                        onMouseEnter={e => { e.currentTarget.style.background = "rgba(239,68,68,0.15)"; e.currentTarget.style.borderColor = "rgba(239,68,68,0.35)"; }}
-                        onMouseLeave={e => { e.currentTarget.style.background = "rgba(239,68,68,0.08)"; e.currentTarget.style.borderColor = "rgba(239,68,68,0.2)"; }}
-                      >
-                        🗑 Clear All
-                      </button>
-                    )
-                  )}
+            {/* ── Header ── */}
+            <div className="flex items-center justify-between gap-3 px-5 py-4 shrink-0" style={{ borderBottom: `1px solid ${BORDER}` }}>
+              <div className="flex items-center gap-3 min-w-0">
+                {selected && (
                   <button
-                    onClick={onClose}
-                    className="w-8 h-8 flex items-center justify-center rounded-xl transition-all"
-                    style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.35)" }}
-                    onMouseEnter={e => { e.currentTarget.style.background = "rgba(239,68,68,0.12)"; e.currentTarget.style.color = "#f87171"; e.currentTarget.style.borderColor = "rgba(239,68,68,0.3)"; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; e.currentTarget.style.color = "rgba(255,255,255,0.35)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; }}
+                    onClick={closeRecord}
+                    aria-label="Back to all sessions"
+                    title="Back (Esc)"
+                    className="w-8 h-8 flex items-center justify-center rounded-xl shrink-0 transition-all hover:bg-white"
+                    style={{ background: SURFACE, border: `1px solid ${BORDER}`, color: MUTED }}
                   >
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
                   </button>
+                )}
+                <div className="min-w-0">
+                  <h2 className="text-[16px] font-bold leading-tight truncate" style={{ color: INK }}>
+                    {selected ? (selected.companyName || "Interview Session") : "Last Interviews"}
+                  </h2>
+                  <p className="text-[10.5px] font-semibold mt-0.5 truncate" style={{ color: SUBTLE }}>
+                    {selected
+                      ? `${formatDate(selected.timestamp)} · ${formatTime(selected.timestamp)}`
+                      : loading
+                        ? "Loading…"
+                        : `${records.length} session${records.length !== 1 ? "s" : ""} saved`}
+                  </p>
                 </div>
               </div>
 
-              {/* ── Body ── */}
-              <div
-                className="flex-1 min-h-0 overflow-y-auto"
-                style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(139,92,246,0.25) transparent" }}
+              <button
+                onClick={onClose}
+                aria-label="Close history"
+                title="Close (Esc)"
+                className="w-8 h-8 flex items-center justify-center rounded-xl shrink-0 transition-all hover:bg-white"
+                style={{ background: SURFACE, border: `1px solid ${BORDER}`, color: MUTED }}
               >
-                {loading ? (
-                  <div className="flex flex-col items-center justify-center py-20 gap-3">
-                    <div className="w-8 h-8 rounded-full border-2 border-violet-500/20 border-t-violet-500 animate-spin" />
-                    <span className="text-[12px] font-semibold" style={{ color: "rgba(255,255,255,0.35)" }}>Loading history…</span>
-                  </div>
-                ) : records.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-24 gap-4 text-center px-6">
-                    <div
-                      className="w-16 h-16 rounded-[20px] flex items-center justify-center text-4xl"
-                      style={{
-                        background: "rgba(139,92,246,0.08)",
-                        border: "1px solid rgba(139,92,246,0.2)",
-                        boxShadow: "0 0 24px rgba(139,92,246,0.1)",
-                      }}
-                    >📭</div>
-                    <div>
-                      <p className="text-[15px] font-black" style={{ color: "rgba(255,255,255,0.7)" }}>No interviews yet</p>
-                      <p className="text-[12px] font-medium mt-1 max-w-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.3)" }}>
-                        Complete an interview session and your history will appear here.
-                      </p>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+
+            {/* ── List toolbar: stats + search + clear ── */}
+            {!selected && !loading && records.length > 0 && (
+              <div className="px-4 pt-3 pb-2 shrink-0 flex flex-col gap-2.5">
+                <div
+                  className="flex items-center justify-between rounded-xl px-3.5 h-9 text-[11px] font-semibold"
+                  style={{ background: SURFACE, border: `1px solid ${BORDER}`, color: MUTED }}
+                >
+                  <span>🗂️ <b style={{ color: INK }}>{records.length}</b> session{records.length !== 1 ? "s" : ""}</span>
+                  <span className="w-px h-3.5" style={{ background: BORDER }} />
+                  <span>⏱ <b style={{ color: INK }}>{formatDuration(totals.seconds) || "—"}</b> total</span>
+                  <span className="w-px h-3.5" style={{ background: BORDER }} />
+                  <span>💬 <b style={{ color: INK }}>{totals.qa}</b> Q&amp;A</span>
+                </div>
+
+                {confirmClear ? (
+                  <div
+                    className="flex items-center justify-between gap-2 rounded-xl px-3 h-9"
+                    style={{ background: "#fef2f2", border: "1px solid #fecaca" }}
+                  >
+                    <span className="text-[11px] font-bold truncate" style={{ color: "#b91c1c" }}>
+                      Delete all {records.length} sessions?
+                    </span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        onClick={handleClearAll}
+                        className="px-2.5 py-1 rounded-lg text-[10.5px] font-bold transition-all"
+                        style={{ background: "#dc2626", color: "#ffffff" }}
+                      >Yes, delete all</button>
+                      <button
+                        onClick={() => setConfirmClear(false)}
+                        className="px-2.5 py-1 rounded-lg text-[10.5px] font-bold transition-all"
+                        style={{ background: "#ffffff", color: MUTED, border: `1px solid ${BORDER}` }}
+                      >Cancel</button>
                     </div>
                   </div>
-                ) : selected ? (
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <label className="relative flex-1 flex items-center">
+                      <svg className="absolute left-3 pointer-events-none" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={SUBTLE} strokeWidth="2.5" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+                      <input
+                        type="text"
+                        value={query}
+                        onChange={e => setQuery(e.target.value)}
+                        placeholder="Search company, role or question…"
+                        className="w-full h-9 pl-9 pr-8 rounded-xl text-[12px] font-medium outline-none transition-all focus:bg-white focus:border-[#c7c9f0] focus:shadow-[0_0_0_3px_rgba(109,111,176,0.12)]"
+                        style={{ background: SURFACE, border: `1px solid ${BORDER}`, color: INK }}
+                      />
+                      {query && (
+                        <button
+                          onClick={() => setQuery("")}
+                          aria-label="Clear search"
+                          className="absolute right-2 w-5 h-5 rounded-full flex items-center justify-center hover:bg-white"
+                          style={{ color: SUBTLE }}
+                        >
+                          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        </button>
+                      )}
+                    </label>
+                    <button
+                      onClick={() => setConfirmClear(true)}
+                      aria-label="Clear all history"
+                      title="Clear all history"
+                      className="w-9 h-9 flex items-center justify-center rounded-xl shrink-0 transition-all hover:brightness-95"
+                      style={{ background: "#fef2f2", border: "1px solid #fecaca", fontSize: "13px" }}
+                    >🗑</button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Body ── */}
+            <div ref={bodyRef} className="flex-1 min-h-0 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
+              {loading ? (
+                <div className="flex flex-col items-center justify-center py-20 gap-3">
+                  <div className="w-8 h-8 rounded-full animate-spin" style={{ border: `2px solid ${BORDER}`, borderTopColor: INK }} />
+                  <span className="text-[12px] font-semibold" style={{ color: SUBTLE }}>Loading history…</span>
+                </div>
+              ) : records.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-24 gap-4 text-center px-6">
+                  <div
+                    className="w-16 h-16 rounded-[20px] flex items-center justify-center text-4xl"
+                    style={{ background: "#f0f0fb", border: "1px solid #c7c9f0" }}
+                  >📭</div>
+                  <div>
+                    <p className="text-[15px] font-bold" style={{ color: INK }}>No interviews yet</p>
+                    <p className="text-[12px] font-medium mt-1 max-w-xs leading-relaxed" style={{ color: SUBTLE }}>
+                      Complete an interview session and your history will appear here.
+                    </p>
+                  </div>
+                </div>
+              ) : selected ? (
+                <motion.div key={`detail-${selected.id}`} initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}>
                   <DetailView
                     record={selected}
                     expandedQA={expandedQA}
                     setExpandedQA={setExpandedQA}
                     onDelete={() => handleDeleteOne(selected.id)}
                   />
-                ) : (
-                  /* ── List View ── */
-                  <div className="p-3 flex flex-col gap-2">
-                    {records.map((rec, idx) => {
-                      const ts = typeStyle(rec.interviewType);
-                      const dur = formatDuration(rec.durationSeconds);
-                      return (
-                        <motion.button
-                          key={rec.id}
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: idx * 0.04, duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-                          onClick={() => { setSelected(rec); setExpandedQA(null); }}
-                          className="w-full text-left rounded-[18px] p-4 transition-all outline-none group relative overflow-hidden"
-                          style={{
-                            background: "rgba(255,255,255,0.03)",
-                            border: "1px solid rgba(255,255,255,0.07)",
-                          }}
-                          onMouseEnter={e => {
-                            e.currentTarget.style.background = "rgba(139,92,246,0.06)";
-                            e.currentTarget.style.borderColor = "rgba(139,92,246,0.22)";
-                            e.currentTarget.style.boxShadow = "0 0 20px rgba(139,92,246,0.08)";
-                          }}
-                          onMouseLeave={e => {
-                            e.currentTarget.style.background = "rgba(255,255,255,0.03)";
-                            e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)";
-                            e.currentTarget.style.boxShadow = "none";
-                          }}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            {/* Left */}
-                            <div className="flex items-start gap-3 min-w-0">
-                              <CompanyAvatar name={rec.companyName} />
-                              <div className="min-w-0 pt-0.5">
-                                <p className="text-[13.5px] font-black leading-tight truncate" style={{ color: "rgba(255,255,255,0.88)" }}>
-                                  {rec.companyName || "Interview Session"}
-                                </p>
-                                {rec.position && (
-                                  <p className="text-[11px] font-semibold truncate mt-0.5" style={{ color: "rgba(255,255,255,0.4)" }}>{rec.position}</p>
-                                )}
-                                {/* Feature chips */}
-                                <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
-                                  <span
-                                    className="text-[9.5px] font-black px-2 py-0.5 rounded-full"
-                                    style={{ background: ts.bg, color: ts.color, border: `1px solid ${ts.border}` }}
-                                  >
-                                    {ts.label}
-                                  </span>
-                                  {rec.featuresUsed?.map(f => {
-                                    const fl = FEATURE_LABELS[f];
-                                    return (
-                                      <span
-                                        key={f}
-                                        className="text-[9.5px] font-black px-2 py-0.5 rounded-full flex items-center gap-1"
-                                        style={{ background: fl?.bg, color: fl?.color, border: `1px solid ${fl?.border}` }}
-                                      >
-                                        {fl?.icon} {fl?.label}
-                                      </span>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Right */}
-                            <div className="shrink-0 text-right flex flex-col items-end gap-1">
-                              <span className="text-[12px] font-black" style={{ color: "rgba(255,255,255,0.82)" }}>
-                                {formatDate(rec.timestamp)}
-                              </span>
-                              <span className="text-[10px] font-semibold" style={{ color: "rgba(255,255,255,0.38)" }}>
-                                {formatTime(rec.timestamp)}
-                              </span>
-                              {dur && (
-                                <span
-                                  className="text-[9.5px] font-bold px-2 py-0.5 rounded-full mt-1.5 flex items-center gap-1"
-                                  style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.45)" }}
-                                >
-                                  ⏱ {dur}
-                                </span>
-                              )}
-                              {rec.qaHistory && rec.qaHistory.length > 0 && (
-                                <span className="text-[9.5px] font-semibold mt-0.5" style={{ color: "rgba(167,139,250,0.55)" }}>
-                                  {rec.qaHistory.length} Q&A
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Arrow indicator */}
-                          <div
-                            className="absolute right-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
-                            style={{ color: "rgba(167,139,250,0.6)" }}
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-                          </div>
-                        </motion.button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+                </motion.div>
+              ) : (
+                <motion.div key="list" initial={{ opacity: 0, x: -18 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }} className="px-3 pb-3 pt-1 flex flex-col gap-3">
+                  {filtered.length === 0 ? (
+                    <div className="flex flex-col items-center gap-2.5 py-14 text-center px-6">
+                      <span className="text-3xl">🔎</span>
+                      <p className="text-[13px] font-bold" style={{ color: INK }}>No sessions match “{query.trim()}”</p>
+                      <button
+                        onClick={() => setQuery("")}
+                        className="text-[11px] font-bold px-3 py-1.5 rounded-xl transition-all hover:bg-white"
+                        style={{ background: SURFACE, border: `1px solid ${BORDER}`, color: MUTED }}
+                      >Clear search</button>
+                    </div>
+                  ) : (
+                    groups.map(group => (
+                      <div key={group.label}>
+                        <p className="px-1 pb-1.5 text-[9px] font-black uppercase tracking-[0.14em]" style={{ color: SUBTLE }}>
+                          {group.label}
+                        </p>
+                        <div className="flex flex-col gap-2">
+                          {group.items.map(rec => (
+                            <SessionCard key={rec.id} rec={rec} index={cardIndex++} onOpen={() => openRecord(rec)} />
+                          ))}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </motion.div>
+              )}
             </div>
-          </motion.div>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+};
+
+/* ─── Session card (list row) ─── */
+const SessionCard: React.FC<{ rec: InterviewRecord; index: number; onOpen: () => void }> = ({ rec, index, onOpen }) => {
+  const tone = typeStyle(rec.interviewType);
+  const dur = formatDuration(rec.durationSeconds);
+  const qaCount = rec.qaHistory?.length || 0;
+
+  return (
+    <motion.button
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: Math.min(index, 8) * 0.035, duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+      whileTap={{ scale: 0.99 }}
+      onClick={onOpen}
+      className="w-full text-left rounded-[16px] px-3.5 py-3 outline-none group flex items-center gap-3 border border-[#e8e8ee] bg-[#f7f7fa] transition-all hover:bg-white hover:border-[#c7c9f0] hover:shadow-[0_6px_18px_rgba(109,111,176,0.14)] focus-visible:border-[#c7c9f0]"
+    >
+      <CompanyAvatar name={rec.companyName} tone={tone} />
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-baseline justify-between gap-2">
+          <p className="text-[13px] font-bold leading-tight truncate" style={{ color: INK }}>
+            {rec.companyName || "Interview Session"}
+          </p>
+          <span className="text-[10px] font-semibold shrink-0" style={{ color: SUBTLE }}>{formatTime(rec.timestamp)}</span>
+        </div>
+        {rec.position && (
+          <p className="text-[11px] font-medium truncate mt-0.5" style={{ color: MUTED }}>{rec.position}</p>
         )}
-      </AnimatePresence>
-    </>
+        <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+          <span
+            className="text-[9.5px] font-black px-2 py-0.5 rounded-full"
+            style={{ background: tone.bg, color: tone.color, border: `1px solid ${tone.border}` }}
+          >{tone.label}</span>
+          {rec.featuresUsed?.map(f => {
+            const fl = FEATURE_LABELS[f];
+            if (!fl) return null;
+            return (
+              <span
+                key={f}
+                title={fl.label}
+                className="w-[18px] h-[18px] rounded-full flex items-center justify-center text-[9px]"
+                style={{ background: fl.bg, border: `1px solid ${fl.border}` }}
+              >{fl.icon}</span>
+            );
+          })}
+          {dur && <span className="text-[10px] font-semibold" style={{ color: MUTED }}>⏱ {dur}</span>}
+          {qaCount > 0 && <span className="text-[10px] font-semibold" style={{ color: ACCENT }}>💬 {qaCount}</span>}
+        </div>
+      </div>
+
+      <svg
+        className="shrink-0 opacity-30 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all"
+        style={{ color: ACCENT }}
+        width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
+      ><path d="M9 6l6 6-6 6"/></svg>
+    </motion.button>
   );
 };
 
@@ -378,7 +475,8 @@ const DetailView: React.FC<{
 }> = ({ record, expandedQA, setExpandedQA, onDelete }) => {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
-  const ts = typeStyle(record.interviewType);
+  const tone = typeStyle(record.interviewType);
+  const qaCount = record.qaHistory?.length || 0;
 
   const copyText = async (text: string, idx: number) => {
     try {
@@ -388,76 +486,51 @@ const DetailView: React.FC<{
     } catch {}
   };
 
-  const infoRows = [
-    { label: "Company",  value: record.companyName || "—",    icon: "🏢" },
-    { label: "Position", value: record.position    || "—",    icon: "💼" },
-    { label: "Date",     value: formatDate(record.timestamp), icon: "📅" },
-    { label: "Time",     value: formatTime(record.timestamp), icon: "🕐" },
-    { label: "Type",     value: ts.label,                     icon: "📂" },
-    { label: "Duration", value: formatDuration(record.durationSeconds) || "—", icon: "⏱" },
-    { label: "AI Model", value: record.model,                 icon: "🤖" },
-    { label: "Provider", value: record.provider,              icon: "⚡" },
+  // The date/time already sits under the title in the header, and each
+  // exchange below is tagged with its own feature, so the summary keeps only
+  // what isn't shown anywhere else.
+  const facts = [
+    { label: "Position", value: record.position || "—", icon: "💼" },
+    { label: "AI Model", value: [record.provider, record.model].filter(Boolean).join(" · ") || "—", icon: "🤖" },
   ];
 
   return (
     <div className="p-4 flex flex-col gap-4">
-      {/* ── Session info ── */}
-      <div
-        className="rounded-[20px] p-4 flex flex-col gap-4"
-        style={{
-          background: "rgba(255,255,255,0.03)",
-          border: "1px solid rgba(255,255,255,0.07)",
-        }}
-      >
-        {/* Grid of info fields */}
-        <div className="grid grid-cols-2 gap-x-6 gap-y-3.5">
-          {infoRows.map(({ label, value, icon }) => (
-            <div key={label}>
-              <p className="text-[8.5px] font-black uppercase tracking-[0.12em] mb-1 flex items-center gap-1" style={{ color: "rgba(255,255,255,0.28)" }}>
+      {/* ── Session summary ── */}
+      <div className="rounded-[20px] p-3.5 flex flex-col gap-3.5" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
+        <div className="grid grid-cols-3 gap-2">
+          <StatTile icon="⏱" label="Duration" value={formatDuration(record.durationSeconds) || "—"} />
+          <StatTile icon="💬" label="Exchanges" value={qaCount} />
+          <StatTile icon="📂" label="Type" value={tone.label} valueColor={tone.color} />
+        </div>
+
+        <div className="grid grid-cols-2 gap-x-6 gap-y-3 pt-3" style={{ borderTop: `1px solid ${BORDER}` }}>
+          {facts.map(({ label, value, icon }) => (
+            <div key={label} className="min-w-0">
+              <p className="text-[8.5px] font-black uppercase tracking-[0.12em] mb-1 flex items-center gap-1" style={{ color: SUBTLE }}>
                 <span>{icon}</span> {label}
               </p>
-              <p className="text-[12.5px] font-bold truncate leading-tight" style={{ color: "rgba(255,255,255,0.82)" }}>{value}</p>
+              <p className="text-[12.5px] font-bold truncate leading-tight" style={{ color: INK }} title={value}>{value}</p>
             </div>
           ))}
         </div>
 
-        {/* Features used */}
-        {record.featuresUsed && record.featuresUsed.length > 0 && (
-          <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "14px" }}>
-            <p className="text-[8.5px] font-black uppercase tracking-[0.12em] mb-2.5" style={{ color: "rgba(255,255,255,0.28)" }}>
-              Features Used
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {record.featuresUsed.map(f => {
-                const fl = FEATURE_LABELS[f];
-                return (
-                  <span
-                    key={f}
-                    className="flex items-center gap-1.5 text-[11px] font-bold px-3 py-1.5 rounded-xl"
-                    style={{ background: fl?.bg, color: fl?.color, border: `1px solid ${fl?.border}` }}
-                  >
-                    {fl?.icon} {fl?.label}
-                  </span>
-                );
-              })}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* ── Q&A History ── */}
       {record.qaHistory && record.qaHistory.length > 0 ? (
         <div className="flex flex-col gap-2.5">
           <div className="flex items-center justify-between px-1">
-            <p className="text-[10px] font-black uppercase tracking-[0.12em]" style={{ color: "rgba(255,255,255,0.35)" }}>
+            <p className="text-[10px] font-black uppercase tracking-[0.12em]" style={{ color: MUTED }}>
               Q&A History
             </p>
-            <span
-              className="text-[9.5px] font-bold px-2.5 py-1 rounded-full"
-              style={{ background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.25)", color: "#a78bfa" }}
+            <button
+              onClick={() => setExpandedQA(expandedQA === null ? 0 : null)}
+              className="text-[10px] font-bold px-2.5 py-1 rounded-full transition-all hover:bg-white"
+              style={{ background: "#f0f0fb", border: "1px solid #c7c9f0", color: "#5b5da8" }}
             >
-              {record.qaHistory.length} exchange{record.qaHistory.length !== 1 ? "s" : ""}
-            </span>
+              {expandedQA === null ? "Open first" : "Collapse"}
+            </button>
           </div>
 
           {record.qaHistory.map((qa, i) => {
@@ -469,13 +542,17 @@ const DetailView: React.FC<{
                 layout
                 className="rounded-[16px] overflow-hidden transition-all"
                 style={{
-                  background: isOpen ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.03)",
-                  border: isOpen ? `1px solid ${feat.border}` : "1px solid rgba(255,255,255,0.07)",
-                  boxShadow: isOpen ? `0 0 16px ${feat.bg}` : "none",
+                  background: isOpen ? "#ffffff" : SURFACE,
+                  border: isOpen ? `1px solid ${feat.border}` : `1px solid ${BORDER}`,
+                  boxShadow: isOpen ? "0 6px 18px rgba(109,111,176,0.10)" : "none",
                 }}
               >
                 {/* Question header */}
-                <button className="w-full flex items-start gap-3 p-4 text-left outline-none" onClick={() => setExpandedQA(isOpen ? null : i)}>
+                <button
+                  className="w-full flex items-start gap-3 p-3.5 text-left outline-none"
+                  aria-expanded={isOpen}
+                  onClick={() => setExpandedQA(isOpen ? null : i)}
+                >
                   <div
                     className="w-8 h-8 rounded-[10px] flex items-center justify-center text-[14px] shrink-0 mt-0.5"
                     style={{ background: feat.bg, border: `1px solid ${feat.border}` }}
@@ -484,18 +561,18 @@ const DetailView: React.FC<{
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="text-[9px] font-black uppercase tracking-widest" style={{ color: feat.color }}>{feat.label}</span>
-                      <span className="text-[9px] font-semibold" style={{ color: "rgba(255,255,255,0.28)" }}>{formatTime(qa.timestamp)}</span>
+                      <span className="text-[9px] font-black uppercase tracking-widest" style={{ color: feat.color }}>Q{i + 1} · {feat.label}</span>
+                      <span className="text-[9px] font-semibold" style={{ color: SUBTLE }}>{formatTime(qa.timestamp)}</span>
                     </div>
-                    <p className="text-[12.5px] font-semibold leading-snug line-clamp-2" style={{ color: "rgba(255,255,255,0.78)" }}>{qa.question}</p>
+                    <p className="text-[12.5px] font-semibold leading-snug line-clamp-2" style={{ color: "#374151" }}>{qa.question}</p>
                   </div>
                   <div
                     className="shrink-0 mt-1.5 w-6 h-6 flex items-center justify-center rounded-full transition-all"
                     style={{
                       transform: isOpen ? "rotate(180deg)" : "none",
-                      background: isOpen ? feat.bg : "rgba(255,255,255,0.05)",
-                      border: isOpen ? `1px solid ${feat.border}` : "1px solid rgba(255,255,255,0.08)",
-                      color: isOpen ? feat.color : "rgba(255,255,255,0.3)",
+                      background: isOpen ? feat.bg : "#ffffff",
+                      border: isOpen ? `1px solid ${feat.border}` : `1px solid ${BORDER}`,
+                      color: isOpen ? feat.color : SUBTLE,
                     }}
                   >
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
@@ -512,38 +589,38 @@ const DetailView: React.FC<{
                       initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }}
                       exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.22, ease: "easeInOut" }}
                     >
-                      <div className="px-4 pb-4 flex flex-col gap-2.5">
+                      <div className="px-3.5 pb-3.5 flex flex-col gap-2.5">
                         {/* Full question */}
                         <div
                           className="rounded-[13px] p-3.5"
                           style={{
-                            background: "rgba(251,191,36,0.06)",
-                            border: "1px solid rgba(251,191,36,0.2)",
-                            borderLeft: "3px solid rgba(251,191,36,0.6)",
+                            background: "#fffbeb",
+                            border: "1px solid #fde68a",
+                            borderLeft: "3px solid #f59e0b",
                           }}
                         >
-                          <p className="text-[8.5px] font-black uppercase tracking-widest mb-2" style={{ color: "rgba(251,191,36,0.6)" }}>🎙️ Full Question</p>
-                          <p className="text-[12.5px] leading-relaxed font-medium" style={{ color: "rgba(255,255,255,0.75)" }}>{qa.question}</p>
+                          <p className="text-[8.5px] font-black uppercase tracking-widest mb-2" style={{ color: "#b45309" }}>🎙️ Full Question</p>
+                          <p className="text-[12.5px] leading-relaxed font-medium" style={{ color: "#374151" }}>{qa.question}</p>
                         </div>
 
                         {/* AI Answer */}
                         <div
                           className="rounded-[13px] p-3.5 relative"
                           style={{
-                            background: "rgba(139,92,246,0.07)",
-                            border: "1px solid rgba(139,92,246,0.2)",
-                            borderLeft: "3px solid rgba(139,92,246,0.6)",
+                            background: "#f0f0fb",
+                            border: "1px solid #c7c9f0",
+                            borderLeft: "3px solid #6d6fb0",
                           }}
                         >
                           <div className="flex items-center justify-between mb-2.5">
-                            <p className="text-[8.5px] font-black uppercase tracking-widest" style={{ color: "rgba(167,139,250,0.7)" }}>🤖 Ghostly AI Answer</p>
+                            <p className="text-[8.5px] font-black uppercase tracking-widest" style={{ color: "#5b5da8" }}>🤖 Ghostly AI Answer</p>
                             <button
                               onClick={() => copyText(qa.answer, i)}
                               className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[9.5px] font-bold transition-all"
                               style={{
-                                background: copiedIdx === i ? "rgba(34,197,94,0.12)" : "rgba(255,255,255,0.06)",
-                                border: copiedIdx === i ? "1px solid rgba(34,197,94,0.3)" : "1px solid rgba(255,255,255,0.09)",
-                                color: copiedIdx === i ? "#4ade80" : "rgba(255,255,255,0.5)",
+                                background: copiedIdx === i ? "#f0fdf4" : "#ffffff",
+                                border: copiedIdx === i ? "1px solid #bbf7d0" : `1px solid ${BORDER}`,
+                                color: copiedIdx === i ? "#16a34a" : MUTED,
                               }}
                             >
                               {copiedIdx === i ? "✓ Copied!" : "Copy"}
@@ -552,11 +629,10 @@ const DetailView: React.FC<{
                           <p
                             className="text-[12.5px] font-medium leading-relaxed whitespace-pre-wrap"
                             style={{
-                              color: "rgba(255,255,255,0.72)",
+                              color: "#374151",
                               maxHeight: "260px",
                               overflowY: "auto",
                               scrollbarWidth: "thin",
-                              scrollbarColor: "rgba(139,92,246,0.25) transparent",
                             }}
                           >{qa.answer}</p>
                         </div>
@@ -571,40 +647,34 @@ const DetailView: React.FC<{
       ) : (
         <div
           className="flex flex-col items-center gap-3 py-10 text-center rounded-[18px]"
-          style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
+          style={{ background: SURFACE, border: `1px solid ${BORDER}` }}
         >
           <span className="text-3xl">📝</span>
-          <p className="text-[12px] font-semibold" style={{ color: "rgba(255,255,255,0.3)" }}>No Q&A pairs recorded for this session.</p>
+          <p className="text-[12px] font-semibold" style={{ color: SUBTLE }}>No Q&A pairs recorded for this session.</p>
         </div>
       )}
 
-      {/* ── Delete button ── */}
-      <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "16px" }}>
+      {/* ── Delete ── */}
+      <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: "14px" }}>
         {confirmDelete ? (
           <div className="flex items-center gap-3 justify-center">
-            <span className="text-[12px] font-semibold" style={{ color: "rgba(255,255,255,0.4)" }}>Delete session forever?</span>
+            <span className="text-[12px] font-semibold" style={{ color: MUTED }}>Delete session forever?</span>
             <button
               onClick={() => { onDelete(); setConfirmDelete(false); }}
               className="px-4 py-2 rounded-xl text-[11px] font-bold transition-all"
-              style={{ background: "rgba(239,68,68,0.15)", color: "#f87171", border: "1px solid rgba(239,68,68,0.3)" }}
+              style={{ background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca" }}
             >Yes, Delete</button>
             <button
               onClick={() => setConfirmDelete(false)}
               className="px-4 py-2 rounded-xl text-[11px] font-bold transition-all"
-              style={{ background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.5)", border: "1px solid rgba(255,255,255,0.08)" }}
+              style={{ background: SURFACE, color: MUTED, border: `1px solid ${BORDER}` }}
             >Cancel</button>
           </div>
         ) : (
           <button
             onClick={() => setConfirmDelete(true)}
-            className="w-full py-2.5 rounded-[13px] text-[12px] font-bold transition-all flex items-center justify-center gap-2"
-            style={{
-              background: "rgba(239,68,68,0.07)",
-              color: "#f87171",
-              border: "1px solid rgba(239,68,68,0.18)",
-            }}
-            onMouseEnter={e => { e.currentTarget.style.background = "rgba(239,68,68,0.14)"; e.currentTarget.style.borderColor = "rgba(239,68,68,0.35)"; }}
-            onMouseLeave={e => { e.currentTarget.style.background = "rgba(239,68,68,0.07)"; e.currentTarget.style.borderColor = "rgba(239,68,68,0.18)"; }}
+            className="w-full py-2 rounded-[13px] text-[11.5px] font-bold transition-all flex items-center justify-center gap-2 hover:bg-[#fef2f2]"
+            style={{ color: "#dc2626", border: "1px solid #fecaca", background: "#ffffff" }}
           >
             🗑 Delete This Session
           </button>

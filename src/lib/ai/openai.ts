@@ -1,4 +1,5 @@
 import type { AIProvider, AIRequestOptions } from "./types";
+import { rateLimitError } from "./types";
 
 export class OpenAIProvider implements AIProvider {
   name = "openai";
@@ -13,7 +14,7 @@ export class OpenAIProvider implements AIProvider {
   }
 
   async *streamSolution(options: AIRequestOptions): AsyncGenerator<string> {
-    const { base64Image, prompt, messages = [], model, apiKey, maxTokens = 4096 } = options;
+    const { base64Image, prompt, messages = [], model, apiKey, maxTokens = 4096, signal } = options;
 
     const imageUrl = base64Image?.startsWith("data:")
       ? base64Image
@@ -46,18 +47,24 @@ export class OpenAIProvider implements AIProvider {
       body: JSON.stringify({
         model,
         max_tokens: maxTokens,
+        // Every other provider in this codebase explicitly sets a low/moderate
+        // temperature (~0.4-0.7) for focused answers — this was the only one
+        // left at the API's own default (1.0), making OpenAI answers
+        // noticeably more random than the identical prompt on any other provider.
+        temperature: 0.5,
         stream: true,
         messages: apiMessages,
       }),
+      signal,
     });
 
     if (!response.ok) {
       const err = await response
         .json()
         .catch(() => ({ error: { message: response.statusText } }));
-      throw new Error(
-        `OpenAI API error: ${err.error?.message || response.statusText}`,
-      );
+      const message = `OpenAI API error: ${err.error?.message || response.statusText}`;
+      if (response.status === 429) throw rateLimitError(message);
+      throw new Error(message);
     }
 
     const reader = response.body!.getReader();

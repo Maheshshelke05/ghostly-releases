@@ -1,66 +1,124 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Ad, useStore } from "../store/useStore";
 import { InterviewHistoryModal } from "../components/InterviewHistoryModal";
+import { HomeSettingsPanel } from "../components/HomeSettingsPanel";
+import { JobPortalModal, JobPortalPreview, BriefcaseIcon, JOB_PORTAL_URL } from "../components/JobPortalModal";
+import { AudioDiagnostics } from "../components/AudioDiagnostics";
+import { AI_PROVIDERS } from "./ApiSetupPage";
+import { activeProviderKey, isProviderDisabled } from "../lib/providerState";
 
-const SHORTCUTS = [
-  { keys: "Ctrl+E",  label: "Screenshot", color: "rgba(139,92,246,0.15)", border: "rgba(139,92,246,0.3)", textColor: "#a78bfa" },
-  { keys: "Ctrl+0",  label: "Send AI",    color: "rgba(34,197,94,0.1)", border: "rgba(34,197,94,0.25)", textColor: "#4ade80" },
-  { keys: "Ctrl+N",  label: "Next Q",     color: "rgba(59,130,246,0.1)", border: "rgba(59,130,246,0.25)", textColor: "#60a5fa" },
-  { keys: "Ctrl+B",  label: "Show/Hide",  color: "rgba(251,191,36,0.08)", border: "rgba(251,191,36,0.22)", textColor: "#fbbf24" },
-  { keys: "Ctrl+G",  label: "Start Over", color: "rgba(239,68,68,0.08)", border: "rgba(239,68,68,0.2)", textColor: "#f87171" },
-  { keys: "Ctrl+↵",  label: "Ask AI",     color: "rgba(139,92,246,0.12)", border: "rgba(139,92,246,0.28)", textColor: "#c4b5fd" },
-];
+// Same light palette as LoginPage.tsx. Layout: greeting + readiness chips, the one
+// primary action (Start Interview), History / Job Portal, then a Tools & help grid
+// (audio test, support, blog, demo). API keys, shortcuts and updates stay in Settings.
+const INK = "#15162b";
+const SUBTLE = "#6b7280";
+const BORDER = "#e8e8ee";
+const SURFACE = "#f7f7fa";
+const FAINT = "#9ca3af";
 
-const escapeHtml = (v: string) =>
-  v.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] || c));
+const MoveIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8b8fa3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="5 9 2 12 5 15" /><polyline points="9 5 12 2 15 5" /><polyline points="15 19 12 22 9 19" /><polyline points="19 9 22 12 19 15" />
+    <line x1="2" y1="12" x2="22" y2="12" /><line x1="12" y1="2" x2="12" y2="22" />
+  </svg>
+);
+const GearIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8b8fa3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="3" />
+    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+  </svg>
+);
+const CloseIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+  </svg>
+);
 
-const AdNetworkPlacement: React.FC<{ ad: Ad }> = ({ ad }) => {
-  const [reloadKey] = useState(() => `${ad.id}-${Date.now()}`);
-  const safeContainerId = (ad.container_id || "").replace(/[^\w-]/g, "");
-  const safeScriptUrl = ad.script_url?.startsWith("https://") || ad.script_url?.startsWith("http://") ? ad.script_url : "";
-  if (!safeContainerId || !safeScriptUrl) return null;
-  const srcDoc = `<!doctype html><html><head><meta charset="utf-8"/><style>html,body{margin:0;padding:0;width:100%;min-height:118px;overflow:hidden;background:transparent;}body{display:flex;align-items:center;justify-content:center;}#${safeContainerId}{width:100%;min-height:118px;}</style></head><body><div id="${safeContainerId}"></div><script async data-cfasync="false" src="${escapeHtml(safeScriptUrl)}"></script></body></html>`;
+const ExternalArrow = () => (
+  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M7 17 17 7M8 7h9v9" />
+  </svg>
+);
+
+const CONTAINER = { hidden: {}, show: { transition: { staggerChildren: 0.05, delayChildren: 0.12 } } };
+const ITEM = { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0, transition: { duration: 0.32, ease: [0.16, 1, 0.3, 1] as any } } };
+
+type ChipTone = "ok" | "warn" | "off";
+const CHIP_TONES: Record<ChipTone, { bg: string; border: string; text: string; dot: string }> = {
+  ok:   { bg: "#f0fdf4", border: "#bbf7d0", text: "#15803d", dot: "#22c55e" },
+  warn: { bg: "#fffbeb", border: "#fde68a", text: "#b45309", dot: "#f59e0b" },
+  off:  { bg: "#f2f3f6", border: "#e8e8ee", text: "#6b7280", dot: "#9ca3af" },
+};
+
+const StatusChip: React.FC<{ tone: ChipTone; label: string; value: string; onClick?: () => void; title?: string }> = ({ tone, label, value, onClick, title }) => {
+  const c = CHIP_TONES[tone];
+  const Tag: any = onClick ? "button" : "div";
   return (
-    <iframe key={reloadKey} title="Sponsored ad" srcDoc={srcDoc}
-      sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
-      className="mx-3 mt-2 block w-[calc(100%-24px)] rounded-[14px] border-0"
-      style={{ height: "124px" }}
-    />
+    <Tag
+      onClick={onClick}
+      title={title}
+      className={`flex-1 min-w-0 flex items-center gap-2 px-3 h-9 rounded-xl text-left outline-none ${onClick ? "transition-transform hover:-translate-y-px active:scale-[0.98]" : ""}`}
+      style={{ background: c.bg, border: `1px solid ${c.border}` }}
+    >
+      <span className="relative flex w-2 h-2 shrink-0">
+        {tone === "ok" && <span className="absolute inset-0 rounded-full animate-ping opacity-50" style={{ background: c.dot }} />}
+        <span className="relative w-2 h-2 rounded-full" style={{ background: c.dot }} />
+      </span>
+      <span className="min-w-0 leading-tight">
+        <span className="block text-[8px] font-black uppercase tracking-[0.12em]" style={{ color: c.text, opacity: 0.7 }}>{label}</span>
+        <span className="block text-[10.5px] font-bold truncate" style={{ color: c.text }}>{value}</span>
+      </span>
+    </Tag>
   );
 };
 
+const ToolTile: React.FC<{ icon: React.ReactNode; title: string; desc: string; external?: boolean; onClick: () => void }> = ({ icon, title, desc, external, onClick }) => (
+  <motion.button
+    whileHover={{ y: -1.5 }}
+    whileTap={{ scale: 0.98 }}
+    onClick={onClick}
+    className="group flex items-center gap-2.5 px-2.5 h-[52px] rounded-2xl text-left outline-none transition-shadow hover:shadow-[0_8px_20px_rgba(20,20,40,0.08)] focus-visible:ring-2 focus-visible:ring-[#c7c9f0]"
+    style={{ background: SURFACE, border: `1px solid ${BORDER}` }}
+  >
+    <span className="w-8 h-8 rounded-[10px] flex items-center justify-center text-[15px] shrink-0" style={{ background: "#fff", border: `1px solid ${BORDER}` }}>{icon}</span>
+    <span className="min-w-0 flex-1 leading-tight">
+      <span className="block text-[11.5px] font-bold" style={{ color: INK }}>{title}</span>
+      <span className="block text-[9.5px] font-medium truncate" style={{ color: FAINT }}>{desc}</span>
+    </span>
+    {external && <span className="shrink-0 opacity-30 group-hover:opacity-80 transition-opacity" style={{ color: INK }}><ExternalArrow /></span>}
+  </motion.button>
+);
+
 export const HomePage: React.FC = () => {
-  const { setAppScreen, user, ads, setUser, setAds } = useStore();
-  const [checkStatus, setCheckStatus] = useState<"idle" | "checking" | "latest">("idle");
+  const { setAppScreen, user, ads, setUser, setAds, setLoginError, settings } = useStore();
   const [startStatus, setStartStatus] = useState<"idle" | "syncing">("idle");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyCount, setHistoryCount] = useState(0);
-  const version = window.ghostly.getVersion();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [jobOpen, setJobOpen] = useState(false);
+  const [audioOpen, setAudioOpen] = useState(false);
+
+  // Readiness shown before the user starts: is there a usable AI key / Deepgram key?
+  const provider = AI_PROVIDERS.find((p) => p.id === settings.activeProvider);
+  const aiTone: ChipTone = isProviderDisabled(settings, settings.activeProvider) ? "off" : activeProviderKey(settings) ? "ok" : "warn";
+  const aiValue = aiTone === "ok" ? provider?.label || "Ready" : aiTone === "off" ? `${provider?.label || "AI"} is off` : "Add an AI key";
+  const hasDeepgram = !!(settings.deepgramApiKey?.trim() || (import.meta as any).env?.VITE_DEEPGRAM_API_KEY);
 
   const activeAd = ads.find((a) => a.is_active) || null;
   const [gateAd, setGateAd] = useState<Ad | null>(null);
   const displayAd = gateAd || activeAd;
   const [adGate, setAdGate] = useState(false);
   const [adClicked, setAdClicked] = useState(false);
-  const [skipCountdown, setSkipCountdown] = useState(5);
+  const continueRef = useRef<HTMLButtonElement>(null);
 
+  // Continue only exists once the sponsor link has been opened — no timer bypass.
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
-    if (adGate) {
-      setSkipCountdown(5);
-      timer = setInterval(() => {
-        setSkipCountdown((c) => {
-          if (c <= 1) {
-            clearInterval(timer);
-            return 0;
-          }
-          return c - 1;
-        });
-      }, 1000);
+    if (adClicked) {
+      const t = setTimeout(() => continueRef.current?.focus(), 250);
+      return () => clearTimeout(t);
     }
-    return () => { if (timer) clearInterval(timer); };
-  }, [adGate]);
+  }, [adClicked]);
 
   const getCachedAds = async () => {
     const stateAds = useStore.getState().ads;
@@ -74,6 +132,7 @@ export const HomePage: React.FC = () => {
     try {
       const res = await fetch(`${import.meta.env.VITE_API_URL}/subscription`, {
         headers: { Authorization: `Bearer ${user.idToken}` },
+        signal: AbortSignal.timeout(10000),
       });
       if (res.status === 401 || res.status === 403) {
         await window.ghostly.logoutUser(); setUser(null); setAds([]); setAppScreen("login");
@@ -98,12 +157,14 @@ export const HomePage: React.FC = () => {
       const latestActiveAd = latestAds.find((a: any) => a.is_active) || null;
       if (!latestActiveAd) { setGateAd(null); setAppScreen("interview-setup"); return; }
       setGateAd(latestActiveAd); setAdGate(true); setAdClicked(false);
-    } catch (error: any) { alert(error.message || "Please login again."); }
+    } catch (error: any) {
+      setLoginError(error.message || "Please login again.");
+    }
     finally { setStartStatus("idle"); }
   };
 
   const handleContinueAfterAd = () => { setAdGate(false); setGateAd(null); setAppScreen("interview-setup"); };
-  const handleAdClick = () => { if (displayAd?.cta_url) window.ghostly.openExternal(displayAd.cta_url); setAdClicked(true); };
+  const handleAdClick = () => { window.ghostly.openExternal(JOB_PORTAL_URL); setAdClicked(true); };
 
   useEffect(() => {
     window.ghostly.getHistory().then((h: any[]) => setHistoryCount(Array.isArray(h) ? h.length : 0)).catch(() => {});
@@ -112,431 +173,194 @@ export const HomePage: React.FC = () => {
     if (!historyOpen) window.ghostly.getHistory().then((h: any[]) => setHistoryCount(Array.isArray(h) ? h.length : 0)).catch(() => {});
   }, [historyOpen]);
 
-  useEffect(() => {
-    window.ghostly.enableMouse();
-  }, [historyOpen]);
+  useEffect(() => { window.ghostly.enableMouse(); }, [historyOpen, settingsOpen, adGate, jobOpen, audioOpen]);
 
-  const handleCheckUpdate = () => {
-    setCheckStatus("checking");
-    window.ghostly.checkForUpdates();
-    setTimeout(() => setCheckStatus((s) => (s === "checking" ? "latest" : s)), 8000);
-  };
   const handleLogout = async () => { await window.ghostly.logoutUser(); setUser(null); setAds([]); setAppScreen("login"); };
 
   return (
     <div
-      className="h-screen w-full flex items-center justify-center px-3 py-2 overflow-y-auto"
+      className="h-screen w-full flex items-center justify-center overflow-hidden"
       style={{ background: "transparent", pointerEvents: "none", fontFamily: "'Inter', -apple-system, sans-serif", userSelect: "none" }}
     >
-      {/* Ambient glow */}
-      <div
-        className="fixed inset-0 pointer-events-none"
-        style={{
-          background: "radial-gradient(ellipse 80% 60% at 50% 0%, rgba(139,92,246,0.09) 0%, transparent 60%)",
-        }}
-      />
-
       <motion.div
         initial={{ opacity: 0, y: 12, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.38, ease: [0.16, 1, 0.3, 1] }}
-        className="w-full max-w-[310px] flex flex-col gap-2 relative z-10"
-        style={{ pointerEvents: "auto" }}
+        transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+        className="w-full max-w-[400px] flex flex-col"
+        style={{
+          pointerEvents: "auto",
+          background: "#ffffff",
+          borderRadius: "22px",
+          border: `1px solid ${BORDER}`,
+          boxShadow: "0 24px 60px rgba(20,20,40,0.28), 0 2px 8px rgba(20,20,40,0.08)",
+          overflow: "hidden",
+        }}
         onMouseEnter={() => window.ghostly.enableMouse()}
       >
-        {/* ── Header ── */}
-        <div className="flex items-center justify-between px-0.5">
-          <div className="flex items-center gap-2.5">
-            {/* Ghost icon */}
-            <div className="relative shrink-0">
-              <motion.div
-                animate={{ y: [0, -3, 0] }}
-                transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-                className="w-10 h-10 rounded-[13px] flex items-center justify-center text-[20px]"
-                style={{
-                  background: "linear-gradient(135deg, rgba(139,92,246,0.2) 0%, rgba(99,102,241,0.12) 100%)",
-                  border: "1.5px solid rgba(139,92,246,0.3)",
-                  boxShadow: "0 0 20px rgba(139,92,246,0.2), 0 4px 12px rgba(0,0,0,0.4)",
-                }}
-              >
-                👻
-              </motion.div>
-              <motion.span
-                animate={{ scale: [1, 1.4, 1], opacity: [1, 0.6, 1] }}
-                transition={{ duration: 2, repeat: Infinity }}
-                className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full"
-                style={{ background: "#22c55e", border: "2px solid #0d0d14", boxShadow: "0 0 8px rgba(34,197,94,0.7)" }}
-              />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-[16px] font-black tracking-tight text-white leading-none">Ghotly AI</h1>
-                <span
-                  className="px-1.5 py-0.5 rounded-full text-[8px] font-black"
-                  style={{ background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.3)", color: "#a78bfa" }}
-                >
-                  v{version}
-                </span>
-              </div>
-              <p className="text-[9px] font-medium mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>
-                Stealth AI Copilot
-              </p>
-            </div>
+        {/* ── Header: icon + name + version (left), move/settings/close (right) ── */}
+        <div
+          className="flex items-center justify-between px-4 py-2.5"
+          style={{ WebkitAppRegion: "drag", borderBottom: `1px solid ${BORDER}` } as React.CSSProperties}
+        >
+          <div className="flex items-center gap-1.5">
+            <span style={{ fontSize: "15px", lineHeight: 1 }}>👻</span>
+            <span className="text-[12px] font-bold" style={{ color: INK }}>Ghotly AI</span>
+            <span className="px-1.5 py-0.5 rounded-full text-[8px] font-black" style={{ background: "#f2f3f6", color: SUBTLE }}>
+              v{window.ghostly.getVersion()}
+            </span>
           </div>
-          {/* Quit */}
-          <button
-            onClick={() => window.ghostly.quit()}
-            className="w-7 h-7 flex items-center justify-center rounded-[9px] transition-all shrink-0"
-            style={{
-              background: "rgba(255,255,255,0.04)",
-              border: "1px solid rgba(255,255,255,0.07)",
-              color: "rgba(255,255,255,0.3)",
-            }}
-            onMouseEnter={e => {
-              window.ghostly.enableMouse();
-              e.currentTarget.style.background = "rgba(239,68,68,0.15)";
-              e.currentTarget.style.borderColor = "rgba(239,68,68,0.35)";
-              e.currentTarget.style.color = "#f87171";
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.background = "rgba(255,255,255,0.04)";
-              e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)";
-              e.currentTarget.style.color = "rgba(255,255,255,0.3)";
-            }}
-          >
-            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
+          <div className="flex items-center gap-1.5" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
+            <span className="w-6 h-6 rounded-[7px] flex items-center justify-center cursor-move" style={{ background: "#f2f3f6" }} title="Drag to move">
+              <MoveIcon />
+            </span>
+            <button onClick={() => setSettingsOpen(true)} className="w-6 h-6 rounded-[7px] flex items-center justify-center transition-colors hover:bg-[#e8e8ee]" style={{ background: "#f2f3f6" }} title="Settings">
+              <GearIcon />
+            </button>
+            <button onClick={() => window.ghostly.quit()} className="w-6 h-6 rounded-[7px] flex items-center justify-center transition-colors hover:brightness-95" style={{ background: "#ef4444" }} title="Quit">
+              <CloseIcon />
+            </button>
+          </div>
         </div>
 
-        {/* ── Main Card ── */}
-        <div
-          className="w-full rounded-[22px] overflow-hidden"
-          style={{
-            background: "rgba(13,13,20,0.9)",
-            backdropFilter: "blur(24px)",
-            WebkitBackdropFilter: "blur(24px)",
-            border: "1px solid rgba(255,255,255,0.08)",
-            boxShadow: "0 16px 48px rgba(0,0,0,0.6), 0 1px 0 rgba(255,255,255,0.06) inset",
-          }}
-        >
-          {/* ── Violet top accent ── */}
-          <div
-            className="h-0.5 w-full"
-            style={{ background: "linear-gradient(90deg, transparent, rgba(139,92,246,0.7), rgba(99,102,241,0.5), transparent)" }}
-          />
+        {/* ── Body ── */}
+        <motion.div variants={CONTAINER} initial="hidden" animate="show" className="px-5 pt-4 pb-4 flex flex-col gap-3.5">
+          {/* Greeting */}
+          <motion.div variants={ITEM} className="flex items-center gap-3">
+            <motion.div
+              animate={{ y: [0, -2, 0] }}
+              transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+              className="relative w-11 h-11 rounded-full flex items-center justify-center shrink-0"
+              style={{ background: "#f2f3f6" }}
+            >
+              <span style={{ fontSize: "22px", lineHeight: 1 }}>👻</span>
+              <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full" style={{ background: "#22c55e", border: "2px solid #ffffff" }} />
+            </motion.div>
+            <div className="min-w-0">
+              <p className="text-[15px] font-extrabold leading-tight truncate" style={{ color: INK }}>Welcome back, {user?.name?.split(" ")[0] || "there"} 👋</p>
+              <p className="text-[11px] font-medium mt-0.5" style={{ color: SUBTLE }}>Ready when you are.</p>
+            </div>
+          </motion.div>
 
-          {/* ── Action Buttons ── */}
-          <div className="px-3 pt-3 pb-2.5 flex flex-col gap-2">
-            {/* Start Interview */}
+          {/* Readiness */}
+          <motion.div variants={ITEM} className="flex gap-2">
+            <StatusChip
+              tone={aiTone}
+              label="AI"
+              value={aiValue}
+              onClick={aiTone === "ok" ? undefined : () => setSettingsOpen(true)}
+              title={aiTone === "ok" ? undefined : "Open Settings → API keys"}
+            />
+            <StatusChip
+              tone={hasDeepgram ? "ok" : "warn"}
+              label="Audio"
+              value={hasDeepgram ? "Deepgram ready" : "Add Deepgram key"}
+              onClick={hasDeepgram ? undefined : () => setSettingsOpen(true)}
+              title={hasDeepgram ? undefined : "Open Settings → API keys"}
+            />
+          </motion.div>
+
+          {/* Primary action */}
+          <motion.div variants={ITEM}>
             <motion.button
-              whileHover={{ scale: 1.02, y: -1 }}
+              whileHover={{ scale: 1.015, y: -1 }}
               whileTap={{ scale: 0.98 }}
               onClick={handleStartInterview}
               disabled={startStatus === "syncing"}
-              className="w-full py-3.5 rounded-[14px] text-[13px] font-extrabold flex items-center justify-center gap-2 relative overflow-hidden"
-              style={{
-                background: startStatus === "syncing"
-                  ? "rgba(139,92,246,0.15)"
-                  : "linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)",
-                color: "#fff",
-                border: "none",
-                boxShadow: startStatus === "syncing"
-                  ? "none"
-                  : "0 6px 24px rgba(139,92,246,0.45), 0 1px 0 rgba(255,255,255,0.2) inset",
-              }}
+              className="relative w-full h-[52px] rounded-full flex items-center justify-center gap-2 outline-none border-none overflow-hidden"
+              style={{ background: INK, color: "#fff", boxShadow: "0 8px 22px rgba(21,22,43,0.30)", opacity: startStatus === "syncing" ? 0.75 : 1 }}
             >
-              {/* Shimmer */}
               {startStatus !== "syncing" && (
-                <motion.div
-                  className="absolute inset-0 w-1/3"
-                  style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent)" }}
-                  animate={{ x: ["-100%", "400%"] }}
-                  transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                <motion.span
+                  aria-hidden
+                  className="absolute top-0 bottom-0 w-16 pointer-events-none"
+                  style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.16), transparent)", skewX: -20 }}
+                  initial={{ x: "-150%" }}
+                  animate={{ x: ["-150%", "700%"] }}
+                  transition={{ duration: 1.6, ease: "easeInOut", repeat: Infinity, repeatDelay: 3.5 }}
                 />
               )}
               {startStatus === "syncing" ? (
                 <>
-                  <svg className="animate-spin" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
-                  </svg>
-                  <span style={{ color: "rgba(255,255,255,0.6)" }}>Syncing…</span>
+                  <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
+                  <span className="text-[14px] font-bold">Syncing…</span>
                 </>
               ) : (
                 <>
-                  <span className="relative z-10 text-[16px]">⚡</span>
-                  <span className="relative z-10">Start Interview</span>
+                  <span className="text-[16px]">⚡</span>
+                  <span className="text-[14px] font-bold">Start Interview</span>
                 </>
               )}
             </motion.button>
+          </motion.div>
 
-            {/* Secondary row */}
-            <div className="flex gap-2">
-              {/* Check Updates */}
-              <motion.button
-                whileTap={{ scale: 0.97 }}
-                onClick={handleCheckUpdate}
-                disabled={checkStatus === "checking"}
-                className="flex-1 py-2.5 rounded-[11px] text-[10px] font-bold flex items-center justify-center gap-1.5 transition-all"
-                style={{
-                  background: checkStatus === "latest"
-                    ? "rgba(34,197,94,0.1)"
-                    : "rgba(255,255,255,0.04)",
-                  border: checkStatus === "latest"
-                    ? "1px solid rgba(34,197,94,0.3)"
-                    : "1px solid rgba(255,255,255,0.08)",
-                  color: checkStatus === "latest"
-                    ? "#4ade80"
-                    : "rgba(255,255,255,0.45)",
-                  boxShadow: checkStatus === "latest" ? "0 0 12px rgba(34,197,94,0.15)" : "none",
-                }}
-                onMouseEnter={e => {
-                  if (checkStatus !== "latest") {
-                    e.currentTarget.style.background = "rgba(255,255,255,0.07)";
-                    e.currentTarget.style.color = "rgba(255,255,255,0.7)";
-                  }
-                }}
-                onMouseLeave={e => {
-                  if (checkStatus !== "latest") {
-                    e.currentTarget.style.background = "rgba(255,255,255,0.04)";
-                    e.currentTarget.style.color = "rgba(255,255,255,0.45)";
-                  }
-                }}
-              >
-                {checkStatus === "checking" ? (
-                  <><svg className="animate-spin" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Checking…</>
-                ) : checkStatus === "latest" ? (
-                  <><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>Up to Date</>
-                ) : (
-                  <><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.59-9.21L21.5 8"/></svg>Update</>
-                )}
-              </motion.button>
+          {/* History + Job Portal */}
+          <motion.div variants={ITEM} className="grid grid-cols-2 gap-2">
+            <motion.button
+              whileHover={{ scale: 1.02, y: -1 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setHistoryOpen(true)}
+              className="h-11 rounded-full flex items-center justify-center gap-2 outline-none"
+              style={{ background: "#f2f3f6", color: INK, border: `1px solid ${BORDER}` }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={INK} strokeWidth="2.3" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+              <span className="text-[12.5px] font-bold">History</span>
+              {historyCount > 0 && (
+                <span className="px-1.5 py-0.5 rounded-full text-[9px] font-black" style={{ background: "#e8e8ee", color: SUBTLE }}>{historyCount}</span>
+              )}
+            </motion.button>
 
-              {/* History */}
-              <motion.button
-                whileTap={{ scale: 0.97 }}
-                onClick={() => setHistoryOpen(true)}
-                className="flex-1 py-2.5 rounded-[11px] text-[10px] font-bold flex items-center justify-center gap-1.5 transition-all"
-                style={{
-                  background: "rgba(255,255,255,0.04)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  color: "rgba(255,255,255,0.45)",
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = "rgba(139,92,246,0.1)";
-                  e.currentTarget.style.borderColor = "rgba(139,92,246,0.25)";
-                  e.currentTarget.style.color = "#a78bfa";
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = "rgba(255,255,255,0.04)";
-                  e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)";
-                  e.currentTarget.style.color = "rgba(255,255,255,0.45)";
-                }}
-              >
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                  <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-                </svg>
-                History
-                {historyCount > 0 && (
-                  <span
-                    className="px-1.5 py-0.5 rounded-full text-[7px] font-black"
-                    style={{ background: "rgba(139,92,246,0.2)", border: "1px solid rgba(139,92,246,0.35)", color: "#a78bfa" }}
-                  >
-                    {historyCount}
-                  </span>
-                )}
-              </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.02, y: -1 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setJobOpen(true)}
+              className="h-11 rounded-full flex items-center justify-center gap-2 outline-none"
+              style={{ background: "#f4fbe0", color: INK, border: "1px solid #dcebb0" }}
+            >
+              <BriefcaseIcon size={13} color="#4d6b12" />
+              <span className="text-[12.5px] font-bold">Job Portal</span>
+              <span className="px-1.5 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider" style={{ background: "#a3e635", color: INK }}>New</span>
+            </motion.button>
+          </motion.div>
+
+          {/* Tools & help */}
+          <motion.div variants={ITEM}>
+            <p className="text-[9px] font-black uppercase tracking-[0.14em] mb-2 px-0.5" style={{ color: FAINT }}>Tools &amp; help</p>
+            <div className="grid grid-cols-2 gap-2">
+              <ToolTile icon="🎙️" title="Audio test" desc="Check mic & audio" onClick={() => setAudioOpen(true)} />
+              <ToolTile icon="💬" title="Support" desc="Talk to us" external onClick={() => window.ghostly.openExternal("https://www.ghotlyai.in/support/")} />
+              <ToolTile icon="📰" title="Blog" desc="Guides & tips" external onClick={() => window.ghostly.openExternal("https://www.ghotlyai.in/blog/")} />
+              <ToolTile icon="▶️" title="Demo" desc="Watch it in action" external onClick={() => window.ghostly.openExternal("https://www.ghotlyai.in/#demo")} />
             </div>
+          </motion.div>
 
-            {/* Quick Links Row: Blog, Support, Demo Video */}
-            <div className="grid grid-cols-3 gap-1.5 pt-0.5">
-              {/* Blog */}
-              <motion.button
-                whileTap={{ scale: 0.96 }}
-                onClick={() => window.ghostly.openExternal("https://www.ghotlyai.in/blog/")}
-                className="py-2 px-1 rounded-[10px] text-[9.5px] font-bold flex items-center justify-center gap-1 transition-all"
-                style={{
-                  background: "rgba(249,115,22,0.06)",
-                  border: "1px solid rgba(249,115,22,0.2)",
-                  color: "#fdba74",
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = "rgba(249,115,22,0.14)";
-                  e.currentTarget.style.borderColor = "rgba(249,115,22,0.35)";
-                  e.currentTarget.style.color = "#ffedd5";
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = "rgba(249,115,22,0.06)";
-                  e.currentTarget.style.borderColor = "rgba(249,115,22,0.2)";
-                  e.currentTarget.style.color = "#fdba74";
-                }}
-                title="Read latest updates & guides"
-              >
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
-                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
-                </svg>
-                <span>Latest Blog</span>
-              </motion.button>
-
-              {/* Support */}
-              <motion.button
-                whileTap={{ scale: 0.96 }}
-                onClick={() => window.ghostly.openExternal("https://www.ghotlyai.in/support/")}
-                className="py-2 px-1 rounded-[10px] text-[9.5px] font-bold flex items-center justify-center gap-1 transition-all"
-                style={{
-                  background: "rgba(59,130,246,0.06)",
-                  border: "1px solid rgba(59,130,246,0.2)",
-                  color: "#93c5fd",
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = "rgba(59,130,246,0.14)";
-                  e.currentTarget.style.borderColor = "rgba(59,130,246,0.35)";
-                  e.currentTarget.style.color = "#dbeafe";
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = "rgba(59,130,246,0.06)";
-                  e.currentTarget.style.borderColor = "rgba(59,130,246,0.2)";
-                  e.currentTarget.style.color = "#93c5fd";
-                }}
-                title="Get help or report a bug"
-              >
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                  <path d="M3 18v-6a9 9 0 0 1 18 0v6"/>
-                  <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/>
-                </svg>
-                <span>Support</span>
-              </motion.button>
-
-              {/* Watch Demo */}
-              <motion.button
-                whileTap={{ scale: 0.96 }}
-                onClick={() => window.ghostly.openExternal("https://www.ghotlyai.in/#demo")}
-                className="py-2 px-1 rounded-[10px] text-[9.5px] font-bold flex items-center justify-center gap-1 transition-all"
-                style={{
-                  background: "rgba(168,85,247,0.06)",
-                  border: "1px solid rgba(168,85,247,0.2)",
-                  color: "#d8b4fe",
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = "rgba(168,85,247,0.14)";
-                  e.currentTarget.style.borderColor = "rgba(168,85,247,0.35)";
-                  e.currentTarget.style.color = "#f3e8ff";
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = "rgba(168,85,247,0.06)";
-                  e.currentTarget.style.borderColor = "rgba(168,85,247,0.2)";
-                  e.currentTarget.style.color = "#d8b4fe";
-                }}
-                title="Watch app demo video"
-              >
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
-                  <polygon points="5 3 19 12 5 21 5 3"/>
-                </svg>
-                <span>Demo Video</span>
-              </motion.button>
-            </div>
-          </div>
-
-          {/* ── Divider ── */}
-          <div className="mx-3 h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
-
-          {/* ── Hotkeys ── */}
-          <div className="px-3 py-3">
-            <p className="text-[8px] font-black uppercase tracking-[0.15em] mb-2.5" style={{ color: "rgba(255,255,255,0.22)" }}>
-              Hotkeys
-            </p>
-            <div className="grid grid-cols-3 gap-1.5">
-              {SHORTCUTS.map((s) => (
-                <div
-                  key={s.keys}
-                  className="flex flex-col items-center justify-center gap-1 px-2 py-2.5 rounded-[11px] transition-all"
-                  style={{
-                    background: s.color,
-                    border: `1px solid ${s.border}`,
-                  }}
-                >
-                  <span className="text-[8px] font-semibold" style={{ color: "rgba(255,255,255,0.5)" }}>{s.label}</span>
-                  <kbd
-                    className="text-[7px] font-bold font-mono px-1.5 py-0.5 rounded-[5px]"
-                    style={{
-                      background: "rgba(0,0,0,0.25)",
-                      color: s.textColor,
-                      border: "none",
-                    }}
-                  >
-                    {s.keys}
-                  </kbd>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* ── Divider ── */}
-          <div className="mx-3 h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
-
-          {/* ── User row ── */}
-          <div className="px-3 py-3 flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              {/* Avatar */}
-              <div
-                className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 overflow-hidden"
-                style={{
-                  border: "1.5px solid rgba(139,92,246,0.35)",
-                  boxShadow: "0 0 12px rgba(139,92,246,0.2)",
-                }}
-              >
+          {/* User row + logout */}
+          <motion.div variants={ITEM} className="flex items-center justify-between pt-3" style={{ borderTop: `1px solid ${BORDER}` }}>
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 overflow-hidden" style={{ border: `1.5px solid ${BORDER}` }}>
                 {user?.picture ? (
                   <img src={user.picture} alt={user.name} className="w-full h-full object-cover" />
                 ) : (
-                  <span
-                    className="text-[11px] font-black w-full h-full flex items-center justify-center"
-                    style={{ background: "linear-gradient(135deg, rgba(139,92,246,0.3), rgba(99,102,241,0.2))", color: "#a78bfa" }}
-                  >
+                  <span className="text-[11px] font-black w-full h-full flex items-center justify-center" style={{ background: "#f2f3f6", color: INK }}>
                     {user?.name?.[0]?.toUpperCase() || "U"}
                   </span>
                 )}
               </div>
-              <div>
-                <p className="text-[10px] font-bold leading-none" style={{ color: "rgba(255,255,255,0.78)" }}>
-                  {user?.name || "Guest"}
-                </p>
-                <p className="text-[8px] mt-0.5 font-semibold" style={{ color: "rgba(167,139,250,0.55)" }}>
-                  Ad-supported · Free
-                </p>
+              <div className="min-w-0">
+                <p className="text-[11px] font-bold leading-none truncate" style={{ color: INK }}>{user?.name || "Guest"}</p>
+                <p className="text-[9px] mt-1 font-semibold" style={{ color: SUBTLE }}>Ad-supported · Free</p>
               </div>
             </div>
-            {/* Logout */}
-            <button
-              onClick={handleLogout}
-              title="Logout"
-              className="w-7 h-7 flex items-center justify-center rounded-[9px] transition-all"
-              style={{
-                background: "rgba(255,255,255,0.04)",
-                border: "1px solid rgba(255,255,255,0.07)",
-                color: "rgba(255,255,255,0.28)",
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.background = "rgba(239,68,68,0.15)";
-                e.currentTarget.style.borderColor = "rgba(239,68,68,0.35)";
-                e.currentTarget.style.color = "#f87171";
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.background = "rgba(255,255,255,0.04)";
-                e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)";
-                e.currentTarget.style.color = "rgba(255,255,255,0.28)";
-              }}
-            >
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>
-              </svg>
+            <button onClick={handleLogout} title="Log out" className="px-2.5 h-7 rounded-lg text-[10px] font-bold transition-colors hover:bg-[#f2f3f6]" style={{ color: SUBTLE }}>
+              Log out
             </button>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       </motion.div>
 
       <InterviewHistoryModal open={historyOpen} onClose={() => setHistoryOpen(false)} />
+      <JobPortalModal open={jobOpen} onClose={() => setJobOpen(false)} />
+      {audioOpen && <AudioDiagnostics onClose={() => setAudioOpen(false)} />}
+      {settingsOpen && <HomeSettingsPanel onClose={() => setSettingsOpen(false)} />}
 
       {/* ── Ad Gate Overlay ── */}
       <AnimatePresence>
@@ -545,133 +369,91 @@ export const HomePage: React.FC = () => {
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
             className="fixed inset-0 z-[9999] flex items-center justify-center"
-            style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(6px)", pointerEvents: "auto" }}
-            onMouseEnter={() => window.ghostly.enableMouse()}
+            style={{ pointerEvents: "none" }}
           >
             <motion.div
               initial={{ scale: 0.92, y: 20, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }}
               exit={{ scale: 0.92, y: 20, opacity: 0 }} transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-              className="w-[320px] rounded-[24px] overflow-hidden flex flex-col gap-0"
-              style={{
-                background: "rgba(13,13,20,0.96)",
-                backdropFilter: "blur(28px)",
-                border: "1px solid rgba(255,255,255,0.1)",
-                boxShadow: "0 32px 80px rgba(0,0,0,0.7), 0 1px 0 rgba(255,255,255,0.07) inset",
-              }}
+              className="w-[320px] rounded-[22px] overflow-hidden flex flex-col"
+              style={{ pointerEvents: "auto", background: "#ffffff", border: `1px solid ${BORDER}`, boxShadow: "0 24px 60px rgba(20,20,40,0.3)" }}
+              onMouseEnter={() => window.ghostly.enableMouse()}
+              onMouseLeave={() => window.ghostly.disableMouse()}
             >
-              {/* Accent top bar */}
-              <div
-                className="h-0.5"
-                style={{ background: "linear-gradient(90deg, transparent, rgba(139,92,246,0.7), rgba(99,102,241,0.5), transparent)" }}
-              />
-
               <div className="p-4 flex flex-col gap-3">
-                {/* Header */}
                 <div className="flex items-center justify-between">
-                  <div
-                    className="px-2.5 py-1 rounded-full text-[8px] font-black uppercase tracking-[0.12em]"
-                    style={{ background: "rgba(139,92,246,0.12)", border: "1px solid rgba(139,92,246,0.3)", color: "#a78bfa" }}
-                  >
+                  <div className="px-2.5 py-1 rounded-full text-[8px] font-black uppercase tracking-[0.12em]" style={{ background: "#f2f3f6", color: SUBTLE }}>
                     📢 Sponsor
                   </div>
                   <motion.div
                     key={adClicked ? "unlocked" : "locked"}
                     initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
                     className="px-2.5 py-1 rounded-full text-[8px] font-black flex items-center gap-1.5"
-                    style={{
-                      background: adClicked ? "rgba(34,197,94,0.12)" : "rgba(255,255,255,0.06)",
-                      border: adClicked ? "1px solid rgba(34,197,94,0.3)" : "1px solid rgba(255,255,255,0.1)",
-                      color: adClicked ? "#4ade80" : "rgba(255,255,255,0.35)",
-                    }}
+                    style={{ background: adClicked ? "#f0fdf4" : "#f2f3f6", color: adClicked ? "#16a34a" : SUBTLE }}
                   >
                     {adClicked ? <>✓ Unlocked</> : <>🔒 Locked</>}
                   </motion.div>
                 </div>
 
-                {/* Ad media */}
-                {displayAd.script_url && displayAd.container_id ? (
-                  <div style={{ borderRadius: "14px", overflow: "hidden", border: "1px solid rgba(255,255,255,0.07)" }}>
-                    <AdNetworkPlacement ad={displayAd} />
-                  </div>
-                ) : displayAd.image_url && (
-                  <div className="rounded-[14px] overflow-hidden" style={{ height: "118px", border: "1px solid rgba(255,255,255,0.07)" }}>
-                    <img src={displayAd.image_url} alt="" className="w-full h-full object-cover" />
-                  </div>
-                )}
+                <JobPortalPreview />
 
-                {/* Ad content */}
                 <div>
-                  <p className="text-[13px] font-black leading-tight text-white">{displayAd.title}</p>
-                  <p className="text-[10px] font-medium mt-1 leading-relaxed" style={{ color: "rgba(255,255,255,0.45)" }}>
-                    {displayAd.description}
+                  <p className="text-[14px] font-black leading-tight" style={{ color: INK }}>GhostlyAI Job Portal</p>
+                  <p className="text-[10.5px] font-medium mt-1 leading-relaxed" style={{ color: SUBTLE }}>
+                    Verified government &amp; private job alerts in 2 minutes, on Telegram and Android.
                   </p>
                 </div>
 
-                {/* Gate notice */}
-                <div
-                  className="px-3 py-2.5 rounded-xl flex items-start gap-2.5"
-                  style={{
-                    background: adClicked ? "rgba(34,197,94,0.07)" : "rgba(255,255,255,0.04)",
-                    border: adClicked ? "1px solid rgba(34,197,94,0.2)" : "1px solid rgba(255,255,255,0.07)",
-                  }}
-                >
+                <div className="px-3 py-2.5 rounded-xl flex items-start gap-2.5 transition-colors duration-300" style={{ background: adClicked ? "#f0fdf4" : "#f7f7fa" }}>
                   <span className="text-[11px] mt-0.5 shrink-0">{adClicked ? "✅" : "🔓"}</span>
-                  <p className="text-[9px] font-semibold leading-relaxed" style={{ color: adClicked ? "#4ade80" : "rgba(255,255,255,0.45)" }}>
+                  <p className="text-[9.5px] font-semibold leading-relaxed transition-colors duration-300" style={{ color: adClicked ? "#16a34a" : SUBTLE }}>
                     {adClicked
-                      ? "Sponsor visited! Tap Continue to start your interview."
-                      : "Ghotly AI is free through sponsors. Tap below once to unlock your session."}
+                      ? "Thanks for visiting! Tap Continue to start your interview."
+                      : "Ghotly AI is free through sponsors. Tap Watch once to unlock your session."}
                   </p>
                 </div>
 
-                {/* Buttons */}
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col">
                   <motion.button
                     whileHover={!adClicked ? { scale: 1.02, y: -1 } : {}}
                     whileTap={!adClicked ? { scale: 0.97 } : {}}
                     onClick={!adClicked ? handleAdClick : undefined}
-                    className="w-full py-3 rounded-[13px] text-[12px] font-extrabold flex items-center justify-center gap-2 transition-all relative overflow-hidden"
+                    className="w-full py-3 rounded-full text-[12px] font-extrabold flex items-center justify-center gap-2"
                     style={{
-                      background: adClicked
-                        ? "rgba(34,197,94,0.1)"
-                        : "linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)",
-                      color: adClicked ? "#4ade80" : "#fff",
-                      border: adClicked ? "1px solid rgba(34,197,94,0.25)" : "none",
-                      boxShadow: adClicked
-                        ? "0 0 16px rgba(34,197,94,0.15)"
-                        : "0 6px 20px rgba(139,92,246,0.4), 0 1px 0 rgba(255,255,255,0.18) inset",
+                      background: adClicked ? "#f0fdf4" : INK,
+                      color: adClicked ? "#16a34a" : "#fff",
+                      border: adClicked ? "1px solid #bbf7d0" : "1px solid transparent",
                       cursor: adClicked ? "default" : "pointer",
+                      transition: "background 0.3s, color 0.3s, border-color 0.3s",
                     }}
                   >
-                    {!adClicked && (
-                      <motion.div
-                        className="absolute inset-0 w-1/3"
-                        style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent)" }}
-                        animate={{ x: ["-100%", "400%"] }}
-                        transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                      />
-                    )}
-                    <span className="relative z-10">
-                      {adClicked ? <>✓ Visited — Thank you!</> : <>{displayAd.cta_text || "Visit Sponsor"} ↗</>}
-                    </span>
+                    {adClicked ? <>✓ Visited — Thank you!</> : <>Watch ↗</>}
                   </motion.button>
 
-                  <motion.button
-                    onClick={adClicked || skipCountdown === 0 ? handleContinueAfterAd : undefined}
-                    disabled={!adClicked && skipCountdown > 0}
-                    whileHover={adClicked || skipCountdown === 0 ? { scale: 1.01 } : {}}
-                    whileTap={adClicked || skipCountdown === 0 ? { scale: 0.98 } : {}}
-                    className="w-full py-3 rounded-[13px] text-[12px] font-extrabold flex items-center justify-center gap-2 transition-all"
-                    style={{
-                      background: adClicked || skipCountdown === 0 ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.03)",
-                      border: adClicked || skipCountdown === 0 ? "1px solid rgba(139,92,246,0.35)" : "1px solid rgba(255,255,255,0.08)",
-                      color: adClicked || skipCountdown === 0 ? "#a78bfa" : "rgba(255,255,255,0.2)",
-                      cursor: adClicked || skipCountdown === 0 ? "pointer" : "not-allowed",
-                    }}
+                  {!adClicked && (
+                    <p className="text-center text-[8.5px] font-medium mt-1.5" style={{ color: "#9aa0ae" }}>Opens job.ghotlyai.in in your browser</p>
+                  )}
+
+                  {/* Height/opacity-animated (not mounted/unmounted) so it can't stall the
+                      overlay's own exit animation; inert until Watch has been clicked. */}
+                  <motion.div
+                    initial={false}
+                    animate={adClicked ? { height: "auto", opacity: 1, marginTop: 8 } : { height: 0, opacity: 0, marginTop: 0 }}
+                    transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+                    style={{ overflow: "hidden", pointerEvents: adClicked ? "auto" : "none" }}
+                    aria-hidden={!adClicked}
                   >
-                    {adClicked || skipCountdown === 0
-                      ? <>Continue to Interview →</>
-                      : <>Visit sponsor or wait {skipCountdown}s…</>}
-                  </motion.button>
+                    <motion.button
+                      ref={continueRef}
+                      tabIndex={adClicked ? 0 : -1}
+                      onClick={adClicked ? handleContinueAfterAd : undefined}
+                      whileHover={{ scale: 1.02, y: -1 }}
+                      whileTap={{ scale: 0.97 }}
+                      className="w-full py-3 rounded-full text-[12px] font-extrabold flex items-center justify-center gap-2 outline-none"
+                      style={{ background: "linear-gradient(135deg, #16a34a, #15803d)", color: "#fff", boxShadow: "0 8px 20px rgba(22,163,74,0.32)" }}
+                    >
+                      Continue to Interview →
+                    </motion.button>
+                  </motion.div>
                 </div>
               </div>
             </motion.div>

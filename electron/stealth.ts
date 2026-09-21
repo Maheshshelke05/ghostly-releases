@@ -11,7 +11,7 @@
  *
  * Uses `koffi` for FFI (no gyp compilation needed, works on all Node versions).
  */
-import { BrowserWindow } from "electron";
+import { app, BrowserWindow } from "electron";
 
 // Win32 affinity constants
 const WDA_NONE = 0x00000000;
@@ -102,6 +102,18 @@ function nudgeRepaint(win: BrowserWindow): void {
  * repaint nudge so the window can never get stuck invisible on the real screen.
  */
 export function applyStealthMode(win: BrowserWindow): void {
+  // Dev-only escape hatch so a design/screenshot session can actually see the
+  // real rendered window — WDA_EXCLUDEFROMCAPTURE blocks every screen-capture
+  // API, including the one used to visually verify UI changes. Requires
+  // BOTH an explicit env var AND a non-packaged build, so this can never
+  // affect a real installed app regardless of the env var's value.
+  if (!app.isPackaged && process.env.GHOSTLY_DISABLE_STEALTH === "1") return;
+  // Called from deferred timers (warmScreenSource's 800ms reapply, the 2s
+  // startup kickoff) against the module-level mainWindow, which main.ts never
+  // nulls on destroy — if the window closes while one of those is pending,
+  // this would otherwise throw synchronously on a destroyed BrowserWindow
+  // with no top-level error handler to catch it, crashing the whole process.
+  if (win.isDestroyed()) return;
   // Always set Electron's built-in protection as baseline (uses WDA_MONITOR internally)
   win.setContentProtection(true);
 
@@ -177,6 +189,7 @@ export function safeguardVisibility(win: BrowserWindow): void {
  * Remove capture exclusion (restore normal window behavior).
  */
 export function removeStealthMode(win: BrowserWindow): void {
+  if (win.isDestroyed()) return;
   win.setContentProtection(false);
 
   if (process.platform !== "win32") return;

@@ -13,8 +13,21 @@ import "./styles/global.css";
 
 type UpdateState = "idle" | "checking" | "available" | "downloading" | "installing" | "ready" | "error";
 
+// Mirrors REMAPPABLE_SHORTCUTS' labels in SettingsPanel.tsx — kept as a small
+// local map here since that file isn't shared with App.tsx.
+const SHORTCUT_LABELS: Record<string, string> = {
+  captureAndSolve: "Screenshot (Ctrl+E)",
+  solve: "Ask AI (Ctrl+Enter)",
+  toggleVisibility: "Show / Hide (Ctrl+B)",
+  startOver: "Start Over (Ctrl+G)",
+  nextQuestion: "Next Question (Ctrl+N)",
+  manualSend: "Send to AI (Ctrl+0)",
+  prevQuestion: "Scroll Up (Ctrl+8)",
+  nextQuestionPage: "Scroll Down (Ctrl+2)",
+};
+
 const App: React.FC = () => {
-  const { appScreen, setAppScreen, setSettings, setHistory, setUser, setAds, user } = useStore();
+  const { appScreen, setAppScreen, setSettings, setHistory, setUser, setAds, user, loginError, setLoginError } = useStore();
   const [updateState, setUpdateState] = React.useState<UpdateState>("idle");
   const [updateVersion, setUpdateVersion] = React.useState("");
   const [updatePercent, setUpdatePercent] = React.useState(0);
@@ -22,6 +35,13 @@ const App: React.FC = () => {
   const [showFullScreenAnimation, setShowFullScreenAnimation] = React.useState(false);
   const [showSplash, setShowSplash] = React.useState(true);
   const [appReady, setAppReady] = React.useState(false);
+  const [hotkeyConflict, setHotkeyConflict] = React.useState<string[] | null>(null);
+  // loginError/setLoginError now live in the Zustand store (see useStore.ts)
+  // instead of local state — surfaced to LoginPage to distinguish a real
+  // failure (server error, auth server down, timeout, blocked account) from
+  // "still waiting for the browser." Shared via the store so HomePage.tsx's
+  // own forced-logout path can set it too, instead of falling back to a
+  // blocking native alert().
 
   const applyAccountPayload = async (data: any) => {
     const savedAds = await window.ghostly.getAds().catch(() => []);
@@ -73,16 +93,23 @@ const App: React.FC = () => {
           window.ghostly.getAds(),
         ]);
         if (savedSettings) {
+          // Build-time VITE_*_API_KEY vars are meant only to seed a *first*
+          // install that has no saved key yet — env var used to take priority
+          // over the saved key even after a user explicitly cleared it in
+          // Settings (savedSettings.apiKeys.gemini === ""), silently
+          // resurrecting a key they'd removed, on every single launch. `??`
+          // (not `||`) matters here: an explicitly-cleared "" must NOT fall
+          // through — only a truly absent (undefined) saved key should.
           const merged = {
             ...savedSettings,
             apiKeys: {
               ...savedSettings.apiKeys,
-              gemini:    import.meta.env.VITE_GEMINI_API_KEY    || savedSettings.apiKeys?.gemini    || "",
-              groq:      import.meta.env.VITE_GROQ_API_KEY      || savedSettings.apiKeys?.groq      || "",
-              openai:    import.meta.env.VITE_OPENAI_API_KEY    || savedSettings.apiKeys?.openai    || "",
-              anthropic: import.meta.env.VITE_ANTHROPIC_API_KEY || savedSettings.apiKeys?.anthropic || "",
+              gemini:    savedSettings.apiKeys?.gemini    ?? import.meta.env.VITE_GEMINI_API_KEY    ?? "",
+              groq:      savedSettings.apiKeys?.groq      ?? import.meta.env.VITE_GROQ_API_KEY      ?? "",
+              openai:    savedSettings.apiKeys?.openai    ?? import.meta.env.VITE_OPENAI_API_KEY    ?? "",
+              anthropic: savedSettings.apiKeys?.anthropic ?? import.meta.env.VITE_ANTHROPIC_API_KEY ?? "",
             },
-            deepgramApiKey: import.meta.env.VITE_DEEPGRAM_API_KEY || savedSettings.deepgramApiKey || "",
+            deepgramApiKey: savedSettings.deepgramApiKey ?? import.meta.env.VITE_DEEPGRAM_API_KEY ?? "",
           };
           setSettings(merged);
           window.ghostly.setOpacity(1);
@@ -90,7 +117,16 @@ const App: React.FC = () => {
         if (savedHistory) setHistory(savedHistory);
         if (savedUser) setUser(savedUser);
         if (savedAds) setAds(savedAds);
-      } catch { /* first run */ }
+      } catch (err) {
+        // Used to assume any failure here meant "first run" — a genuinely
+        // corrupted/unreadable electron-store file (e.g. an interrupted write
+        // during a crash) hits this exact path too, silently dropping a
+        // returning user's settings/history/login with zero indication their
+        // data failed to load rather than never having existed. Still
+        // proceeds with defaults either way (that's the only reasonable
+        // recovery), but now at least it's not silent.
+        console.error("[Ghostly] Failed to load saved app data:", err);
+      }
       setAppReady(true);
     };
     loadData();
@@ -103,27 +139,52 @@ const App: React.FC = () => {
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [appScreen]);
 
-  useEffect(() => {
-    const handleAuthToken = async ({ token, user }: { token: string; user: any }) => {
-      try {
-        const res = await fetch(`${import.meta.env.VITE_API_URL}/subscription`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.status === 403) {
-          await handleBlockedAuth();
-          alert("Your Ghotly AI account has been blocked. Please contact support if this is a mistake.");
-          return;
-        }
-        if (!res.ok) return;
-        const data = await res.json();
-        const fullUser = { ...user, idToken: token };
-        setUser(fullUser);
-        await window.ghostly.saveUser(fullUser);
-        await applyAccountPayload(data);
-        setAppScreen("home");
-      } catch { /* ignore */ }
-    };
+  // Extracted out of the auth-token effect below (instead of being defined
+  // inline inside it) so the deep-link effect can also call it — a deep link
+  // arriving needs the exact same completion logic as the normal POST flow.
+  const handleAuthToken = async ({ token, user }: { token: string; user: any }) => {
+    setLoginError(null);
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/subscription`, {
+        headers: { Authorization: `Bearer ${token}` },
+        // OAuth had already succeeded by the time this runs — an unbounded
+        // fetch here used to mean a slow/unreachable backend left the user
+        // stuck on "Waiting for browser login..." forever with no real
+        // diagnostic, even though login itself was fine.
+        signal: AbortSignal.timeout(10000),
+      });
+      if (res.status === 403) {
+        await handleBlockedAuth();
+        // Electron's alert() opens a native OS dialog — unlike the app's own
+        // window, that dialog is NOT covered by stealth (WDA_EXCLUDEFROMCAPTURE
+        // only applies to the BrowserWindow it's set on), so this could
+        // genuinely show up in a live screen-share, and it blocks the whole
+        // renderer thread until dismissed. handleBlockedAuth() already routes
+        // back to LoginPage, so reuse its own error banner instead.
+        setLoginError("Your Ghotly AI account has been blocked. Please contact support if this is a mistake.");
+        return;
+      }
+      if (!res.ok) {
+        console.error(`[Ghostly] /subscription returned ${res.status} after login`);
+        setLoginError(`Server error (${res.status}) finishing login. Please try again in a moment.`);
+        return;
+      }
+      const data = await res.json();
+      const fullUser = { ...user, idToken: token };
+      setUser(fullUser);
+      await window.ghostly.saveUser(fullUser);
+      await applyAccountPayload(data);
+      setAppScreen("home");
+    } catch (err) {
+      console.error("[Ghostly] Failed to complete login:", err);
+      const isTimeout = err instanceof Error && err.name === "TimeoutError";
+      setLoginError(isTimeout
+        ? "Server took too long to respond. Check your connection and try again."
+        : "Something went wrong finishing login. Please try again.");
+    }
+  };
 
+  useEffect(() => {
     // Covers the case where Google OAuth (completed in the system browser, via
     // the website's AuthCallback page) posts the token to this app's local
     // auth server before this listener has even mounted — that message would
@@ -137,6 +198,44 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    // The ghostly:// custom-protocol handoff (second-instance / macOS
+    // open-url) was fully wired in the main process but had no renderer
+    // listener at all — if that path were ever exercised instead of the
+    // localhost:7842 POST the app actually relies on, the event vanished
+    // silently and login would sit on "Waiting..." until its own timeout.
+    // No producer currently encodes an auth payload into this URL, so the
+    // safe thing to do here (without inventing an unverified format) is
+    // re-check the same pending-auth-token buffer the POST flow already
+    // uses — if a token did land around the same time, this picks it up
+    // instead of leaving the deep link a complete dead end.
+    const offDeepLink = window.ghostly.onDeepLink((url) => {
+      console.warn("[Ghostly] Received deep link (unexpected — no producer sends this today):", url);
+      window.ghostly.getPendingAuthToken().then((pending) => {
+        if (pending) handleAuthToken(pending);
+      });
+    });
+    return () => offDeepLink();
+  }, []);
+
+  useEffect(() => {
+    window.ghostly.getPendingHotkeyConflict().then((pending) => {
+      if (pending && pending.length) setHotkeyConflict(pending);
+    });
+    const offHotkeyConflict = window.ghostly.onHotkeyConflict((failed) => {
+      if (failed && failed.length) setHotkeyConflict(failed);
+    });
+    return () => offHotkeyConflict();
+  }, []);
+
+  useEffect(() => {
+    window.ghostly.getPendingAuthServerError().then((pending) => {
+      if (pending) setLoginError(pending);
+    });
+    const offAuthServerError = window.ghostly.onAuthServerError((message) => setLoginError(message));
+    return () => offAuthServerError();
+  }, []);
+
+  useEffect(() => {
     const offShow = window.ghostly.onShow(() => {
       setTimeout(() => {
         if (useStore.getState().appScreen !== "interview") window.ghostly.enableMouse();
@@ -145,6 +244,7 @@ const App: React.FC = () => {
       if (currentUser?.idToken) {
         fetch(`${import.meta.env.VITE_API_URL}/subscription`, {
           headers: { Authorization: `Bearer ${currentUser.idToken}` },
+          signal: AbortSignal.timeout(10000),
         })
           .then(async (r) => {
             if (r.status === 403) { await handleBlockedAuth(); return null; }
@@ -162,6 +262,7 @@ const App: React.FC = () => {
     if (!appReady || !user?.idToken) return;
     fetch(`${import.meta.env.VITE_API_URL}/subscription`, {
       headers: { Authorization: `Bearer ${user.idToken}` },
+      signal: AbortSignal.timeout(10000),
     })
       .then(async (r) => {
         if (r.status === 403) { await handleBlockedAuth(); return null; }
@@ -194,11 +295,10 @@ const App: React.FC = () => {
   }, [user?.idToken]);
 
   if (showSplash || !appReady) return <SplashScreen onComplete={() => setShowSplash(false)} />;
-  if (!user && appScreen !== "login") return <LoginPage />;
+  if (!user && appScreen !== "login") return <LoginPage externalError={loginError} onClearExternalError={() => setLoginError(null)} />;
 
   const SETUP_STEPS = [
     { key: "interview-setup", label: "Session",  icon: "🎯" },
-    { key: "api-setup",       label: "API Keys", icon: "🔑" },
     { key: "audio-setup",     label: "Audio",    icon: "🎙️" },
   ] as const;
 
@@ -251,9 +351,8 @@ const App: React.FC = () => {
           transition={{ type: "spring", stiffness: 350, damping: 25 }}
           className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-3.5 px-4 py-3 rounded-2xl"
           style={{
-            background: "linear-gradient(135deg, rgba(14,14,20,0.96) 0%, rgba(20,20,28,0.96) 100%)",
+            background: "linear-gradient(135deg, #0e0e14 0%, #14141c 100%)",
             border: "1px solid rgba(139,92,246,0.35)",
-            backdropFilter: "blur(28px)",
             boxShadow: "0 12px 40px rgba(0,0,0,0.6), 0 0 24px rgba(139,92,246,0.25), inset 0 1px 0 rgba(255,255,255,0.1)",
             pointerEvents: "auto",
             minWidth: "300px",
@@ -401,9 +500,49 @@ const App: React.FC = () => {
     </AnimatePresence>
   );
 
-  if (appScreen === "interview") return <>{showFullScreenAnimation && <UpdateAnimation status={updateState} progress={updatePercent} version={updateVersion} error={updateError} />}{<Home />}{updateBanner}</>;
-  if (appScreen === "login") return <LoginPage />;
-  return <>{showFullScreenAnimation && <UpdateAnimation status={updateState} progress={updatePercent} version={updateVersion} error={updateError} />}{<HomePage />}{updateBanner}</>;
+  const hotkeyConflictBanner = (
+    <AnimatePresence>
+      {hotkeyConflict && hotkeyConflict.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+          transition={{ type: "spring", stiffness: 350, damping: 25 }}
+          className="fixed top-3 left-1/2 -translate-x-1/2 z-[9999] flex items-start gap-3 px-4 py-3 rounded-2xl"
+          style={{
+            background: "linear-gradient(135deg, #0e0e14 0%, #14141c 100%)",
+            border: "1px solid rgba(251,191,36,0.35)",
+            boxShadow: "0 12px 40px rgba(0,0,0,0.6)",
+            pointerEvents: "auto",
+            maxWidth: "360px",
+          }}
+          onMouseEnter={() => window.ghostly.enableMouse()}
+        >
+          <span className="text-[16px] shrink-0">⚠️</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-extrabold text-amber-300 leading-tight">
+              {hotkeyConflict.length} shortcut{hotkeyConflict.length > 1 ? "s" : ""} blocked by another app
+            </p>
+            <p className="text-[10px] text-white/55 font-sans mt-1 leading-relaxed">
+              {hotkeyConflict.map((a) => SHORTCUT_LABELS[a] || a).join(", ")} — another running app already uses that key combo. Change it in Settings → Keyboard Shortcuts.
+            </p>
+          </div>
+          <button
+            onClick={() => setHotkeyConflict(null)}
+            className="w-6 h-6 flex items-center justify-center rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-all cursor-pointer shrink-0"
+          >
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
+  if (appScreen === "interview") return <>{showFullScreenAnimation && <UpdateAnimation status={updateState} progress={updatePercent} version={updateVersion} error={updateError} />}{<Home />}{updateBanner}{hotkeyConflictBanner}</>;
+  if (appScreen === "login") return <LoginPage externalError={loginError} onClearExternalError={() => setLoginError(null)} />;
+  return <>{showFullScreenAnimation && <UpdateAnimation status={updateState} progress={updatePercent} version={updateVersion} error={updateError} />}{<HomePage />}{updateBanner}{hotkeyConflictBanner}</>;
 };
 
 export default App;

@@ -1,4 +1,5 @@
 import type { AIProvider, AIRequestOptions } from "./types";
+import { rateLimitError, extractApiErrorMessage } from "./types";
 
 export class AnthropicProvider implements AIProvider {
   name = "anthropic";
@@ -71,7 +72,9 @@ export class AnthropicProvider implements AIProvider {
 
       if (!result.ok) {
         console.error("[Anthropic] API error:", result.data);
-        throw new Error(`Anthropic API failed (${result.status}): ${result.data.slice(0, 300)}`);
+        const message = extractApiErrorMessage(result.data, "Anthropic", result.status);
+        if (result.status === 429) throw rateLimitError(message);
+        throw new Error(message);
       }
 
       const response = JSON.parse(result.data);

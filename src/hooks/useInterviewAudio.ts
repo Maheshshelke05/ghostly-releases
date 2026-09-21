@@ -64,6 +64,7 @@ export function useInterviewAudio() {
   const [isRecording, setIsRecording] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const [isModelReady, setIsModelReady] = useState(false);
+  const [statusWarning, setStatusWarning] = useState("");
   const downloadProgress = null;
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -84,6 +85,21 @@ export function useInterviewAudio() {
   const deepgramApiKey = useStore(
     (s) => s.settings.deepgramApiKey ?? import.meta.env.VITE_DEEPGRAM_API_KEY ?? ""
   );
+  const deepgramLanguage = useStore((s) => s.settings.deepgramLanguage ?? "");
+
+  // Watches for total silence right after starting — the #1 hard-to-diagnose
+  // complaint cluster is "mic/audio not working", and system-audio loopback
+  // (not a real microphone — see below) is a Windows OS-level capture of
+  // whatever the DEFAULT PLAYBACK device is. If a headset is connected but
+  // Windows or the calling app (Zoom/Meet/Teams) is actually routing audio
+  // through a different device/role (e.g. the headset became the default
+  // *communications* device but not the default *playback* device), loopback
+  // silently captures nothing — no error, just an empty transcript forever.
+  // This can't be fixed from inside the app (no browser/Electron API exposes
+  // which physical output loopback is tied to, or lets us pick one), so the
+  // best available fix is surfacing an actionable warning instead of silence.
+  const hasHeardAudioRef = useRef(false);
+  const silenceWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const addLog = useCallback((msg: string) => {
     // Fix: sanitize log messages — prevent log injection
@@ -112,6 +128,10 @@ export function useInterviewAudio() {
   }, [deepgramApiKey, addLog]);
 
   const performCleanup = () => {
+    if (silenceWatchdogRef.current) {
+      clearTimeout(silenceWatchdogRef.current);
+      silenceWatchdogRef.current = null;
+    }
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
@@ -148,9 +168,16 @@ export function useInterviewAudio() {
     dgPendingRef.current = [];
   };
 
-  const startInterview = async () => {
-    if (!isModelReady) return addLog("Cannot start: Deepgram key missing.");
+  // Returns whether capture actually started — Home.tsx used to fire-and-forget
+  // this and optimistically flip liveActive=true regardless, so a failure here
+  // (getDisplayMedia rejecting, zero audio tracks) left the UI stuck showing
+  // "Listening…" forever with no error, since only this hook's internal
+  // (unrendered) log array recorded what happened.
+  const startInterview = async (): Promise<boolean> => {
+    if (!isModelReady) { addLog("Cannot start: Deepgram key missing."); return false; }
     isRecordingRef.current = true;
+    hasHeardAudioRef.current = false;
+    setStatusWarning("");
     if (isMountedRef.current) setIsRecording(true);
     addLog("Starting audio capture (Zoom/Meet/Teams supported)...");
 
@@ -169,8 +196,11 @@ export function useInterviewAudio() {
 
       const audioTracks = displayStream.getAudioTracks();
       if (!audioTracks.length) {
+        // There is no OS share picker anymore (the app resolves this
+        // automatically via useSystemPicker:false in the main process) — this
+        // used to tell users to check a box that no longer appears on screen.
         throw new Error(
-          "No audio track received. Enable 'Share system audio' when prompted."
+          "No system audio track available. Make sure something is actually set as your Windows default playback device (Settings > Sound)."
         );
       }
 
@@ -191,7 +221,7 @@ export function useInterviewAudio() {
 
       const connectWebSocket = () => {
         if (!isMountedRef.current || !isRecordingRef.current) return;
-        const params = new URLSearchParams({
+        const paramsObj: Record<string, string> = {
           model: "nova-2",
           smart_format: "true",
           encoding: "linear16",
@@ -202,7 +232,12 @@ export function useInterviewAudio() {
           endpointing: "300",
           vad_events: "true",
           no_delay: "true",
-        });
+        };
+        // Omitted entirely unless the user explicitly set one in Settings —
+        // Deepgram defaults to English when this is absent, so leaving it out
+        // keeps today's behavior unchanged for everyone who hasn't opted in.
+        if (deepgramLanguage) paramsObj.language = deepgramLanguage;
+        const params = new URLSearchParams(paramsObj);
 
         const ws = new WebSocket(
           `wss://api.deepgram.com/v1/listen?${params}`,
@@ -268,6 +303,18 @@ export function useInterviewAudio() {
 
       connectWebSocket();
 
+      // If nothing above a near-silent noise floor has come through within
+      // 12s of starting, the loopback capture is very likely tapping a
+      // device the interviewer's audio isn't actually playing through (see
+      // the note on hasHeardAudioRef above) — tell the user instead of
+      // leaving them staring at an empty "Listening…" transcript.
+      silenceWatchdogRef.current = setTimeout(() => {
+        if (!isRecordingRef.current || hasHeardAudioRef.current) return;
+        const msg = "No system audio detected for 12s. If you're using headphones/a headset, open Windows Sound Settings and make sure it's set as your DEFAULT output device (not just default communication device) — then press Start again.";
+        addLog(`[WARNING] ${msg}`);
+        if (isMountedRef.current) setStatusWarning(msg);
+      }, 12000);
+
       const source = audioCtx.createMediaStreamSource(sysStream);
       const voiceBoost = audioCtx.createGain();
       voiceBoost.gain.value = 2.6;
@@ -289,6 +336,17 @@ export function useInterviewAudio() {
       workletNode.port.onmessage = (e) => {
         if (e.data.type !== "audio") return;
         const buf = e.data.buffer as ArrayBuffer;
+
+        // Cheap silence check for the watchdog above — only runs until the
+        // first real signal is seen, then never again (no per-chunk cost for
+        // the rest of the session).
+        if (!hasHeardAudioRef.current) {
+          const samples = new Int16Array(buf);
+          for (let i = 0; i < samples.length; i++) {
+            if (Math.abs(samples[i]) > 400) { hasHeardAudioRef.current = true; break; }
+          }
+        }
+
         const currentWs = wsRef.current;
         if (currentWs?.readyState === WebSocket.OPEN) {
           currentWs.send(buf);
@@ -299,12 +357,14 @@ export function useInterviewAudio() {
       };
 
       addLog("🎙️ Listening to system audio...");
+      return true;
     } catch (err) {
       isRecordingRef.current = false;
       const safeErr = err instanceof Error ? sanitizeText(err.message) : "Unknown error";
       addLog(`[ERROR] ${safeErr}`);
       if (isMountedRef.current) setIsRecording(false);
       performCleanup();
+      return false;
     }
   };
 
@@ -313,6 +373,7 @@ export function useInterviewAudio() {
     if (isMountedRef.current) {
       setIsRecording(false);
       setLiveText("");
+      setStatusWarning("");
     }
     dgAccumulatedRef.current = "";
     addLog("Stopped.");
@@ -333,6 +394,7 @@ export function useInterviewAudio() {
     logs,
     isModelReady,
     downloadProgress,
+    statusWarning,
     startInterview,
     stopInterview,
     clearMessages,

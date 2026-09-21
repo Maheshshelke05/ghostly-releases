@@ -188,6 +188,11 @@ export function registerIpcHandlers(): void {
       req.on("error", (error) => {
         reject(error);
       });
+      // Nothing in this call ever had a timeout — a connection that opens but
+      // never gets a response (dead network, restrictive proxy silently
+      // dropping packets) left the renderer's await hanging forever with no
+      // error, no timeout, and no way to recover except restarting the app.
+      req.setTimeout(30000, () => req.destroy(new Error("NVIDIA request timed out after 30s")));
 
       req.write(postData);
       req.end();
@@ -218,6 +223,7 @@ export function registerIpcHandlers(): void {
       });
 
       req.on("error", (error) => reject(error));
+      req.setTimeout(15000, () => req.destroy(new Error("NVIDIA key test timed out after 15s")));
       req.end();
     });
   });
@@ -254,6 +260,7 @@ export function registerIpcHandlers(): void {
       req.on("error", (error) => {
         reject(error);
       });
+      req.setTimeout(30000, () => req.destroy(new Error("Anthropic request timed out after 30s")));
 
       req.write(postData);
       req.end();

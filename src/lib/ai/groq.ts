@@ -1,4 +1,5 @@
 import type { AIProvider, AIRequestOptions } from "./types";
+import { rateLimitError } from "./types";
 
 export class GroqProvider implements AIProvider {
   name = "groq";
@@ -20,7 +21,7 @@ export class GroqProvider implements AIProvider {
   }
 
   async *streamSolution(options: AIRequestOptions): AsyncGenerator<string> {
-    const { base64Image, prompt, messages = [], model, apiKey, maxTokens = 4096 } = options;
+    const { base64Image, prompt, messages = [], model, apiKey, maxTokens = 4096, signal } = options;
 
     const apiMessages: any[] = messages.map((m) => ({
       role: m.role,
@@ -55,6 +56,7 @@ export class GroqProvider implements AIProvider {
           stream: true,
           messages: apiMessages,
         }),
+        signal,
       },
     );
 
@@ -62,9 +64,9 @@ export class GroqProvider implements AIProvider {
       const err = await response
         .json()
         .catch(() => ({ error: { message: response.statusText } }));
-      throw new Error(
-        `Groq API error: ${err.error?.message || response.statusText}`,
-      );
+      const message = `Groq API error: ${err.error?.message || response.statusText}`;
+      if (response.status === 429) throw rateLimitError(message);
+      throw new Error(message);
     }
 
     const reader = response.body!.getReader();

@@ -1,4 +1,17 @@
 import type { AIProvider, AIRequestOptions } from "./types";
+import { rateLimitError } from "./types";
+
+// Gemini 3.x Flash models "think" by default: hundreds of hidden tokens are
+// generated before the first visible word. Measured on this app's own prompts
+// (screenshot -> short answer): ~370-520 thinking tokens per answer, i.e. 3-6s
+// before/while anything showed, versus ~2s with thinking off — and identical
+// correctness on Two Sum / Trapping Rain Water / Coin Change / Median of Two
+// Sorted Arrays / Minimum Window Substring (all passed, run against real tests).
+// This app wants short, glanceable answers fast, so thinking is switched off.
+// Pro models can't turn thinking off, so they keep their default.
+function thinkingConfigFor(model: string): { thinkingBudget: number } | undefined {
+  return /pro/i.test(model) ? undefined : { thinkingBudget: 0 };
+}
 
 export class GeminiProvider implements AIProvider {
   name = "gemini";
@@ -25,6 +38,7 @@ export class GeminiProvider implements AIProvider {
       model,
       apiKey,
       maxTokens = 4096,
+      signal,
     } = options;
 
     // Clean model name
@@ -69,29 +83,55 @@ export class GeminiProvider implements AIProvider {
       parts,
     });
 
-    const body = {
-      contents,
-      generationConfig: {
-        maxOutputTokens: maxTokens,
-        temperature: 0.4,
-        topP: 0.95,
-        topK: 40,
-      },
+    const thinking = thinkingConfigFor(model);
+    const generationConfig: Record<string, unknown> = {
+      maxOutputTokens: maxTokens,
+      temperature: 0.4,
+      topP: 0.95,
+      topK: 40,
+      ...(thinking ? { thinkingConfig: thinking } : {}),
     };
+    const body = { contents, generationConfig };
 
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-      body: JSON.stringify(body),
-    });
+    const send = () =>
+      fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+        body: JSON.stringify(body),
+        signal,
+      });
+
+    let response = await send();
+
+    // A model variant that rejects thinkingConfig must not break the answer:
+    // drop it and retry once with Gemini's defaults.
+    if (response.status === 400 && thinking) {
+      const detail = await response.clone().text().catch(() => "");
+      if (/thinking/i.test(detail)) {
+        delete generationConfig.thinkingConfig;
+        response = await send();
+      }
+    }
 
     if (!response.ok) {
       const err = await response
         .json()
         .catch(() => ({ error: { message: response.statusText } }));
-      throw new Error(
-        `Gemini API error: ${err.error?.message || response.statusText}`,
-      );
+      const rawMessage = err.error?.message || response.statusText;
+      // 429 covers both a real per-day quota AND a much more common per-minute
+      // rate limit on the free tier — Google's own message doesn't always make
+      // that distinction obvious, and users were reading any 429 as "I'm out
+      // for the day" even when it clears in under a minute. Surface which kind
+      // this actually looks like instead of passing the raw text through as-is.
+      if (response.status === 429) {
+        const isDaily = /per[\s-]?day|daily|PerDay/i.test(rawMessage);
+        throw rateLimitError(
+          isDaily
+            ? `Gemini free-tier DAILY quota reached for this key. It resets at midnight Pacific Time — switch to another provider in Settings to keep going today. (${rawMessage})`
+            : `Gemini rate limit hit (too many requests in a short time — this is usually per-MINUTE, not per-day). Wait ~30-60s and try again, or switch provider in Settings. (${rawMessage})`,
+        );
+      }
+      throw new Error(`Gemini API error: ${rawMessage}`);
     }
 
     const reader = response.body!.getReader();

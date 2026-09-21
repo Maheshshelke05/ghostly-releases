@@ -59,6 +59,26 @@ contextBridge.exposeInMainWorld("ghostly", {
   getPendingAuthToken: (): Promise<{ token: string; user: any } | null> =>
     ipcRenderer.invoke("ghostly:get-pending-auth-token"),
 
+  // Hotkey conflict (another app already owns one of our default combos)
+  getPendingHotkeyConflict: (): Promise<string[] | null> =>
+    ipcRenderer.invoke("ghostly:get-pending-hotkey-conflict"),
+  onHotkeyConflict: (cb: (failed: string[]) => void): (() => void) => {
+    const listener = (_: any, failed: string[]): void => cb(failed);
+    ipcRenderer.on("ghostly:hotkey-conflict", listener);
+    return () => ipcRenderer.removeListener("ghostly:hotkey-conflict", listener);
+  },
+
+  // Local OAuth-callback server (port 7842) failed to start — login can never
+  // complete until this is surfaced, since the previous behavior was an
+  // undiagnosable, permanent "Waiting for browser login..." hang.
+  getPendingAuthServerError: (): Promise<string | null> =>
+    ipcRenderer.invoke("ghostly:get-pending-auth-server-error"),
+  onAuthServerError: (cb: (message: string) => void): (() => void) => {
+    const listener = (_: any, message: string): void => cb(message);
+    ipcRenderer.on("ghostly:auth-server-error", listener);
+    return () => ipcRenderer.removeListener("ghostly:auth-server-error", listener);
+  },
+
   // Deep link callback (Google OAuth)
   onDeepLink: (cb: (url: string) => void): (() => void) => {
     const listener = (_: any, url: string): void => cb(url);
@@ -77,6 +97,12 @@ contextBridge.exposeInMainWorld("ghostly", {
     const listener = (): void => cb();
     ipcRenderer.on("ghostly:solve", listener);
     return () => ipcRenderer.removeListener("ghostly:solve", listener);
+  },
+
+  onCaptureError: (cb: (message: string) => void): (() => void) => {
+    const listener = (_: any, message: string): void => cb(message);
+    ipcRenderer.on("ghostly:capture-error", listener);
+    return () => ipcRenderer.removeListener("ghostly:capture-error", listener);
   },
 
   onStartOver: (cb: () => void): (() => void) => {

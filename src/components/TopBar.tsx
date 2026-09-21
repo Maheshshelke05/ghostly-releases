@@ -1,4 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
+import { motion } from "framer-motion";
+import { JobIcon } from "./JobPortalTab";
+
+export type InterviewTab = "ai" | "screen" | "chat" | "jobs" | "support";
 
 interface TopBarProps {
   onOpenSettings: () => void;
@@ -10,11 +14,13 @@ interface TopBarProps {
   onMicSend?: () => void;
   onNextQuestion?: () => void;
   showNext?: boolean;
-  activeTab: "ai" | "screen" | "chat" | "support";
-  onTabChange: (tab: "ai" | "screen" | "chat" | "support") => void;
+  activeTab: InterviewTab;
+  onTabChange: (tab: InterviewTab) => void;
   onStop: () => void;
   autoAI: boolean;
   onToggleAutoAI: () => void;
+  // Collapse the whole overlay to just the logo (see MinimizedLogo).
+  onMinimize: () => void;
 }
 
 const MicIcon = () => (
@@ -46,16 +52,17 @@ const SettingsIcon = () => (
 );
 
 const TABS = [
-  { id: "ai" as const,      label: "AI Answer", Icon: MicIcon,    color: "#8b5cf6", glow: "rgba(139,92,246,0.5)" },
-  { id: "screen" as const,  label: "Screen",    Icon: ScreenIcon, color: "#3b82f6", glow: "rgba(59,130,246,0.45)" },
-  { id: "chat" as const,    label: "Chat",      Icon: ChatIcon,   color: "#a78bfa", glow: "rgba(167,139,250,0.45)" },
-  { id: "support" as const, label: "Report",   Icon: null,       color: "#fb923c", glow: "rgba(251,146,60,0.45)" },
+  { id: "ai" as const,      label: "AI Answer", Icon: MicIcon,    color: "#a78bfa", glow: "rgba(139,92,246,0.45)" },
+  { id: "screen" as const,  label: "Screen",    Icon: ScreenIcon, color: "#60a5fa", glow: "rgba(59,130,246,0.4)" },
+  { id: "chat" as const,    label: "Chat",      Icon: ChatIcon,   color: "#a78bfa", glow: "rgba(167,139,250,0.4)" },
+  { id: "jobs" as const,    label: "Job Portal", Icon: JobIcon,   color: "#a3e635", glow: "rgba(163,230,53,0.4)" },
+  { id: "support" as const, label: "Report",   Icon: null,       color: "#fb923c", glow: "rgba(251,146,60,0.4)" },
 ];
 
 export const TopBar: React.FC<TopBarProps> = ({
   onOpenSettings, settingsOpen, isLiveActive, onToggleLive, onScreenAnalysis,
   liveText = "", onMicSend, onNextQuestion, showNext = false,
-  activeTab, onTabChange, onStop, autoAI, onToggleAutoAI,
+  activeTab, onTabChange, onStop, autoAI, onToggleAutoAI, onMinimize,
 }) => {
   const [timer, setTimer] = useState(0);
   const transcriptScrollRef = useRef<HTMLDivElement>(null);
@@ -86,8 +93,6 @@ export const TopBar: React.FC<TopBarProps> = ({
     onTabChange(id);
   };
 
-  const activeTabData = TABS.find(t => t.id === activeTab);
-
   return (
     <div
       className="w-full flex justify-center pt-2 px-3 pointer-events-none"
@@ -98,105 +103,106 @@ export const TopBar: React.FC<TopBarProps> = ({
         style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
         onMouseEnter={() => window.ghostly.enableMouse()}
       >
-        {/* ── Main Bar ── */}
-        <div
-          className={`flex items-center h-10 px-2.5 gap-1.5 ${isLiveActive ? "rounded-t-2xl" : "rounded-2xl"}`}
+        {/* ── Main Bar ──
+            Fully opaque: CSS backdrop-filter can only blur content painted within
+            THIS same page — it cannot blur whatever real OS window is sitting
+            behind this transparent, frameless Electron window. Any alpha here
+            (even 0.93) exposes unblurred text/pixels from the app behind the
+            overlay, ghosting through this bar's own text. */}
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+          className={`relative flex items-center h-10 px-2.5 gap-1 ${isLiveActive ? "rounded-t-2xl" : "rounded-2xl"}`}
           style={{
-            background: "linear-gradient(180deg, rgba(18,18,24,0.99) 0%, rgba(12,12,16,0.99) 100%)",
-            backdropFilter: "blur(48px)",
-            border: "1px solid rgba(255,255,255,0.08)",
-            boxShadow: "0 8px 32px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 0 rgba(0,0,0,0.3)",
+            background: "linear-gradient(180deg, #14141d 0%, #0d0d13 100%)",
+            border: "1px solid rgba(255,255,255,0.09)",
+            boxShadow: "0 10px 34px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.07)",
+            transition: "border-radius 0.25s ease",
           }}
         >
-          {/* ── Brand ── */}
-          <div className="flex items-center gap-2 shrink-0 pr-1.5">
-            <div
+          {/* ── Brand — click to minimize the whole overlay down to the logo ── */}
+          <motion.button
+            onClick={onMinimize}
+            whileHover="hover"
+            whileTap={{ scale: 0.96 }}
+            title="Minimize — collapse to the logo (click the logo to reopen)"
+            aria-label="Minimize GhotlyAI"
+            className="group flex items-center gap-2 shrink-0 pl-0.5 pr-2 h-8 -ml-0.5 rounded-[10px] outline-none transition-colors duration-200 hover:bg-white/[0.06] focus-visible:bg-white/[0.08]"
+          >
+            <motion.span
+              variants={{ hover: { rotate: [0, -10, 8, 0], scale: 1.08, transition: { duration: 0.5 } } }}
               className="w-6 h-6 rounded-[8px] flex items-center justify-center text-[12px] shrink-0 relative"
-              style={{
-                background: "linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)",
-                boxShadow: "0 2px 8px rgba(139,92,246,0.5), inset 0 1px 0 rgba(255,255,255,0.2)",
-              }}
+              style={{ background: "rgba(139,92,246,0.18)", border: "1px solid rgba(139,92,246,0.32)", boxShadow: "0 0 14px rgba(139,92,246,0.25)" }}
             >
               👻
-            </div>
+            </motion.span>
             <span
-              className="text-[12px] font-black tracking-tight whitespace-nowrap"
-              style={{ color: "rgba(255,255,255,0.92)", letterSpacing: "-0.3px" }}
+              className="text-[12px] font-bold tracking-tight whitespace-nowrap text-white/90 transition-colors duration-200 group-hover:text-white"
+              style={{ letterSpacing: "-0.3px" }}
             >
               GhotlyAI
             </span>
-          </div>
+          </motion.button>
 
           {/* ── Divider ── */}
-          <div className="w-px h-5 shrink-0" style={{ background: "linear-gradient(180deg, transparent, rgba(255,255,255,0.1), transparent)" }} />
+          <div className="w-px h-5 shrink-0" style={{ background: "rgba(255,255,255,0.1)" }} />
 
-          {/* ── Tabs ── */}
+          {/* ── Tabs — the highlight glides between them (shared layoutId) ── */}
           <div
             className="flex items-center gap-0.5 p-0.5 rounded-[11px] shrink-0"
-            style={{
-              background: "rgba(255,255,255,0.04)",
-              border: "1px solid rgba(255,255,255,0.06)",
-            }}
+            style={{ background: "rgba(255,255,255,0.035)", border: "1px solid rgba(255,255,255,0.06)" }}
           >
             {TABS.map((tab) => {
               const isActive = activeTab === tab.id;
               const isStopBtn = tab.id === "ai" && isLiveActive;
 
               return (
-                <button
+                <motion.button
                   key={tab.id}
                   onClick={() => handleTabClick(tab.id)}
-                  className="flex items-center gap-1.5 px-2.5 h-7 rounded-[9px] text-[10px] font-bold whitespace-nowrap transition-all duration-200"
+                  whileTap={{ scale: 0.95 }}
+                  title={tab.label}
+                  className={`relative flex items-center gap-1 px-2 h-7 rounded-[9px] text-[10px] font-bold whitespace-nowrap outline-none transition-colors duration-200 ${
+                    isStopBtn || isActive ? "" : "text-white/40 hover:text-white/80 hover:bg-white/[0.04]"
+                  }`}
                   style={
                     isStopBtn
-                      ? {
-                          background: "linear-gradient(135deg, rgba(239,68,68,0.25), rgba(220,38,38,0.2))",
-                          border: "1px solid rgba(239,68,68,0.4)",
-                          color: "#f87171",
-                          boxShadow: "0 0 12px rgba(239,68,68,0.2)",
-                        }
+                      ? { background: "rgba(239,68,68,0.2)", border: "1px solid rgba(239,68,68,0.4)", color: "#f87171" }
                       : isActive
-                      ? {
-                          background: `linear-gradient(135deg, ${tab.color}22, ${tab.color}15)`,
-                          border: `1px solid ${tab.color}55`,
-                          color: tab.color,
-                          boxShadow: `0 0 14px ${tab.glow}`,
-                        }
-                      : {
-                          color: "rgba(255,255,255,0.3)",
-                          background: "transparent",
-                          border: "1px solid transparent",
-                        }
+                      ? { color: tab.color, border: "1px solid transparent" }
+                      : { border: "1px solid transparent" }
                   }
-                  onMouseEnter={e => {
-                    if (!isActive && !isStopBtn) {
-                      e.currentTarget.style.color = "rgba(255,255,255,0.65)";
-                      e.currentTarget.style.background = "rgba(255,255,255,0.07)";
-                      e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)";
-                    }
-                  }}
-                  onMouseLeave={e => {
-                    if (!isActive && !isStopBtn) {
-                      e.currentTarget.style.color = "rgba(255,255,255,0.3)";
-                      e.currentTarget.style.background = "transparent";
-                      e.currentTarget.style.borderColor = "transparent";
-                    }
-                  }}
                 >
-                  {isStopBtn ? (
-                    <>
-                      <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: "#f87171" }} />
-                      <span>Stop</span>
-                    </>
-                  ) : tab.Icon ? (
-                    <>
-                      <tab.Icon />
-                      <span>{tab.label}</span>
-                    </>
-                  ) : (
-                    <span>{tab.label}</span>
+                  {isActive && !isStopBtn && (
+                    <motion.span
+                      layoutId="ghotly-tab-pill"
+                      aria-hidden
+                      className="absolute -inset-px rounded-[9px] pointer-events-none"
+                      style={{ border: "1px solid transparent" }}
+                      initial={false}
+                      animate={{ backgroundColor: `${tab.color}22`, borderColor: `${tab.color}55`, boxShadow: `0 0 12px ${tab.glow}` }}
+                      transition={{ layout: { type: "spring", stiffness: 460, damping: 36 }, default: { duration: 0.25 } }}
+                    />
                   )}
-                </button>
+                  <span className="relative flex items-center gap-1">
+                    {isStopBtn ? (
+                      <>
+                        <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: "#f87171" }} />
+                        <span>Stop</span>
+                      </>
+                    ) : tab.Icon ? (
+                      <>
+                        <tab.Icon />
+                        {/* The live-session bar (Stop + Auto) leaves no room for a
+                            fifth full label in the 700px window — icon-only there. */}
+                        {!(isLiveActive && tab.id === "jobs") && <span>{tab.label}</span>}
+                      </>
+                    ) : (
+                      <span>{tab.label}</span>
+                    )}
+                  </span>
+                </motion.button>
               );
             })}
           </div>
@@ -204,24 +210,18 @@ export const TopBar: React.FC<TopBarProps> = ({
           {/* ── Auto AI pill — only when live ── */}
           {isLiveActive && (
             <>
-              <div className="w-px h-5 shrink-0" style={{ background: "linear-gradient(180deg, transparent, rgba(255,255,255,0.08), transparent)" }} />
-              <button
+              <div className="w-px h-5 shrink-0" style={{ background: "rgba(255,255,255,0.08)" }} />
+              <motion.button
+                initial={{ opacity: 0, scale: 0.85 }}
+                animate={{ opacity: 1, scale: 1 }}
+                whileTap={{ scale: 0.95 }}
                 onClick={onToggleAutoAI}
                 title={autoAI ? "Auto AI ON — click to disable" : "Auto AI OFF — click to enable"}
-                className="flex items-center gap-1.5 px-2.5 h-7 rounded-[9px] text-[10px] font-bold whitespace-nowrap transition-all duration-200 shrink-0"
+                className="flex items-center gap-1.5 px-2.5 h-7 rounded-[9px] text-[10px] font-bold whitespace-nowrap outline-none transition-colors duration-200 shrink-0"
                 style={
                   autoAI
-                    ? {
-                        background: "rgba(34,197,94,0.12)",
-                        border: "1px solid rgba(34,197,94,0.3)",
-                        color: "#4ade80",
-                        boxShadow: "0 0 10px rgba(34,197,94,0.15)",
-                      }
-                    : {
-                        background: "rgba(255,255,255,0.04)",
-                        border: "1px solid rgba(255,255,255,0.07)",
-                        color: "rgba(255,255,255,0.25)",
-                      }
+                    ? { background: "rgba(34,197,94,0.14)", border: "1px solid rgba(34,197,94,0.35)", color: "#4ade80" }
+                    : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.3)" }
                 }
               >
                 <span className="relative flex w-1.5 h-1.5 shrink-0">
@@ -229,35 +229,19 @@ export const TopBar: React.FC<TopBarProps> = ({
                   <span className="relative w-1.5 h-1.5 rounded-full" style={{ background: autoAI ? "#4ade80" : "rgba(255,255,255,0.15)" }} />
                 </span>
                 Auto
-              </button>
+              </motion.button>
             </>
           )}
 
           {/* ── Spacer ── */}
           <div className="flex-1" />
 
-          {/* ── Active tab indicator pill ── */}
-          {!isLiveActive && activeTabData && (
-            <div
-              className="flex items-center gap-1.5 px-2 h-6 rounded-[7px] shrink-0"
-              style={{
-                background: `${activeTabData.color}12`,
-                border: `1px solid ${activeTabData.color}30`,
-              }}
-            >
-              <span className="w-1 h-1 rounded-full" style={{ background: activeTabData.color }} />
-              <span className="text-[9px] font-bold uppercase tracking-wider" style={{ color: `${activeTabData.color}cc` }}>
-                {activeTab === "support" ? "Support" : activeTab === "ai" ? "AI" : activeTab === "screen" ? "Screen" : "Chat"}
-              </span>
-            </div>
-          )}
-
           {/* ── Timer ── */}
           <div
-            className="flex items-center gap-1.5 px-2.5 h-7 rounded-[9px] shrink-0"
+            className="flex items-center gap-1.5 px-2 h-7 rounded-[9px] shrink-0 transition-colors duration-300"
             style={{
-              background: "rgba(255,255,255,0.04)",
-              border: "1px solid rgba(255,255,255,0.07)",
+              background: isLiveActive ? "rgba(34,197,94,0.08)" : "rgba(255,255,255,0.04)",
+              border: isLiveActive ? "1px solid rgba(34,197,94,0.22)" : "1px solid rgba(255,255,255,0.07)",
             }}
           >
             <span
@@ -268,71 +252,72 @@ export const TopBar: React.FC<TopBarProps> = ({
                 animation: isLiveActive ? "pulse 2s infinite" : "none",
               }}
             />
-            <span className="text-[10px] font-mono tabular-nums" style={{ color: "rgba(255,255,255,0.4)" }}>{fmt(timer)}</span>
+            <span className="text-[10px] font-mono tabular-nums transition-colors duration-300" style={{ color: isLiveActive ? "rgba(134,239,172,0.9)" : "rgba(255,255,255,0.4)" }}>{fmt(timer)}</span>
           </div>
 
+          {/* ── Settings ── */}
+          <motion.button
+            onClick={onOpenSettings}
+            whileTap={{ scale: 0.92 }}
+            title="Settings"
+            className={`group w-8 h-8 flex items-center justify-center rounded-[9px] outline-none transition-colors duration-200 shrink-0 ${
+              settingsOpen ? "" : "hover:bg-white/[0.09] hover:text-white/70"
+            }`}
+            style={
+              settingsOpen
+                ? { background: "rgba(139,92,246,0.18)", border: "1px solid rgba(139,92,246,0.4)", color: "#a78bfa" }
+                : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.4)" }
+            }
+          >
+            <span className={`flex transition-transform duration-500 ease-out ${settingsOpen ? "rotate-90" : "group-hover:rotate-45"}`}>
+              <SettingsIcon />
+            </span>
+          </motion.button>
+
           {/* ── End Session ── */}
-          <button
+          <motion.button
             onClick={onStop}
-            className="flex items-center gap-1.5 px-2.5 h-7 rounded-[9px] text-[10px] font-bold whitespace-nowrap transition-all duration-200 shrink-0"
-            style={{
-              background: "rgba(239,68,68,0.08)",
-              border: "1px solid rgba(239,68,68,0.15)",
-              color: "rgba(239,68,68,0.55)",
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.background = "rgba(239,68,68,0.18)";
-              e.currentTarget.style.borderColor = "rgba(239,68,68,0.4)";
-              e.currentTarget.style.color = "#f87171";
-              e.currentTarget.style.boxShadow = "0 0 12px rgba(239,68,68,0.2)";
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.background = "rgba(239,68,68,0.08)";
-              e.currentTarget.style.borderColor = "rgba(239,68,68,0.15)";
-              e.currentTarget.style.color = "rgba(239,68,68,0.55)";
-              e.currentTarget.style.boxShadow = "none";
-            }}
+            whileTap={{ scale: 0.95 }}
+            className="flex items-center gap-1.5 px-2.5 h-7 rounded-[9px] text-[10px] font-bold whitespace-nowrap outline-none transition-colors duration-200 shrink-0 bg-red-500/[0.08] border border-red-500/[0.15] text-red-400/70 hover:bg-red-500/[0.2] hover:border-red-500/40 hover:text-red-300"
           >
             <svg width="7" height="7" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="3"/></svg>
             End
-          </button>
-
+          </motion.button>
 
           {/* ── Close ── */}
-          <button
+          <motion.button
             onClick={() => window.ghostly.quit()}
-            className="w-8 h-8 flex items-center justify-center rounded-[9px] transition-all duration-200 shrink-0"
-            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.3)" }}
-            onMouseEnter={e => { window.ghostly.enableMouse(); e.currentTarget.style.background = "rgba(239,68,68,0.18)"; e.currentTarget.style.borderColor = "rgba(239,68,68,0.4)"; e.currentTarget.style.color = "#f87171"; e.currentTarget.style.boxShadow = "0 0 10px rgba(239,68,68,0.2)"; }}
-            onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)"; e.currentTarget.style.color = "rgba(255,255,255,0.3)"; e.currentTarget.style.boxShadow = "none"; }}
+            onMouseEnter={() => window.ghostly.enableMouse()}
+            whileTap={{ scale: 0.92 }}
+            title="Quit"
+            className="w-8 h-8 flex items-center justify-center rounded-[9px] outline-none transition-colors duration-200 shrink-0 bg-white/[0.04] border border-white/[0.07] text-white/30 hover:bg-red-500/[0.18] hover:border-red-500/40 hover:text-red-400"
           >
             <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
             </svg>
-          </button>
-        </div>
+          </motion.button>
+        </motion.div>
 
         {/* ── Live Transcript Strip ── */}
         {isLiveActive && (
           <div
             className="flex items-center h-9 gap-2.5 px-3.5 rounded-b-2xl"
             style={{
-              background: "linear-gradient(180deg, rgba(10,10,14,0.99) 0%, rgba(8,8,11,0.99) 100%)",
-              backdropFilter: "blur(48px)",
-              border: "1px solid rgba(255,255,255,0.05)",
-              borderTop: "1px solid rgba(34,197,94,0.12)",
-              boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+              background: "#0a0a0e",
+              border: "1px solid rgba(255,255,255,0.06)",
+              borderTop: "1px solid rgba(34,197,94,0.15)",
+              boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
             }}
           >
             {/* Live indicator */}
             <div className="flex items-center gap-1.5 shrink-0">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inset-0 rounded-full bg-green-400 opacity-50" />
-                <span className="relative rounded-full h-2 w-2 bg-green-500" style={{ boxShadow: "0 0 6px rgba(34,197,94,0.9)" }} />
+                <span className="relative rounded-full h-2 w-2 bg-green-500" />
               </span>
               <span
                 className="text-[8px] font-black uppercase tracking-[0.15em]"
-                style={{ color: "rgba(74,222,128,0.7)" }}
+                style={{ color: "rgba(74,222,128,0.75)" }}
               >
                 Live
               </span>
@@ -356,7 +341,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                     // which made random conversational words light up as fake tech terms.
                     const isKey = ["array", "string", "tree", "binary", "graph", "hashmap", "queue", "stack", "heap", "dp", "recursion", "complexity", "o(n)", "o(1)", "o(log", "n)", "react", "python", "javascript", "typescript", "sql", "postgresql", "mongodb", "database", "api", "rest", "graphql", "docker", "redis", "kafka", "aws"].includes(clean);
                     return isKey ? (
-                      <span key={i} className="px-1 py-0.5 rounded text-[11px] font-extrabold text-amber-300 bg-amber-400/15 border border-amber-400/30 mx-0.5">
+                      <span key={i} className="px-1 py-0.5 rounded text-[11px] font-extrabold mx-0.5" style={{ color: "#fbbf24", background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.3)" }}>
                         {word}{" "}
                       </span>
                     ) : (
@@ -365,7 +350,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                   })}
                 </span>
               ) : (
-                <span className="text-[11px] font-sans whitespace-nowrap italic" style={{ color: "rgba(255,255,255,0.18)" }}>
+                <span className="text-[11px] font-sans whitespace-nowrap italic" style={{ color: "rgba(255,255,255,0.2)" }}>
                   Listening for interviewer…
                 </span>
               )}
@@ -380,11 +365,8 @@ export const TopBar: React.FC<TopBarProps> = ({
                   style={{
                     background: "linear-gradient(135deg, #8b5cf6, #7c3aed)",
                     color: "#fff",
-                    boxShadow: "0 2px 8px rgba(139,92,246,0.45)",
-                    border: "1px solid rgba(139,92,246,0.3)",
+                    border: "1px solid rgba(139,92,246,0.4)",
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 3px 14px rgba(139,92,246,0.6)"; e.currentTarget.style.transform = "translateY(-0.5px)"; }}
-                  onMouseLeave={e => { e.currentTarget.style.boxShadow = "0 2px 8px rgba(139,92,246,0.45)"; e.currentTarget.style.transform = "none"; }}
                 >
                   <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
@@ -402,8 +384,6 @@ export const TopBar: React.FC<TopBarProps> = ({
                     border: "1px solid rgba(255,255,255,0.12)",
                     color: "rgba(255,255,255,0.55)",
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.12)"; e.currentTarget.style.color = "#fff"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.2)"; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.07)"; e.currentTarget.style.color = "rgba(255,255,255,0.55)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; }}
                 >
                   Next ›
                 </button>

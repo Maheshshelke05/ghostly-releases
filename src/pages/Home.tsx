@@ -1,11 +1,15 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useStore } from "../store/useStore";
-import { getProvider } from "../lib/ai";
+import { streamWithFallback, warmProviderConnection, type ProviderName } from "../lib/ai";
+import { activeProviderKey, isProviderDisabled, usableApiKeys } from "../lib/providerState";
 import { buildPrompt, buildSessionContext, buildLiveInterviewPrompt } from "../lib/prompts";
 import { v4 as uuidv4 } from "uuid";
-import { TopBar } from "../components/TopBar";
-import { SettingsPanel } from "../components/SettingsPanel";
+import { TopBar, type InterviewTab } from "../components/TopBar";
+import { JobPortalHeader, JobPortalPanel, JobPortalFooter } from "../components/JobPortalTab";
+import { HomeSettingsPanel } from "../components/HomeSettingsPanel";
+import { MinimizedLogo } from "../components/MinimizedLogo";
+import { useMinimizedClickThrough } from "../hooks/useMinimizedClickThrough";
 import { SolutionCard } from "../components/SolutionCard";
 import { useInterviewAudio } from "../hooks/useInterviewAudio";
 import { compressScreenshot } from "../lib/utils/imageCompressor";
@@ -92,6 +96,32 @@ const CopyButton: React.FC<{ text: string }> = ({ text }) => {
   );
 };
 
+const COMMUNITY_URL = "https://chat.whatsapp.com/E5FwqHfExlOBrKhZffspZv?s=cl&p=i&mlu=4&ilr=4";
+
+const CommunityButton: React.FC = () => (
+  <button
+    type="button"
+    onClick={() => window.ghostly.openExternal(COMMUNITY_URL)}
+    className="lg:col-span-2 group w-full flex items-center gap-3 rounded-2xl px-4 py-3 text-left transition-all active:scale-[0.99]"
+    style={{ background: "linear-gradient(135deg, rgba(37,211,102,0.16), rgba(37,211,102,0.05))", border: "1px solid rgba(37,211,102,0.32)" }}
+    onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(37,211,102,0.6)"; e.currentTarget.style.boxShadow = "0 0 20px rgba(37,211,102,0.18)"; }}
+    onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(37,211,102,0.32)"; e.currentTarget.style.boxShadow = "none"; }}
+  >
+    <span className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: "#25D366" }}>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff">
+        <path d="M17.47 14.38c-.3-.15-1.76-.87-2.03-.97-.27-.1-.47-.15-.67.15-.2.3-.77.97-.94 1.17-.17.2-.35.22-.65.07-.3-.15-1.26-.46-2.4-1.48-.89-.79-1.49-1.77-1.66-2.07-.17-.3-.02-.46.13-.61.14-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.08-.15-.67-1.62-.92-2.22-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.8.37-.27.3-1.04 1.02-1.04 2.48s1.07 2.88 1.21 3.08c.15.2 2.1 3.2 5.08 4.49.71.31 1.26.49 1.69.63.71.23 1.36.2 1.87.12.57-.08 1.76-.72 2.01-1.41.25-.7.25-1.29.17-1.41-.07-.13-.27-.2-.57-.35zM12.04 21.5h-.01a9.45 9.45 0 0 1-4.82-1.32l-.35-.2-3.58.94.96-3.49-.23-.36a9.43 9.43 0 0 1-1.45-5.03c0-5.21 4.24-9.45 9.46-9.45 2.52 0 4.9.99 6.68 2.77a9.4 9.4 0 0 1 2.76 6.69c0 5.21-4.24 9.45-9.42 9.45zM20.52 3.45A11.4 11.4 0 0 0 12.04 0C5.73 0 .6 5.13.6 11.44c0 2.02.53 3.99 1.53 5.73L.5 24l6.98-1.83a11.43 11.43 0 0 0 5.46 1.39h.01c6.31 0 11.44-5.13 11.44-11.44 0-3.06-1.19-5.93-3.35-8.09z" />
+      </svg>
+    </span>
+    <span className="min-w-0 flex-1">
+      <span className="block text-[13px] font-black text-white leading-tight">Join our WhatsApp Community</span>
+      <span className="block text-[10.5px] text-white/45 mt-0.5">Get help, tips and updates from other Ghostly AI users</span>
+    </span>
+    <span className="text-[#25D366]/70 group-hover:text-[#25D366] shrink-0">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M7 17 17 7M8 7h9v9" /></svg>
+    </span>
+  </button>
+);
+
 interface SupportPanelProps {
   email: string;
   supportAd?: { script_url?: string; container_id?: string };
@@ -120,6 +150,7 @@ const SupportPanel: React.FC<SupportPanelProps> = ({
   onSubmit,
 }) => (
   <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-4 py-1">
+    <CommunityButton />
     <form onSubmit={onSubmit} className="rounded-2xl border border-white/[0.08] p-4"
       style={{ background: "linear-gradient(160deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03))" }}>
       <div className="mb-4">
@@ -152,14 +183,14 @@ const SupportPanel: React.FC<SupportPanelProps> = ({
         <label className="text-[9px] font-bold uppercase tracking-widest text-white/30">Subject</label>
         <input value={supportSubject} onChange={(e) => setSupportSubject(e.target.value)}
           required maxLength={120} placeholder="Example: Screenshot capture is not working"
-          className="mt-1 w-full rounded-xl px-3 py-2 text-[12px] font-semibold bg-white/[0.06] border border-white/[0.08] text-white/85 placeholder:text-white/20 outline-none focus:border-orange-400/40" />
+          className="mt-1 w-full rounded-xl px-3 py-2 text-[12px] font-semibold bg-white/[0.06] border border-white/[0.08] text-white/85 placeholder:text-white/20 outline-none focus:border-violet-400/40" />
       </div>
 
       <div className="mt-3">
         <label className="text-[9px] font-bold uppercase tracking-widest text-white/30">Message</label>
         <textarea value={supportMessage} onChange={(e) => setSupportMessage(e.target.value)}
           required minLength={10} maxLength={1200} placeholder="Tell what happened, what you clicked, and what you expected."
-          className="mt-1 w-full h-28 rounded-xl px-3 py-2 text-[12px] font-semibold bg-white/[0.06] border border-white/[0.08] text-white/85 placeholder:text-white/20 outline-none resize-none focus:border-orange-400/40" />
+          className="mt-1 w-full h-28 rounded-xl px-3 py-2 text-[12px] font-semibold bg-white/[0.06] border border-white/[0.08] text-white/85 placeholder:text-white/20 outline-none resize-none focus:border-violet-400/40" />
       </div>
 
       {supportError && <p className="mt-3 text-[11px] font-bold text-red-300">{supportError}</p>}
@@ -167,15 +198,15 @@ const SupportPanel: React.FC<SupportPanelProps> = ({
 
       <button type="submit" disabled={supportStatus === "sending" || !supportSubject.trim() || supportMessage.trim().length < 10}
         className="mt-4 w-full py-2.5 rounded-xl text-[12px] font-black transition-all disabled:opacity-40"
-        style={{ background: "linear-gradient(135deg, #eb9245, #d97706)", color: "#111" }}>
+        style={{ background: "linear-gradient(135deg, #8b5cf6, #7c3aed)", color: "#fff" }}>
         {supportStatus === "sending" ? "Sending..." : "Send Report"}
       </button>
     </form>
 
     <div className="space-y-3">
-      <div className="rounded-2xl border border-orange-400/20 p-3"
-        style={{ background: "linear-gradient(160deg, rgba(235,146,69,0.12), rgba(255,255,255,0.04))" }}>
-        <p className="text-[10px] font-black uppercase tracking-widest text-orange-300/80">Support Ads</p>
+      <div className="rounded-2xl border border-violet-400/20 p-3"
+        style={{ background: "linear-gradient(160deg, rgba(139,92,246,0.12), rgba(255,255,255,0.04))" }}>
+        <p className="text-[10px] font-black uppercase tracking-widest text-violet-300/80">Support Ads</p>
         <p className="mt-1 text-[11px] text-white/45 leading-relaxed">
           Sponsored content may appear here while you send feedback. No ads are shown in the interview answer area.
         </p>
@@ -200,14 +231,33 @@ export const Home: React.FC = () => {
   } = useStore();
 
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Minimized = the whole overlay collapsed to just the logo. Everything stays mounted
+  // (live audio, streaming answers and the session keep running); it is only hidden.
+  const [collapsed, setCollapsed] = useState(false);
+  const [fullyHidden, setFullyHidden] = useState(false);
+  const handleMinimize = useCallback(() => setCollapsed(true), []);
+  useMinimizedClickThrough(collapsed);
+  const handleExpand = useCallback(() => {
+    setFullyHidden(false);
+    setCollapsed(false);
+    window.ghostly.enableMouse();
+  }, []);
   const [followUpText, setFollowUpText] = useState("");
   const [followUpFocused, setFollowUpFocused] = useState(false);
   const [chatFocused, setChatFocused] = useState(false);
-  const [activeTab, setActiveTab] = useState<"ai" | "screen" | "chat" | "support">("ai");
+  const [activeTab, setActiveTab] = useState<InterviewTab>("ai");
   const [liveActive, setLiveActive] = useState(false);
   // Fix: load autoAI from saved settings instead of hardcoded true
   const [autoAI, setAutoAI] = useState(() => settings.autoAI ?? true);
   const [qaPages, setQaPages] = useState<{ question: string; answer: string }[]>([]);
+  // Shown briefly whenever streamWithFallback actually switches provider —
+  // this is the whole point of making the switch visible instead of silent.
+  const [fallbackNotice, setFallbackNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (!fallbackNotice) return;
+    const t = setTimeout(() => setFallbackNotice(null), 6000);
+    return () => clearTimeout(t);
+  }, [fallbackNotice]);
 
   // ── Session tracking ────────────────────────────────────────────────────────
   const sessionStartRef   = useRef<number>(Date.now());
@@ -241,6 +291,16 @@ export const Home: React.FC = () => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages, chatStreaming]);
 
+  // Keep the answering provider's connection warm for the whole interview, so the
+  // first Screen/AI answer doesn't spend its first ~0.2s+ on DNS/TCP/TLS. Idle
+  // connections get dropped after a few minutes, hence the periodic refresh.
+  useEffect(() => {
+    const name = settings.activeProvider as ProviderName;
+    warmProviderConnection(name);
+    const t = window.setInterval(() => warmProviderConnection(name), 4 * 60 * 1000);
+    return () => window.clearInterval(t);
+  }, [settings.activeProvider]);
+
   // ── Core AI Stream ──────────────────────────────────────────────────────────
   const runAIStream = useCallback(async (
     screenshotList: string[],
@@ -248,10 +308,14 @@ export const Home: React.FC = () => {
     followUpQuery?: string,
   ) => {
     const providerName = settings.activeProvider;
-    const activeKey = settings.apiKeys[settings.activeProvider];
+    const activeKey = activeProviderKey(settings);
 
     if (!activeKey) {
-      setError(`No API key for ${providerName}. Open Settings to add one.`);
+      setError(
+        isProviderDisabled(settings, providerName)
+          ? `${providerName} is deactivated. Open Settings → API Keys and activate a provider.`
+          : `No API key for ${providerName}. Open Settings to add one.`
+      );
       setIsStreaming(false);
       return;
     }
@@ -274,13 +338,19 @@ export const Home: React.FC = () => {
     setFollowUpText("");
 
     let prompt = "";
+    // Screen analysis (and any other caller that hands runAIStream a fully-built
+    // prompt via followUpQuery) is detected here once, and reused below for the
+    // saved questionText too — previously questionText had its own, narrower
+    // "staff engineer" -only check, so every screen-analysis answer for any
+    // interviewType other than system_design stored/displayed the entire raw
+    // prompt ("You are an expert python developer...") as if it were the
+    // interviewer's question.
+    const isFormattedPrompt = !!followUpQuery && (
+      followUpQuery.includes("## Approach") ||
+      followUpQuery.includes("You are an expert") ||
+      followUpQuery.includes("staff engineer")
+    );
     if (followUpQuery) {
-      // Screen analysis saathi buildPrompt already pass hoto as followUpQuery
-      // Check karto ki he already formatted prompt ahe ka simple question
-      const isFormattedPrompt = followUpQuery.includes("## Approach") || 
-        followUpQuery.includes("You are an expert") ||
-        followUpQuery.includes("staff engineer");
-      
       if (isFormattedPrompt) {
         prompt = followUpQuery; // Already built prompt — directly use karo
       } else {
@@ -289,23 +359,40 @@ export const Home: React.FC = () => {
     } else if (transcriptOverride) {
         prompt = buildLiveInterviewPrompt(transcriptOverride, interviewSession);
     } else {
-      prompt = buildPrompt(settings.interviewType, settings.language, interviewSession);
+      prompt = buildPrompt(interviewSession);
     }
 
     try {
-      const provider = getProvider(providerName);
       let fullSolution = "";
       const latestScreenshot = transcriptOverride ? undefined :
         screenshotList.length > 0 ? screenshotList[screenshotList.length - 1] : undefined;
       const historyContext = sessionMessages.slice(-4).map((m) => ({ role: m.role, content: m.content }));
 
-      const stream = provider.streamSolution({
-        base64Image: latestScreenshot, prompt, messages: historyContext,
-        model: settings.activeModel,
-        apiKey: activeKey,
-        mimeType: latestScreenshot?.includes("image/jpeg") ? "image/jpeg" : "image/png",
-        maxTokens: transcriptOverride ? 2048 : 4096,
-      });
+      const stream = streamWithFallback(
+        providerName as ProviderName,
+        {
+          base64Image: latestScreenshot, prompt, messages: historyContext,
+          model: settings.activeModel,
+          apiKey: activeKey,
+          mimeType: latestScreenshot?.includes("image/jpeg") ? "image/jpeg" : "image/png",
+          maxTokens: transcriptOverride ? 2048 : 4096,
+          // Previously this AbortController only got checked between chunks
+          // inside the loop below (`if (signal.aborted) break`) — it never
+          // actually reached the network call, so a request that simply never
+          // received a response (not aborted, just stalled) would hang the
+          // await forever. Composed with a 60s hard timeout — generous enough
+          // that a normal (even slow) streaming answer won't hit it — so a
+          // genuinely stalled connection eventually fails instead of hanging.
+          signal: AbortSignal.any([signal, AbortSignal.timeout(60000)]),
+        },
+        usableApiKeys(settings),
+        settings.autoSwitchProvider ?? true,
+        ({ from, to, reason }) => setFallbackNotice(
+          reason === "vision"
+            ? `👁️ ${from} can't see screenshots — this answer used ${to} instead.`
+            : `⚡ ${from} hit a rate limit — this answer used ${to} instead.`
+        ),
+      );
 
       let lastFlush = Date.now();
       let pendingBuffer = "";
@@ -335,7 +422,7 @@ export const Home: React.FC = () => {
       else if (screenshotList.length) featuresUsedRef.current.add("screen");
 
       // Save Q&A to session history
-      const questionText = transcriptOverride || (followUpQuery && !followUpQuery.includes("staff engineer") ? followUpQuery : "Screen Analysis");
+      const questionText = transcriptOverride || (followUpQuery && !isFormattedPrompt ? followUpQuery : "Screen Analysis");
       const featureTag = transcriptOverride ? "ai-answer" : screenshotList.length ? "screen" : "follow-up";
       sessionQARef.current.push({ question: questionText, answer: fullSolution, feature: featureTag, timestamp: Date.now() });
 
@@ -369,7 +456,7 @@ export const Home: React.FC = () => {
     } finally {
       if (!signal.aborted) { setIsStreaming(false); }
     }
-  }, [settings, sessionMessages, interviewSession, setCurrentSolution, setError, setIsStreaming, appendToSolution, addToHistory, addSessionMessage, liveActive, clearScreenshots]);
+  }, [settings, sessionMessages, interviewSession, setCurrentSolution, setError, setIsStreaming, appendToSolution, addToHistory, addSessionMessage, liveActive, clearScreenshots, setFallbackNotice]);
 
   // ── Auto AI: silence detection — 2.5s after last transcript change ──────────
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -377,6 +464,17 @@ export const Home: React.FC = () => {
   // Fix: stable ref to avoid stale closure inside setTimeout
   const runAIStreamRef = useRef(runAIStream);
   useEffect(() => { runAIStreamRef.current = runAIStream; }, [runAIStream]);
+
+  // Read inside the setTimeout below instead of the closed-over `liveActive` —
+  // React's effect-cleanup (which clears silenceTimerRef) is a passive effect,
+  // not guaranteed to run before an already-scheduled timer fires. If the user
+  // switches to Screen/Chat (or clicks Stop) in the ~1 second right before a
+  // pending silence timer was due, the stale timer could still fire an extra
+  // live AI-answer request after the tab switch — racing the Screen Analysis
+  // request that just started and burning through the AI provider's quota for
+  // no visible reason (reported as "screen capture fails + false daily limit").
+  const liveActiveRef = useRef(liveActive);
+  useEffect(() => { liveActiveRef.current = liveActive; }, [liveActive]);
 
   useEffect(() => {
     if (!liveActive || !autoAI || isStreaming) return;
@@ -389,6 +487,7 @@ export const Home: React.FC = () => {
     const silenceDelay = endsWithQuestion ? 800 : 2200;
 
     silenceTimerRef.current = setTimeout(() => {
+      if (!liveActiveRef.current) return;
       const current = audio.liveText.trim();
       if (!current || isStreaming) return;
 
@@ -412,7 +511,7 @@ export const Home: React.FC = () => {
   }, [audio.liveText, liveActive, autoAI, isStreaming, pendingTranscript, currentSolution]);
 
   // ── Toggle Live Mode (AI Answer tab click) ──────────────────────────────────
-  const handleToggleLive = useCallback(() => {
+  const handleToggleLive = useCallback(async () => {
     if (liveActive) {
       audio.stopInterview();
       setLiveActive(false);
@@ -434,7 +533,15 @@ export const Home: React.FC = () => {
     setPageIndex(0);
     setPendingTranscript("");
     setLiveActive(true);
-    audio.startInterview();
+    // Used to fire-and-forget this — if capture genuinely failed to start
+    // (getDisplayMedia rejected, zero audio tracks), liveActive stayed stuck
+    // true with nothing telling the UI, so "Listening…" pulsed forever with
+    // no error and no way to tell it apart from real silence.
+    const started = await audio.startInterview();
+    if (!started) {
+      setLiveActive(false);
+      setError("Couldn't start listening — check Windows Sound Settings for a working default playback device, then try again.");
+    }
   }, [liveActive, audio, clearSolution, setError]);
 
   // ── Manual Send — liveText AI ko bhejo, same screen pe answer dikhe ─────────
@@ -478,12 +585,16 @@ export const Home: React.FC = () => {
       clearScreenshots();
       setError(null);
       const rawB64 = await window.ghostly.captureFullscreen();
-      const compressedB64 = await compressScreenshot(rawB64, 800, 0.7);
+      const compressedB64 = await compressScreenshot(rawB64);
       addScreenshot(compressedB64);
-      const screenPrompt = buildPrompt(settings.interviewType, settings.language);
+      // interviewSession carries the candidate's custom instructions / job
+      // description / profile — this used to be omitted here, so Screen
+      // Analysis silently ignored any custom instructions the user set in
+      // Interview Setup (only the live "AI Answer" path included them).
+      const screenPrompt = buildPrompt(interviewSession);
       runAIStream([compressedB64], undefined, screenPrompt);
     } catch { setError("Failed to capture screen."); }
-  }, [runAIStream, setError, settings.interviewType, settings.language, addScreenshot, liveActive, audio, setCurrentSolution, clearScreenshots, setIsStreaming]);
+  }, [runAIStream, setError, addScreenshot, liveActive, audio, setCurrentSolution, clearScreenshots, setIsStreaming, interviewSession]);
 
   // ── Tab change ──────────────────────────────────────────────────────────────
   const supportAd = useMemo(() => ads.find((ad) => ad.is_active && ad.script_url && ad.container_id), [ads]);
@@ -497,7 +608,12 @@ export const Home: React.FC = () => {
 
   const handleSupportSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user?.idToken || supportStatus === "sending") return;
+    if (supportStatus === "sending") return;
+    if (!user?.idToken) {
+      setSupportStatus("error");
+      setSupportError("You are not logged in. Please log in again and resend.");
+      return;
+    }
 
     setSupportStatus("sending");
     setSupportError("");
@@ -515,15 +631,27 @@ export const Home: React.FC = () => {
           message: supportMessage.trim(),
           app_version: window.ghostly.getVersion(),
           page: activeTab,
-          interview_type: settings.interviewType,
-          language: settings.language,
         }),
+        signal: AbortSignal.timeout(15000),
       });
 
       const data = await res.json().catch(() => ({}));
       if (res.status === 429) {
         setSupportStatus("limited");
         setSupportError(data.error || "You can send only one support message per day.");
+        return;
+      }
+      // Sign-in tokens last about an hour, so a long session can outlive its token —
+      // say so instead of showing the raw "Invalid token: ..." from the server.
+      // The typed text is kept so nothing is lost.
+      if (res.status === 401) {
+        setSupportStatus("error");
+        setSupportError("Your login has expired. Please log in again, then send the report (your text is kept).");
+        return;
+      }
+      if (res.status === 403) {
+        setSupportStatus("error");
+        setSupportError(data.error ? `Your account is blocked: ${data.error}` : "Your account is blocked. Contact support.");
         return;
       }
       if (!res.ok) throw new Error(data.error || "Could not send your report.");
@@ -533,11 +661,17 @@ export const Home: React.FC = () => {
       setSupportMessage("");
     } catch (err: any) {
       setSupportStatus("error");
-      setSupportError(err.message || "Could not send your report.");
+      setSupportError(
+        err?.name === "TimeoutError" || err?.name === "AbortError"
+          ? "The server took too long to respond. Check your connection and try again."
+          : err instanceof TypeError
+          ? "Could not reach the server. Check your internet connection and try again."
+          : err.message || "Could not send your report."
+      );
     }
   };
 
-  const handleTabChange = useCallback((tab: "ai" | "screen" | "chat" | "support") => {
+  const handleTabChange = useCallback((tab: InterviewTab) => {
     // Abort any active AI stream when switching tabs to avoid feature collisions
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -654,8 +788,7 @@ export const Home: React.FC = () => {
       solution: qaList[0]?.answer || "",
       provider: settings.activeProvider,
       model: settings.activeModel,
-      interviewType: hasLive ? "live-interview" : settings.interviewType,
-      language: settings.language,
+      interviewType: hasLive ? "live-interview" : "general",
       companyName: interviewSession?.companyName || "",
       position: interviewSession?.position || "",
       durationSeconds: duration,
@@ -701,23 +834,37 @@ export const Home: React.FC = () => {
     setChatInput("");
     setChatStreaming(true);
 
-    const activeKey = settings.apiKeys[settings.activeProvider];
+    const activeKey = activeProviderKey(settings);
     if (!activeKey) {
-      setChatMessages(prev => [...prev, { role: "assistant", text: `No API key for ${settings.activeProvider}. Open Settings to add one.` }]);
+      setChatMessages(prev => [...prev, {
+        role: "assistant",
+        text: isProviderDisabled(settings, settings.activeProvider)
+          ? `${settings.activeProvider} is deactivated. Open Settings → API Keys and activate a provider.`
+          : `No API key for ${settings.activeProvider}. Open Settings to add one.`,
+      }]);
       setChatStreaming(false);
       return;
     }
 
     try {
-      const provider = getProvider(settings.activeProvider);
       const history = chatMessages.slice(-8).map(m => ({ role: m.role, content: m.text }));
-      const stream = provider.streamSolution({
-        prompt: text.trim(),
-        messages: history,
-        model: settings.activeModel,
-        apiKey: activeKey,
-        maxTokens: 2048,
-      });
+      const stream = streamWithFallback(
+        settings.activeProvider as ProviderName,
+        {
+          prompt: text.trim(), messages: history, model: settings.activeModel, apiKey: activeKey, maxTokens: 2048,
+          // Same "stalled connection hangs the chat input forever" gap as the
+          // main AI-answer path — chat has no cancel button, so this timeout
+          // is its only way out of a dead request.
+          signal: AbortSignal.timeout(60000),
+        },
+        usableApiKeys(settings),
+        settings.autoSwitchProvider ?? true,
+        ({ from, to, reason }) => setFallbackNotice(
+          reason === "vision"
+            ? `👁️ ${from} can't see screenshots — this answer used ${to} instead.`
+            : `⚡ ${from} hit a rate limit — this answer used ${to} instead.`
+        ),
+      );
 
       let full = "";
       let lastChatFlush = Date.now();
@@ -745,13 +892,30 @@ export const Home: React.FC = () => {
     } finally {
       setChatStreaming(false);
     }
-  }, [chatStreaming, chatMessages, settings]);
+  }, [chatStreaming, chatMessages, settings, setFallbackNotice]);
 
   // Force show window, opacity 1, and enable mouse on mount when entering interview screen
   useEffect(() => {
     window.ghostly.setOpacity(1);
     window.ghostly.show();
     window.ghostly.enableMouse();
+  }, []);
+
+  // After Ctrl+E/Ctrl+Enter show the answer, hotkeys.ts deliberately puts the
+  // window into click-through mode so the meeting app underneath stays
+  // clickable — but every interactive element's onMouseEnter calls
+  // enableMouse() (full mouse capture) the moment the pointer enters it, and
+  // nothing ever restored click-through afterward. A single window-level
+  // listener here (rather than one per element) restores it once the pointer
+  // actually leaves the overlay entirely. `relatedTarget === null` is the
+  // standard way to distinguish "left the window" from "moved between
+  // child elements" for a mouseout event.
+  useEffect(() => {
+    const onMouseOut = (e: MouseEvent) => {
+      if (e.relatedTarget === null) window.ghostly.disableMouse();
+    };
+    window.addEventListener("mouseout", onMouseOut);
+    return () => window.removeEventListener("mouseout", onMouseOut);
   }, []);
 
   // Hotkeys — all of these arrive as IPC events from Electron's system-wide
@@ -763,23 +927,28 @@ export const Home: React.FC = () => {
   // effectively never during a real interview.
   useEffect(() => {
     // Ctrl+E / Ctrl+Shift+S / Ctrl+Shift+Enter (main process) both funnel through
-    // here. Compress to 800px/70% JPEG to match handleScreenAnalysis's payload
-    // size (this used to be sent uncompressed for the hotkey path only, several
-    // times larger than the button-triggered flow).
+    // here. Same compression as handleScreenAnalysis (imageCompressor defaults) so
+    // both capture paths send an identical, text-legible payload (this used to be
+    // sent uncompressed for the hotkey path only, several times larger).
     const offScreenshot = window.ghostly.onScreenshot(async (b64) => {
-      const compressed = await compressScreenshot(b64, 800, 0.7);
+      const compressed = await compressScreenshot(b64);
       addScreenshot(compressed);
     });
     // Ctrl+Enter — solve whatever's already captured/transcribed. If it's a
-    // screenshot-driven solve, use the same interview-type/language prompt
-    // handleScreenAnalysis builds instead of an empty one.
+    // screenshot-driven solve, use the same adaptive prompt handleScreenAnalysis
+    // builds instead of an empty one.
     const offSolve = window.ghostly.onSolve(async () => {
       const followUp = screenshotsRef.current.length > 0
-        ? buildPrompt(settings.interviewType, settings.language)
+        ? buildPrompt(interviewSession)
         : undefined;
       await runAIStream(screenshotsRef.current, undefined, followUp);
     });
     const offStartOver = window.ghostly.onStartOver(handleRestart);
+
+    // Ctrl+E capture failing (e.g. desktopCapturer erroring) used to only log
+    // to the terminal — invisible in a packaged app, so it looked exactly
+    // like the hotkey silently doing nothing.
+    const offCaptureError = window.ghostly.onCaptureError((message) => setError(message));
 
     // Ctrl+N — Next Question (only meaningful while live-listening)
     const offNextQuestion = window.ghostly.onNextQuestion(() => {
@@ -817,22 +986,34 @@ export const Home: React.FC = () => {
       offScreenshot();
       offSolve();
       offStartOver();
+      offCaptureError();
       offNextQuestion();
       offManualSend();
       offPrevQuestion();
       offNextQuestionPage();
     };
-  }, [runAIStream, addScreenshot, handleRestart, liveActive, isStreaming, currentSolution, pendingTranscript, handleManualSend, audio.liveText, settings.interviewType, settings.language, totalPages]);
+  }, [runAIStream, addScreenshot, handleRestart, liveActive, isStreaming, currentSolution, pendingTranscript, handleManualSend, audio.liveText, totalPages, interviewSession]);
 
   const displayLiveText = audio.liveText || pendingTranscript;
 
   return (
     <div className="h-screen w-full bg-transparent text-white font-mono pointer-events-none flex flex-col" style={{ userSelect: "none", WebkitUserSelect: "none" } as React.CSSProperties}>
 
+      {/* Everything except the logo collapses toward the top-left corner. `visibility`
+          (not just opacity) is switched off once the fade finishes so nothing invisible
+          can still catch the mouse. */}
+      <motion.div
+        className="flex-1 min-h-0 flex flex-col"
+        initial={false}
+        animate={collapsed ? { opacity: 0, scale: 0.9 } : { opacity: 1, scale: 1 }}
+        transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+        onAnimationComplete={() => { if (collapsed) setFullyHidden(true); }}
+        style={{ transformOrigin: "28px 28px", visibility: fullyHidden ? "hidden" : "visible" }}
+      >
       {/* ── TopBar ── */}
       <div className="flex-none">
         <TopBar
-          onOpenSettings={() => setSettingsOpen(true)}
+          onOpenSettings={() => setSettingsOpen((v) => !v)}
           settingsOpen={settingsOpen}
           isLiveActive={liveActive}
           onToggleLive={handleToggleLive}
@@ -846,37 +1027,43 @@ export const Home: React.FC = () => {
           onStop={() => { saveSessionToHistory(); handleRestart(); useStore.getState().setAppScreen("home"); setTimeout(() => window.ghostly.enableMouse(), 50); setTimeout(() => window.ghostly.enableMouse(), 300); }}
           autoAI={autoAI}
           onToggleAutoAI={() => setAutoAI(v => !v)}
+          onMinimize={handleMinimize}
         />
       </div>
 
-      {/* ── Settings Panel ── */}
-      <AnimatePresence>
-        {settingsOpen && (
-          <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.15 }}>
-            <SettingsPanel onClose={() => setSettingsOpen(false)} />
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* ── Settings ── the same panel as the home screen (API keys with Active/Off,
+           shortcuts, opacity, audio test). Not wrapped in AnimatePresence: it plays
+           its own exit, and a parent-driven exit can hang behind its tab switcher.
+           topInset keeps it clear of the top bar above. */}
+      {settingsOpen && <HomeSettingsPanel onClose={() => setSettingsOpen(false)} topInset={56} />}
 
       {/* ── Main Content ── */}
       {!settingsOpen && (
         <div className="flex-1 min-h-0 flex justify-center px-3 pb-3 mt-1 pointer-events-auto overflow-hidden">
           <div className="w-full flex flex-col h-full">
             <div
-              className="flex-1 min-h-0 flex flex-col rounded-2xl overflow-hidden border border-white/[0.07] shadow-2xl"
-              style={{ background: "rgba(16,16,18,0.94)", backdropFilter: "blur(28px)" }}
+              className="flex-1 min-h-0 flex flex-col rounded-2xl overflow-hidden"
+              // Fully opaque. backdrop-filter can't blur whatever real window sits
+              // behind this transparent Electron overlay, and even a 0.94 alpha
+              // still let that window's text ghost through the card, so there's no
+              // transparency here at all (and no blur — it has nothing to blur).
+              style={{ background: "#0e0e12", border: "1px solid rgba(255,255,255,0.07)", boxShadow: "0 20px 50px rgba(0,0,0,0.45)" }}
               onMouseEnter={() => window.ghostly.enableMouse()}
             >
               {/* ── Card Header ── */}
-              <div className="flex items-center justify-between px-4 h-11 border-b border-white/[0.06] flex-shrink-0"
-                style={{ WebkitAppRegion: "drag" } as React.CSSProperties}>
+              <div className="flex items-center justify-between px-4 h-11 flex-shrink-0"
+                style={{ WebkitAppRegion: "drag", borderBottom: "1px solid rgba(255,255,255,0.06)" } as React.CSSProperties}>
 
                 {activeTab === "support" ? (
                   <>
                     <div style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
-                      <span className="text-[11px] font-semibold text-orange-300/80 font-sans">Support & Report</span>
+                      <span className="text-[11px] font-semibold text-violet-300/80 font-sans">Support & Report</span>
                     </div>
+                    <div /><div />
+                  </>
+                ) : activeTab === "jobs" ? (
+                  <>
+                    <JobPortalHeader />
                     <div /><div />
                   </>
                 ) : activeTab === "chat" ? (
@@ -896,7 +1083,7 @@ export const Home: React.FC = () => {
                         <input type="range" min="20" max="100"
                           value={Math.round((settings.opacity ?? 1) * 100)}
                           onChange={(e) => { const v = parseInt(e.target.value)/100; updateSettings({opacity:v}); window.ghostly.setOpacity(v); }}
-                          className="w-14 h-1 accent-orange-400 cursor-pointer" />
+                          className="w-14 h-1 accent-violet-400 cursor-pointer" />
                       </div>
                     </div>
                   </>
@@ -920,7 +1107,7 @@ export const Home: React.FC = () => {
                       {Array.from({ length: Math.min(totalPages, 10) }).map((_, i) => (
                         <button key={i} onClick={() => { setUserNavigated(true); setPageIndex(i); }}
                           className={`rounded-full transition-all ${
-                            i === pageIndex ? "w-5 h-1.5 bg-[#eb9245]" :
+                            i === pageIndex ? "w-5 h-1.5 bg-violet-400" :
                             i === livePageIndex && liveActive ? "w-1.5 h-1.5 bg-green-400/70" :
                             "w-1.5 h-1.5 bg-white/20 hover:bg-white/40"
                           }`} />
@@ -939,7 +1126,7 @@ export const Home: React.FC = () => {
                           updateSettings({ opacity: v });
                           window.ghostly.setOpacity(v);
                         }}
-                        className="w-14 h-1 accent-orange-400 cursor-pointer" />
+                        className="w-14 h-1 accent-violet-400 cursor-pointer" />
                     </div>
                     <div className="w-px h-4 bg-white/10" />
                     <button onClick={handleRestart} title="Clear session"
@@ -969,6 +1156,8 @@ export const Home: React.FC = () => {
                     supportError={supportError}
                     onSubmit={handleSupportSubmit}
                   />
+                ) : activeTab === "jobs" ? (
+                  <JobPortalPanel />
                 ) : (activeTab as string) === "support-old" ? (
                   /* ── SUPPORT PANEL ── */
                   <div className="flex flex-col items-center gap-5 py-2">
@@ -1041,12 +1230,12 @@ export const Home: React.FC = () => {
                         {chatMessages.map((msg, i) => (
                           <div key={i} className={`flex flex-col gap-1.5 ${msg.role === "user" ? "items-end" : "items-start"}`}>
                             <span className={`text-[9px] font-bold uppercase tracking-widest ${
-                              msg.role === "user" ? "text-[#eb9245]/60" : "text-blue-400/60"
+                              msg.role === "user" ? "text-violet-400/60" : "text-blue-400/60"
                             }`}>
                               {msg.role === "user" ? "You" : "👻 Ghostly AI"}
                             </span>
                             {msg.role === "user" ? (
-                              <div className="max-w-[85%] bg-[#eb9245]/15 border border-[#eb9245]/20 rounded-2xl rounded-tr-sm px-4 py-2.5 text-[13px] text-white/85 font-sans leading-relaxed">
+                              <div className="max-w-[85%] bg-violet-500/15 border border-violet-500/20 rounded-2xl rounded-tr-sm px-4 py-2.5 text-[13px] text-white/85 font-sans leading-relaxed">
                                 {msg.text}
                               </div>
                             ) : (
@@ -1058,9 +1247,9 @@ export const Home: React.FC = () => {
                         ))}
                         {chatStreaming && chatMessages[chatMessages.length - 1]?.role === "assistant" && chatMessages[chatMessages.length - 1]?.text === "" && (
                           <div className="flex items-center gap-2 text-white/30 text-[12px] font-sans">
-                            <span className="w-1.5 h-1.5 bg-[#eb9245] rounded-full animate-pulse" />
-                            <span className="w-1.5 h-1.5 bg-[#eb9245] rounded-full animate-pulse" style={{ animationDelay: "0.2s" }} />
-                            <span className="w-1.5 h-1.5 bg-[#eb9245] rounded-full animate-pulse" style={{ animationDelay: "0.4s" }} />
+                            <span className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-pulse" />
+                            <span className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-pulse" style={{ animationDelay: "0.2s" }} />
+                            <span className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-pulse" style={{ animationDelay: "0.4s" }} />
                           </div>
                         )}
                         <div ref={chatEndRef} />
@@ -1077,7 +1266,7 @@ export const Home: React.FC = () => {
                       <div>
                         <p className="text-[15px] font-semibold text-white/50 font-sans mb-2">Ghostly AI is ready</p>
                         <p className="text-[12px] text-white/25 font-sans leading-relaxed">
-                          Click <span className="text-[#eb9245] font-semibold">AI Answer</span> to start live transcription<br />
+                          Click <span className="text-violet-400 font-semibold">AI Answer</span> to start live transcription<br />
                           or <span className="text-white/40 font-semibold">Analyze Screen</span> to capture & solve
                         </p>
                       </div>
@@ -1107,11 +1296,13 @@ export const Home: React.FC = () => {
                       className="flex flex-col gap-5">
 
                       {/* ── Interviewer Question ── */}
-                      {/* Hide question box for Screen Analysis or system prompt */}
+                      {/* Hide question box for Screen Analysis — questionText is always
+                          the literal "Screen Analysis" for any built-prompt answer now
+                          (see isFormattedPrompt in runAIStream), so this one check covers
+                          every interviewType, not just system_design. */}
                       {!(isOnLivePage && liveActive) &&
                         (isOnLivePage ? liveQuestion : activePage?.question) &&
-                        activePage?.question !== "Screen Analysis" &&
-                        !activePage?.question?.includes("staff engineer") && (
+                        activePage?.question !== "Screen Analysis" && (
                         <div>
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-1.5">
@@ -1155,7 +1346,7 @@ export const Home: React.FC = () => {
 
                       {/* Waiting state on live page — clean empty screen */}
                       {isOnLivePage && !isStreaming && !liveAnswer && (
-                        <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
+                        <div className="flex flex-col items-center justify-center gap-3 py-12 text-center px-4">
                           <span className="text-3xl">🎙️</span>
                           <div className="flex items-center gap-2">
                             <span className="w-1.5 h-1.5 bg-green-400/60 rounded-full animate-pulse" />
@@ -1163,6 +1354,16 @@ export const Home: React.FC = () => {
                               {liveActive ? "Listening… speak and click Send to AI" : "Click AI Answer to start listening"}
                             </span>
                           </div>
+                          {/* Was previously silent — an active session with zero
+                              audio detected for 12s now surfaces exactly why
+                              instead of leaving the user staring at nothing. */}
+                          {liveActive && audio.statusWarning && (
+                            <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl border border-amber-400/25 max-w-[380px]"
+                              style={{ background: "rgba(251,191,36,0.08)" }}>
+                              <span className="text-[13px] shrink-0">⚠️</span>
+                              <p className="text-[10.5px] text-amber-200/85 font-sans leading-relaxed text-left">{audio.statusWarning}</p>
+                            </div>
+                          )}
                         </div>
                       )}
                     </motion.div>
@@ -1172,10 +1373,11 @@ export const Home: React.FC = () => {
               </div>
 
               {/* ── Input Footer ── */}
-              {activeTab !== "support" && (
+              {activeTab === "jobs" && <JobPortalFooter />}
+              {activeTab !== "support" && activeTab !== "jobs" && (
               <>
               <div className="flex-shrink-0 px-4 py-3 border-t border-white/[0.05]"
-                style={{ background: "rgba(10,10,12,0.9)" }}>
+                style={{ background: "rgba(10,10,12,0.6)" }}>
                 {activeTab === "chat" ? (
                   <form onSubmit={(e) => { e.preventDefault(); handleChatSend(chatInput); }} className="relative">
                     <input
@@ -1183,10 +1385,10 @@ export const Home: React.FC = () => {
                       onChange={(e) => setChatInput(e.target.value)}
                       placeholder="Ask Ghostly AI anything..."
                       disabled={chatStreaming}
-                      className="w-full bg-white/[0.05] border border-white/[0.07] hover:border-white/[0.14] focus:border-[#eb9245]/50 rounded-xl pl-4 pr-12 py-2.5 text-[13px] font-sans text-white/90 placeholder:text-white/25 focus:outline-none transition-colors disabled:opacity-40"
+                      className="w-full bg-white/[0.05] border border-white/[0.07] hover:border-white/[0.14] focus:border-violet-400/50 rounded-xl pl-4 pr-12 py-2.5 text-[13px] font-sans text-white/90 placeholder:text-white/25 focus:outline-none transition-colors disabled:opacity-40"
                     />
                     <button type="submit" disabled={chatStreaming || !chatInput.trim()}
-                      className={`absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-xl transition-all ${chatInput.trim() ? "bg-[#eb9245] text-black hover:bg-[#f5a55a] shadow-md" : "text-white/20"}`}>
+                      className={`absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-xl transition-all ${chatInput.trim() ? "bg-violet-500 text-white hover:bg-violet-400 shadow-md" : "text-white/20"}`}>
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                         <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
                       </svg>
@@ -1199,10 +1401,10 @@ export const Home: React.FC = () => {
                       onChange={(e) => setFollowUpText(e.target.value)}
                       placeholder="Ask AI anything..."
                       disabled={isStreaming}
-                      className="w-full bg-white/[0.05] border border-white/[0.07] hover:border-white/[0.14] focus:border-[#eb9245]/50 rounded-xl pl-4 pr-12 py-2.5 text-[13px] font-sans text-white/90 placeholder:text-white/25 focus:outline-none transition-colors disabled:opacity-40"
+                      className="w-full bg-white/[0.05] border border-white/[0.07] hover:border-white/[0.14] focus:border-violet-400/50 rounded-xl pl-4 pr-12 py-2.5 text-[13px] font-sans text-white/90 placeholder:text-white/25 focus:outline-none transition-colors disabled:opacity-40"
                     />
                     <button type="submit" disabled={isStreaming || !followUpText.trim()}
-                      className={`absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-xl transition-all ${followUpText.trim() ? "bg-[#eb9245] text-black hover:bg-[#f5a55a] shadow-md" : "text-white/20"}`}>
+                      className={`absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-xl transition-all ${followUpText.trim() ? "bg-violet-500 text-white hover:bg-violet-400 shadow-md" : "text-white/20"}`}>
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                         <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
                       </svg>
@@ -1216,6 +1418,27 @@ export const Home: React.FC = () => {
           </div>
         </div>
       )}
+
+      </motion.div>
+
+      {/* ── Minimized: just the logo, in the spot the top bar's brand was ── */}
+      <AnimatePresence>
+        {collapsed && <MinimizedLogo key="minimized-logo" onExpand={handleExpand} live={liveActive} busy={isStreaming} />}
+      </AnimatePresence>
+
+      {/* ── Provider Fallback Notice — visible, unlike the old silent Groq
+          fallback bug this deliberately avoids repeating ── */}
+      <AnimatePresence>
+        {fallbackNotice && !error && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            className="absolute bottom-3 left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl pointer-events-auto bg-violet-500/15 border border-violet-500/25 backdrop-blur-md shadow-xl">
+            <p className="text-[12px] text-violet-200/90 font-sans flex gap-2 items-center">
+              {fallbackNotice}
+              <button onClick={() => setFallbackNotice(null)} className="ml-2 text-violet-300/50 hover:text-violet-200 transition-colors">✕</button>
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── Error Banner ── */}
       <AnimatePresence>

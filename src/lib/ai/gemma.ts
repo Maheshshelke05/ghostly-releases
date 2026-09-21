@@ -10,7 +10,13 @@ export class GemmaProvider implements AIProvider {
   async *streamSolution(options: AIRequestOptions): AsyncGenerator<string> {
     const { base64Image, mimeType = "image/png", prompt, messages = [], model, apiKey, maxTokens = 4096 } = options;
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
+    // Not currently wired into the provider registry (dead code today), but
+    // fixed preemptively: this used the same ?key= query-param auth that
+    // gemini.ts's own history documents as returning 401
+    // ACCESS_TOKEN_TYPE_UNSUPPORTED for the newer "AQ."-prefixed keys Google
+    // AI Studio now issues by default — would reproduce that already-fixed
+    // bug immediately if this provider is ever reactivated.
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`;
 
     const imageData = base64Image?.includes(",") ? base64Image.split(",")[1] : base64Image;
     const contents: any[] = [];
@@ -26,7 +32,7 @@ export class GemmaProvider implements AIProvider {
 
     const response = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
       body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: maxTokens, temperature: 0.1 } }),
     });
 
