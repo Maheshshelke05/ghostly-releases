@@ -1,5 +1,6 @@
 import React from "react";
 import { motion } from "framer-motion";
+import GhostMascot from "./ghost/GhostMascot";
 
 interface Props {
   onExpand: () => void;
@@ -58,10 +59,10 @@ export const MinimizedLogo: React.FC<Props> = ({ onExpand, live = false, busy = 
         />
       )}
       <span
-        className="w-7 h-7 rounded-[9px] flex items-center justify-center text-[14px]"
-        style={{ background: "rgba(139,92,246,0.18)", border: "1px solid rgba(139,92,246,0.32)", boxShadow: "0 0 14px rgba(139,92,246,0.3)" }}
+        className="w-8 h-8 rounded-[10px] flex items-center justify-center"
+        style={{ background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.16)", boxShadow: "0 0 14px rgba(139,92,246,0.3)" }}
       >
-        👻
+        <GhostMascot size={28} variant="calm" alt="" />
       </span>
       {live && (
         <span className="absolute bottom-1 right-1 flex w-2.5 h-2.5">

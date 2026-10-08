@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import GhostMascot from "./ghost/GhostMascot";
 
 export const SplashScreen: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
   const [progress, setProgress] = useState(0);
@@ -119,13 +120,7 @@ export const SplashScreen: React.FC<{ onComplete: () => void }> = ({ onComplete 
                 boxShadow: "0 24px 64px rgba(20,20,40,0.18), inset 0 1px 0 rgba(255,255,255,0.6)",
               }}
             >
-              <motion.div
-                animate={{ y: [0, -4, 0], rotate: [0, 3, -3, 0] }}
-                transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-                style={{ fontSize: "64px", lineHeight: 1 }}
-              >
-                👻
-              </motion.div>
+              <GhostMascot size={92} variant="hello" alt="" />
 
               {/* Live status dot */}
               <motion.div

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useStore } from "../store/useStore";
 import { MinimizedLogo } from "../components/MinimizedLogo";
 import { useMinimizedClickThrough } from "../hooks/useMinimizedClickThrough";
+import GhostMascot from "../components/ghost/GhostMascot";
 
 interface LoginPageProps {
   // A known, real failure (auth server down, backend error, timeout) reported
@@ -191,7 +192,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ externalError, onClearExte
             className="group flex items-center gap-1.5 -ml-1 pl-1 pr-2 h-7 rounded-[9px] outline-none transition-colors hover:bg-[#f2f3f6]"
             style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
           >
-            <motion.span variants={{ hover: { rotate: [0, -10, 8, 0], scale: 1.1, transition: { duration: 0.5 } } }} style={{ fontSize: "15px", lineHeight: 1, display: "inline-block" }}>👻</motion.span>
+            <motion.span variants={{ hover: { rotate: [0, -10, 8, 0], scale: 1.1, transition: { duration: 0.5 } } }} style={{ lineHeight: 0, display: "inline-block" }}><GhostMascot size={22} variant="calm" alt="" /></motion.span>
             <span className="text-[12px] font-bold" style={{ color: INK }}>Ghotly AI</span>
           </motion.button>
           <div className="flex items-center gap-1.5" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
@@ -221,11 +222,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ externalError, onClearExte
             <motion.div
               animate={{ y: [0, -4, 0] }}
               transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-              className="relative w-[64px] h-[64px] rounded-full flex items-center justify-center"
+              className="relative w-[84px] h-[84px] rounded-full flex items-center justify-center"
               style={{ background: "#f2f3f6", boxShadow: "inset 0 0 0 1px rgba(20,20,40,0.04)" }}
             >
-              <span style={{ fontSize: "34px", lineHeight: 1 }}>👻</span>
-              <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full" style={{ background: "#22c55e", border: "2.5px solid #ffffff" }} />
+              <GhostMascot size={72} variant="hello" alt="" />
+              <span className="absolute bottom-0.5 right-0.5 w-3.5 h-3.5 rounded-full" style={{ background: "#22c55e", border: "2.5px solid #ffffff" }} />
             </motion.div>
           </motion.div>
 

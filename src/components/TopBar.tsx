@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { JobIcon } from "./JobPortalTab";
+import GhostMascot from "./ghost/GhostMascot";
 
 export type InterviewTab = "ai" | "screen" | "chat" | "jobs" | "support";
 
@@ -132,10 +133,10 @@ export const TopBar: React.FC<TopBarProps> = ({
           >
             <motion.span
               variants={{ hover: { rotate: [0, -10, 8, 0], scale: 1.08, transition: { duration: 0.5 } } }}
-              className="w-6 h-6 rounded-[8px] flex items-center justify-center text-[12px] shrink-0 relative"
-              style={{ background: "rgba(139,92,246,0.18)", border: "1px solid rgba(139,92,246,0.32)", boxShadow: "0 0 14px rgba(139,92,246,0.25)" }}
+              className="w-7 h-7 rounded-[9px] flex items-center justify-center shrink-0 relative"
+              style={{ background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.16)", boxShadow: "0 0 14px rgba(139,92,246,0.30)" }}
             >
-              👻
+              <GhostMascot size={24} variant="calm" alt="" />
             </motion.span>
             <span
               className="text-[12px] font-bold tracking-tight whitespace-nowrap text-white/90 transition-colors duration-200 group-hover:text-white"

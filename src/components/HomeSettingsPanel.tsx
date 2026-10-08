@@ -2,9 +2,11 @@ import React, { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useStore, type Settings } from "../store/useStore";
 import { AI_PROVIDERS, testApiKey, type AIProviderConfig } from "../pages/ApiSetupPage";
+import { toSyncBadge, type KeySyncBadge } from "../lib/keySync";
 import { REMAPPABLE_SHORTCUTS, formatAccelerator, keyEventToAccelerator } from "../lib/shortcuts";
 import { isProviderDisabled, withoutDisabled } from "../lib/providerState";
 import { AudioDiagnostics } from "./AudioDiagnostics";
+import GhostMascot from "./ghost/GhostMascot";
 
 // Light-theme Settings reachable straight from HomePage — API Keys (with a
 // per-provider Active switch), Keyboard Shortcuts, and app info in one place a
@@ -186,6 +188,23 @@ function ResultLine({ test, okHint }: { test: TestState; okHint?: string }) {
   );
 }
 
+// "☁ Saved to your account" (green) / "☁ Couldn't back up…" (amber) under a Test result — pressing Test
+// also saves the key to the user's account (lib/keySync.ts). Renders nothing when there is nothing to
+// say (not signed in, still in flight…), so the Test row layout is never disturbed.
+function SyncNote({ badge }: { badge?: KeySyncBadge }) {
+  if (!badge) return null;
+  return (
+    <p
+      role="status"
+      title={badge.hint}
+      className="text-[9.5px] font-semibold leading-snug px-0.5 -mt-1.5"
+      style={{ color: badge.kind === "saved" ? GREEN : AMBER }}
+    >
+      {badge.kind === "saved" ? "☁ Saved to your account" : "☁ Couldn't back up (will retry on next test)"}
+    </p>
+  );
+}
+
 // Inline (not a native <select>): a native popup is a separate OS widget, which
 // fights with this window's click-through toggling when the pointer moves onto it.
 function ModelPicker({ provider, value, onChange }: { provider: AIProviderConfig; value: string; onChange: (m: string) => void }) {
@@ -246,13 +265,14 @@ interface ProviderCardProps {
   model: string;
   onModelChange: (m: string) => void;
   test: TestState;
+  sync?: KeySyncBadge;
   onTest: () => void;
   onActivate: () => void;
   onDeactivate: () => void;
 }
 
 const ProviderCard: React.FC<ProviderCardProps> = ({
-  p, state, isOpen, onToggle, apiKey, showKey, onToggleShow, onKeyChange, model, onModelChange, test, onTest, onActivate, onDeactivate,
+  p, state, isOpen, onToggle, apiKey, showKey, onToggleShow, onKeyChange, model, onModelChange, test, sync, onTest, onActivate, onDeactivate,
 }) => {
   const hasKey = state !== "empty";
   const [nudge, setNudge] = useState(false);
@@ -384,6 +404,7 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
               </div>
 
               <ResultLine test={test} okHint={state === "active" ? undefined : "press Activate to use it"} />
+              <SyncNote badge={sync} />
 
               <p className="text-[9.5px] font-semibold leading-snug px-0.5 transition-colors" style={{ color: hint.color }}>{hint.text}</p>
 
@@ -464,19 +485,34 @@ export const HomeSettingsPanel: React.FC<HomeSettingsPanelProps> = ({ onClose, t
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [expanded, setExpanded] = useState<string | null>(null);
   const [testStatus, setTestStatus] = useState<Record<string, TestState>>({});
+  // How the background "save to your account" went for each provider's latest Test. testSeq numbers the
+  // Tests per provider so a late answer to an older Test (or to a key that has since been edited) can't
+  // overwrite what the indicator shows now.
+  const [syncBadge, setSyncBadge] = useState<Record<string, KeySyncBadge | undefined>>({});
+  const testSeq = useRef<Record<string, number>>({});
+  const invalidateSync = (providerId: string) => {
+    const seq = (testSeq.current[providerId] = (testSeq.current[providerId] || 0) + 1);
+    setSyncBadge((prev) => (prev[providerId] ? { ...prev, [providerId]: undefined } : prev));
+    return seq;
+  };
 
   const runTest = async (providerId: string, apiKey: string) => {
     if (!apiKey.trim()) {
       setTestStatus((prev) => ({ ...prev, [providerId]: { status: "invalid", message: "Enter an API key first" } }));
       return;
     }
+    const seq = invalidateSync(providerId);
     setTestStatus((prev) => ({ ...prev, [providerId]: { status: "testing" } }));
-    const result = await testApiKey(providerId, apiKey, selModel[providerId]);
+    const result = await testApiKey(providerId, apiKey, selModel[providerId], (synced) => {
+      if (testSeq.current[providerId] !== seq) return;
+      setSyncBadge((prev) => ({ ...prev, [providerId]: toSyncBadge(synced) ?? undefined }));
+    });
     setTestStatus((prev) => ({ ...prev, [providerId]: result }));
   };
 
   const onDeepgramChange = (v: string) => {
     setDeepgram(v);
+    invalidateSync("deepgram");
     setTestStatus((prev) => ({ ...prev, deepgram: { status: "idle" } }));
     updateSettings({ deepgramApiKey: v.trim() });
     persist();
@@ -500,6 +536,7 @@ export const HomeSettingsPanel: React.FC<HomeSettingsPanelProps> = ({ onClose, t
 
   const onKeyChange = (id: string, v: string) => {
     setAiKeys((prev) => ({ ...prev, [id]: v }));
+    invalidateSync(id);
     setTestStatus((prev) => ({ ...prev, [id]: { status: "idle" } }));
     const st = useStore.getState().settings;
     const trimmed = v.trim();
@@ -705,6 +742,13 @@ export const HomeSettingsPanel: React.FC<HomeSettingsPanelProps> = ({ onClose, t
                   </div>
                 )}
 
+                {/* Pressing Test also saves the key to the user's account (lib/keySync.ts) — say so up front. */}
+                <p className="text-[10px] font-medium leading-snug px-0.5 -my-1" style={{ color: SUBTLE, userSelect: "text" }}>
+                  🔒 When you press Test, the key is saved (encrypted) to your Ghotly AI account. Email{" "}
+                  <button onClick={() => window.ghostly.openExternal("mailto:support@ghotlyai.in")} className="font-bold hover:underline" style={{ color: ACCENT }}>support@ghotlyai.in</button>{" "}
+                  to have it deleted.
+                </p>
+
                 {/* Deepgram */}
                 <div className="flex flex-col gap-2">
                   <SectionLabel right={<button onClick={() => window.ghostly.openExternal("https://console.deepgram.com/signup")} className="text-[9.5px] font-bold hover:underline" style={{ color: ACCENT }}>Get key ↗</button>}>
@@ -745,6 +789,7 @@ export const HomeSettingsPanel: React.FC<HomeSettingsPanelProps> = ({ onClose, t
                     </motion.button>
                   </div>
                   <ResultLine test={testStatus.deepgram || { status: "idle" }} />
+                  <SyncNote badge={syncBadge.deepgram} />
                   {!deepgram.trim() && <p className="text-[9.5px] font-semibold px-0.5" style={{ color: AMBER }}>Required — live transcription can't start without it.</p>}
                   {/* Interviewer mixing Hindi/another language with English? Deepgram's
                       default only transcribes English well; this opts into another
@@ -782,6 +827,7 @@ export const HomeSettingsPanel: React.FC<HomeSettingsPanelProps> = ({ onClose, t
                       model={selModel[p.id] || p.models[0]}
                       onModelChange={(m) => onModelChange(p.id, m)}
                       test={testStatus[p.id] || { status: "idle" }}
+                      sync={syncBadge[p.id]}
                       onTest={() => runTest(p.id, aiKeys[p.id] || "")}
                       onActivate={() => activate(p.id)}
                       onDeactivate={() => deactivate(p.id)}
@@ -868,7 +914,7 @@ export const HomeSettingsPanel: React.FC<HomeSettingsPanelProps> = ({ onClose, t
             ) : (
               <motion.div key="more" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.14 }} className="flex flex-col gap-3">
                 <div className="rounded-2xl p-4 flex items-center gap-3.5" style={{ background: "linear-gradient(135deg, #f0f0fb 0%, #ffffff 100%)", border: `1px solid ${ACCENT_BORDER}` }}>
-                  <span className="w-12 h-12 rounded-2xl flex items-center justify-center text-[24px] shrink-0" style={{ background: "#fff", border: `1px solid ${ACCENT_BORDER}` }}>👻</span>
+                  <span className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0" style={{ background: "#fff", border: `1px solid ${ACCENT_BORDER}` }}><GhostMascot size={46} variant="idle" alt="" /></span>
                   <div className="min-w-0 flex-1">
                     <p className="text-[14px] font-extrabold" style={{ color: INK }}>Ghotly AI</p>
                     <p className="text-[10.5px] font-semibold mt-0.5" style={{ color: SUBTLE }}>Version {version}</p>

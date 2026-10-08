@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import GhostMascot from "./ghost/GhostMascot";
 
 // Matches App.tsx's UpdateState exactly — "ready" (not "complete") is what
 // actually gets sent when a downloaded update is ready to install. It used to
 // be missing from this union entirely, so TypeScript's own type error was
 // pointing at a real bug: the switch below had no case for it, so users saw a
-// generic "Ghostly AI — Ready" placeholder instead of an update-ready prompt.
+// generic "Ghotly AI — Ready" placeholder instead of an update-ready prompt.
 interface UpdateAnimationProps {
   status: "idle" | "checking" | "available" | "downloading" | "installing" | "ready" | "complete" | "error";
   progress?: number;
@@ -108,7 +109,7 @@ export const UpdateAnimation: React.FC<UpdateAnimationProps> = ({ status, progre
       default:
         return {
           emoji: "👻",
-          title: "Ghostly AI",
+          title: "Ghotly AI",
           subtitle: "Ready",
           color: "#15162b",
           glow: "rgba(21, 22, 43, 0.18)",
@@ -226,7 +227,7 @@ export const UpdateAnimation: React.FC<UpdateAnimationProps> = ({ status, progre
                 }}
                 className="text-8xl"
               >
-                {config.emoji}
+                {config.emoji === "👻" ? <GhostMascot size={120} variant="hello" alt="" /> : config.emoji}
               </motion.div>
 
               {/* Electric Bolts around emoji */}
@@ -369,8 +370,8 @@ export const UpdateAnimation: React.FC<UpdateAnimationProps> = ({ status, progre
           transition={{ delay: 0.5 }}
           className="absolute bottom-8 flex items-center gap-2"
         >
-          <span className="text-2xl">👻</span>
-          <span className="text-sm font-bold" style={{ color: "#9ca3af" }}>Ghostly AI</span>
+          <GhostMascot size={28} variant="calm" alt="" />
+          <span className="text-sm font-bold" style={{ color: "#9ca3af" }}>Ghotly AI</span>
         </motion.div>
       </motion.div>
     </AnimatePresence>

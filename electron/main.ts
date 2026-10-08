@@ -1,4 +1,5 @@
 import { app, BrowserWindow, Tray, Menu, nativeImage, screen, ipcMain, desktopCapturer, shell, protocol } from "electron";
+import { TRAY_ICON_16, TRAY_ICON_32 } from "./trayIcon";
 import path from "path";
 import http from "http";
 import { autoUpdater } from "electron-updater";
@@ -133,7 +134,7 @@ function startAuthServer() {
   });
   authServer.on("error", (err: NodeJS.ErrnoException) => {
     const message = err.code === "EADDRINUSE"
-      ? "Login server couldn't start — port 7842 is already in use by another program (maybe another copy of Ghostly?). Close it and restart the app."
+      ? "Login server couldn't start — port 7842 is already in use by another program (maybe another copy of Ghotly AI?). Close it and restart the app."
       : `Login server failed to start: ${err.message}`;
     console.error("[Ghostly] Auth server error:", err);
     pendingAuthServerError = message;
@@ -262,13 +263,12 @@ function toggleWindowVisibility() {
 }
 
 function createTray(): Tray {
-  const icon = nativeImage.createFromDataURL(
-    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAY0lEQVR4nGNgGAXDBTAiC/z//5/h////DIyMjAxMTEwMYPr/fwYGBgYGBkZGRgYmRiADyIYJMDExAeUYGRmgcowgGsgGqWFkZASpYWJiAqthBOrBAKgaGA3igzCQP7xdMwoAAD6OI0GqswYnAAAAAElFTkSuQmCC",
-  );
+  const icon = nativeImage.createFromDataURL(TRAY_ICON_16);
+  icon.addRepresentation({ scaleFactor: 2, dataURL: TRAY_ICON_32 });
   const t = new Tray(icon);
-  t.setToolTip("Ghostly — Stealth AI Assistant");
+  t.setToolTip("Ghotly AI — Stealth AI Assistant");
   t.setContextMenu(Menu.buildFromTemplate([
-    { label: "Show/Hide Ghostly", click: toggleWindowVisibility },
+    { label: "Show/Hide Ghotly AI", click: toggleWindowVisibility },
     {
       label: "Capture Screen",
       click: async () => {
@@ -285,7 +285,7 @@ function createTray(): Tray {
       },
     },
     { type: "separator" },
-    { label: "Quit Ghostly", click: () => app.quit() },
+    { label: "Quit Ghotly AI", click: () => app.quit() },
   ]));
   t.on("click", toggleWindowVisibility);
   return t;

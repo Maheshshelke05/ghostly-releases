@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useStore } from "../store/useStore";
 import { streamWithFallback, warmProviderConnection, type ProviderName } from "../lib/ai";
 import { activeProviderKey, isProviderDisabled, usableApiKeys } from "../lib/providerState";
-import { buildPrompt, buildSessionContext, buildLiveInterviewPrompt } from "../lib/prompts";
+import { buildPrompt, buildSessionContext, buildLiveInterviewPrompt, buildChatPrompt, buildFollowUpPrompt } from "../lib/prompts";
 import { v4 as uuidv4 } from "uuid";
 import { TopBar, type InterviewTab } from "../components/TopBar";
 import { JobPortalHeader, JobPortalPanel, JobPortalFooter } from "../components/JobPortalTab";
@@ -13,6 +13,7 @@ import { useMinimizedClickThrough } from "../hooks/useMinimizedClickThrough";
 import { SolutionCard } from "../components/SolutionCard";
 import { useInterviewAudio } from "../hooks/useInterviewAudio";
 import { compressScreenshot } from "../lib/utils/imageCompressor";
+import GhostMascot from "../components/ghost/GhostMascot";
 
 const escapeHtml = (value: string) =>
   value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char] || char));
@@ -114,7 +115,7 @@ const CommunityButton: React.FC = () => (
     </span>
     <span className="min-w-0 flex-1">
       <span className="block text-[13px] font-black text-white leading-tight">Join our WhatsApp Community</span>
-      <span className="block text-[10.5px] text-white/45 mt-0.5">Get help, tips and updates from other Ghostly AI users</span>
+      <span className="block text-[10.5px] text-white/45 mt-0.5">Get help, tips and updates from other Ghotly AI users</span>
     </span>
     <span className="text-[#25D366]/70 group-hover:text-[#25D366] shrink-0">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M7 17 17 7M8 7h9v9" /></svg>
@@ -354,7 +355,7 @@ export const Home: React.FC = () => {
       if (isFormattedPrompt) {
         prompt = followUpQuery; // Already built prompt — directly use karo
       } else {
-        prompt = `${followUpQuery}\n\n(Answer concisely, spoken-style, max 4 sentences.)`;
+        prompt = buildFollowUpPrompt(followUpQuery, interviewSession);
       }
     } else if (transcriptOverride) {
         prompt = buildLiveInterviewPrompt(transcriptOverride, interviewSession);
@@ -851,7 +852,7 @@ export const Home: React.FC = () => {
       const stream = streamWithFallback(
         settings.activeProvider as ProviderName,
         {
-          prompt: text.trim(), messages: history, model: settings.activeModel, apiKey: activeKey, maxTokens: 2048,
+          prompt: buildChatPrompt(text.trim(), interviewSession), messages: history, model: settings.activeModel, apiKey: activeKey, maxTokens: 2048,
           // Same "stalled connection hangs the chat input forever" gap as the
           // main AI-answer path — chat has no cancel button, so this timeout
           // is its only way out of a dead request.
@@ -892,7 +893,7 @@ export const Home: React.FC = () => {
     } finally {
       setChatStreaming(false);
     }
-  }, [chatStreaming, chatMessages, settings, setFallbackNotice]);
+  }, [chatStreaming, chatMessages, settings, setFallbackNotice, interviewSession]);
 
   // Force show window, opacity 1, and enable mouse on mount when entering interview screen
   useEffect(() => {
@@ -1163,7 +1164,7 @@ export const Home: React.FC = () => {
                   <div className="flex flex-col items-center gap-5 py-2">
                     <div className="text-center">
                       <div className="text-3xl mb-1.5">💛</div>
-                      <p className="text-[15px] font-bold text-white/80 font-sans">Support Ghostly AI</p>
+                      <p className="text-[15px] font-bold text-white/80 font-sans">Support Ghotly AI</p>
                       <p className="text-[12px] text-white/35 font-sans mt-1 leading-relaxed">
                         If this tool helped you crack an interview,<br />consider buying the developer a coffee! ☕
                       </p>
@@ -1176,7 +1177,7 @@ export const Home: React.FC = () => {
                         style={{ border: "2px solid rgba(235,146,69,0.5)" }} />
                       <div>
                         <p className="text-[13px] font-bold text-white">Mahesh Shelke</p>
-                        <p className="text-[11px] text-white/40 font-sans">Developer · Ghostly AI</p>
+                        <p className="text-[11px] text-white/40 font-sans">Developer · Ghotly AI</p>
                       </div>
                     </div>
 
@@ -1222,7 +1223,7 @@ export const Home: React.FC = () => {
                     {chatMessages.length === 0 ? (
                       <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center">
                         <div className="text-4xl">💬</div>
-                        <p className="text-[14px] font-semibold text-white/40 font-sans">Chat with Ghostly AI</p>
+                        <p className="text-[14px] font-semibold text-white/40 font-sans">Chat with Ghotly AI</p>
                         <p className="text-[12px] text-white/20 font-sans">Ask anything — coding, interview prep, explanations...</p>
                       </div>
                     ) : (
@@ -1232,7 +1233,7 @@ export const Home: React.FC = () => {
                             <span className={`text-[9px] font-bold uppercase tracking-widest ${
                               msg.role === "user" ? "text-violet-400/60" : "text-blue-400/60"
                             }`}>
-                              {msg.role === "user" ? "You" : "👻 Ghostly AI"}
+                              {msg.role === "user" ? "You" : <span className="inline-flex items-center gap-1"><GhostMascot size={16} variant="calm" alt="" /> Ghotly AI</span>}
                             </span>
                             {msg.role === "user" ? (
                               <div className="max-w-[85%] bg-violet-500/15 border border-violet-500/20 rounded-2xl rounded-tr-sm px-4 py-2.5 text-[13px] text-white/85 font-sans leading-relaxed">
@@ -1262,9 +1263,9 @@ export const Home: React.FC = () => {
                     /* Empty state */
                     <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                       className="h-full flex flex-col items-center justify-center gap-4 text-center py-8">
-                      <div className="text-5xl">👻</div>
+                      <GhostMascot size={84} variant="hello" alt="" />
                       <div>
-                        <p className="text-[15px] font-semibold text-white/50 font-sans mb-2">Ghostly AI is ready</p>
+                        <p className="text-[15px] font-semibold text-white/50 font-sans mb-2">Ghotly AI is ready</p>
                         <p className="text-[12px] text-white/25 font-sans leading-relaxed">
                           Click <span className="text-violet-400 font-semibold">AI Answer</span> to start live transcription<br />
                           or <span className="text-white/40 font-semibold">Analyze Screen</span> to capture & solve
@@ -1324,7 +1325,7 @@ export const Home: React.FC = () => {
                         <div>
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-1.5">
-                              <span className="text-[10px] font-bold text-violet-400/80 uppercase tracking-widest">🤖 Ghostly AI Solution</span>
+                              <span className="text-[10px] font-bold text-violet-400/80 uppercase tracking-widest">🤖 Ghotly AI Solution</span>
                               {isStreaming && (
                                 <span className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-pulse" />
                               )}
@@ -1383,7 +1384,7 @@ export const Home: React.FC = () => {
                     <input
                       type="text" value={chatInput}
                       onChange={(e) => setChatInput(e.target.value)}
-                      placeholder="Ask Ghostly AI anything..."
+                      placeholder="Ask Ghotly AI anything..."
                       disabled={chatStreaming}
                       className="w-full bg-white/[0.05] border border-white/[0.07] hover:border-white/[0.14] focus:border-violet-400/50 rounded-xl pl-4 pr-12 py-2.5 text-[13px] font-sans text-white/90 placeholder:text-white/25 focus:outline-none transition-colors disabled:opacity-40"
                     />

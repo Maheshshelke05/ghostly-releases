@@ -5,8 +5,10 @@ import { InterviewHistoryModal } from "../components/InterviewHistoryModal";
 import { HomeSettingsPanel } from "../components/HomeSettingsPanel";
 import { JobPortalModal, JobPortalPreview, BriefcaseIcon, JOB_PORTAL_URL } from "../components/JobPortalModal";
 import { AudioDiagnostics } from "../components/AudioDiagnostics";
+import { COPY } from "../lib/jobPortal";
 import { AI_PROVIDERS } from "./ApiSetupPage";
 import { activeProviderKey, isProviderDisabled } from "../lib/providerState";
+import GhostMascot from "../components/ghost/GhostMascot";
 
 // Same light palette as LoginPage.tsx. Layout: greeting + readiness chips, the one
 // primary action (Start Interview), History / Job Portal, then a Tools & help grid
@@ -203,7 +205,7 @@ export const HomePage: React.FC = () => {
           style={{ WebkitAppRegion: "drag", borderBottom: `1px solid ${BORDER}` } as React.CSSProperties}
         >
           <div className="flex items-center gap-1.5">
-            <span style={{ fontSize: "15px", lineHeight: 1 }}>👻</span>
+            <span style={{ lineHeight: 0 }}><GhostMascot size={22} variant="calm" alt="" /></span>
             <span className="text-[12px] font-bold" style={{ color: INK }}>Ghotly AI</span>
             <span className="px-1.5 py-0.5 rounded-full text-[8px] font-black" style={{ background: "#f2f3f6", color: SUBTLE }}>
               v{window.ghostly.getVersion()}
@@ -227,13 +229,11 @@ export const HomePage: React.FC = () => {
           {/* Greeting */}
           <motion.div variants={ITEM} className="flex items-center gap-3">
             <motion.div
-              animate={{ y: [0, -2, 0] }}
-              transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-              className="relative w-11 h-11 rounded-full flex items-center justify-center shrink-0"
+              className="relative w-[52px] h-[52px] rounded-full flex items-center justify-center shrink-0"
               style={{ background: "#f2f3f6" }}
             >
-              <span style={{ fontSize: "22px", lineHeight: 1 }}>👻</span>
-              <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full" style={{ background: "#22c55e", border: "2px solid #ffffff" }} />
+              <GhostMascot size={46} variant="hello" alt="" />
+              <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full" style={{ background: "#22c55e", border: "2px solid #ffffff" }} />
             </motion.div>
             <div className="min-w-0">
               <p className="text-[15px] font-extrabold leading-tight truncate" style={{ color: INK }}>Welcome back, {user?.name?.split(" ")[0] || "there"} 👋</p>
@@ -397,9 +397,9 @@ export const HomePage: React.FC = () => {
                 <JobPortalPreview />
 
                 <div>
-                  <p className="text-[14px] font-black leading-tight" style={{ color: INK }}>GhostlyAI Job Portal</p>
+                  <p className="text-[14px] font-black leading-tight" style={{ color: INK }}>{COPY.brand}</p>
                   <p className="text-[10.5px] font-medium mt-1 leading-relaxed" style={{ color: SUBTLE }}>
-                    Verified government &amp; private job alerts in 2 minutes, on Telegram and Android.
+                    {COPY.blurb}
                   </p>
                 </div>
 

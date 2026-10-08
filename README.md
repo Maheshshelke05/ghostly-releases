@@ -1,6 +1,18 @@
-# 👻 Ghostly AI v3.3.5 — Stealth Technical Interview Assistant
+<p align="center"><img src="icon.png" width="120" alt="Ghotly AI logo — a smiling ghost" /></p>
+
+# Ghostly AI — Stealth Technical Interview Assistant
 
 Ghostly AI is an ultra-fast, stealthy AI assistant engineered specifically for live technical interviews, DSA coding rounds, and system design evaluations. It operates discreetly on your screen, featuring real-time audio transcription, instant screen capture analysis, and deep resume context injection.
+
+---
+
+## ✨ Coming in the next release
+
+- **New logo, animated:** the glossy ghost replaces the old emoji everywhere — in the app, the tray, the installer and the website. It blinks, smiles and waves (and stays still if your system asks for reduced motion).
+- **Resume import:** in *Interview Setup → Profile*, upload a resume (PDF, DOCX, TXT or an image/scan). Once an AI key is set up, the AI reads it and fills in your profile, and answers in chat, follow-ups, live transcript and screen analysis are grounded in those facts. The resume is read on your device and sent only to the AI provider you chose.
+- **Key backup:** pressing **Test** on an AI provider or Deepgram key also saves it, encrypted, to your Ghotly AI account (see [SECURITY.md](SECURITY.md)).
+- **Interview language** is English only; the picker is gone.
+- **Job Portal tab** now shows live data from [job.ghotlyai.in](https://job.ghotlyai.in) instead of hand-written text.
 
 ---
 

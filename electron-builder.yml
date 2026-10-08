@@ -19,11 +19,15 @@ asarUnpack:
   - resources/**
 win:
   executableName: Ghostly
+  icon: icon.ico
   target:
     - target: nsis
       arch:
         - x64
 nsis:
+  installerIcon: icon.ico
+  uninstallerIcon: icon.ico
+  installerHeaderIcon: icon.ico
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: Ghostly
   uninstallDisplayName: Ghostly

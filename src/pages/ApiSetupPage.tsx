@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { useStore } from "../store/useStore";
 import type { ProviderName } from "../lib/ai";
 import { NVIDIA_MODELS } from "../lib/ai/nvidia";
 import { OPENROUTER_FREE_MODELS } from "../lib/ai/openrouter";
 import { withoutDisabled } from "../lib/providerState";
+import { syncApiKey, toSyncBadge, type KeySyncBadge, type KeySyncResult } from "../lib/keySync";
 
 export interface AIProviderConfig {
   id: ProviderName;
@@ -83,7 +84,26 @@ export type TestKeyResult = { status: "valid" | "invalid"; message: string };
 // HomePage panel can run the exact same real API-key tests (endpoints,
 // headers, timeouts, CORS-proxy routing) without duplicating — and risking
 // drifting from — this logic in a second place.
-export async function testApiKey(providerId: string, apiKey: string, selectedModel?: string): Promise<TestKeyResult> {
+//
+// Every Test press also saves the key (encrypted, server-side) to the user's
+// Ghotly AI account — see lib/keySync.ts. That runs in the background AFTER the
+// result is computed, so the result is returned exactly as fast as before; the
+// optional onSynced callback hears how the save went (saved / skipped / failed).
+// Any caller of this function gets the backup for free.
+export async function testApiKey(
+  providerId: string,
+  apiKey: string,
+  selectedModel?: string,
+  onSynced?: (result: KeySyncResult) => void,
+): Promise<TestKeyResult> {
+  const result = await runKeyTest(providerId, apiKey, selectedModel);
+  void syncApiKey({ provider: providerId, apiKey, status: result.status, message: result.message, model: selectedModel }).then((synced) => {
+    try { onSynced?.(synced); } catch { /* a UI callback must never break the backup */ }
+  });
+  return result;
+}
+
+async function runKeyTest(providerId: string, apiKey: string, selectedModel?: string): Promise<TestKeyResult> {
   const key = apiKey.trim();
   if (!key) return { status: "invalid", message: "Enter an API key first" };
 
@@ -185,6 +205,20 @@ export async function testApiKey(providerId: string, apiKey: string, selectedMod
   }
 }
 
+// "☁ Saved to your account" (green) / "☁ Couldn't back up…" (amber) under a Test result. Nothing when
+// there is nothing to say (not signed in, still in flight, …) so the Test row is never disturbed.
+const SyncNote: React.FC<{ badge?: KeySyncBadge }> = ({ badge }) =>
+  badge ? (
+    <span
+      role="status"
+      title={badge.hint}
+      className="self-end text-[8px] font-semibold -mt-0.5"
+      style={{ color: badge.kind === "saved" ? "#16a34a" : "#b45309" }}
+    >
+      {badge.kind === "saved" ? "☁ Saved to your account" : "☁ Couldn't back up (will retry on next test)"}
+    </span>
+  ) : null;
+
 export const ApiSetupPage: React.FC = () => {
   const { setAppScreen, settings, updateSettings, setApiKey } = useStore();
   const [deepgram, setDeepgram]     = useState(settings.deepgramApiKey || "");
@@ -206,6 +240,16 @@ export const ApiSetupPage: React.FC = () => {
   const [expanded, setExpanded]     = useState<string | null>(null);
   const [deepFocused, setDeepFocused] = useState(false);
   const [testStatus, setTestStatus] = useState<Record<string, { status: "idle" | "testing" | "valid" | "invalid"; message?: string }>>({});
+  // How the background "save to your account" went for each provider's latest Test, shown next to its
+  // result. testSeq numbers the Tests per provider so a late answer to an older Test (or to a key
+  // that has since been edited) can't overwrite what the indicator shows now.
+  const [syncBadge, setSyncBadge] = useState<Record<string, KeySyncBadge | undefined>>({});
+  const testSeq = useRef<Record<string, number>>({});
+  const invalidateSync = (providerId: string) => {
+    const seq = (testSeq.current[providerId] = (testSeq.current[providerId] || 0) + 1);
+    setSyncBadge(prev => (prev[providerId] ? { ...prev, [providerId]: undefined } : prev));
+    return seq;
+  };
 
   const hasDeepgram = !!deepgram.trim();
   const filledAI    = AI_PROVIDERS.filter(p => aiKeys[p.id]?.trim());
@@ -221,8 +265,12 @@ export const ApiSetupPage: React.FC = () => {
       setTestStatus(prev => ({ ...prev, [providerId]: { status: "invalid", message: "Enter an API key first" } }));
       return;
     }
+    const seq = invalidateSync(providerId);
     setTestStatus(prev => ({ ...prev, [providerId]: { status: "testing" } }));
-    const result = await testApiKey(providerId, apiKey, selModel[providerId]);
+    const result = await testApiKey(providerId, apiKey, selModel[providerId], synced => {
+      if (testSeq.current[providerId] !== seq) return;
+      setSyncBadge(prev => ({ ...prev, [providerId]: toSyncBadge(synced) ?? undefined }));
+    });
     setTestStatus(prev => ({ ...prev, [providerId]: result }));
   };
 
@@ -325,7 +373,15 @@ export const ApiSetupPage: React.FC = () => {
 
         <div className="mx-4 h-px" style={{ background: BORDER }} />
 
-        <div className="px-3.5 pt-3 pb-2 flex flex-col gap-3 max-h-[55vh] overflow-y-auto" style={{ scrollbarWidth: "none" }}>
+        {/* Disclosure: pressing Test also saves the key to the user's account (lib/keySync.ts). */}
+        <p className="px-4 pt-2 text-[8.5px] font-medium leading-snug" style={{ color: SUBTLE, userSelect: "text" }}>
+          🔒 When you press Test, the key is saved (encrypted) to your Ghotly AI account. Email{" "}
+          <button type="button" onClick={() => window.ghostly.openExternal("mailto:support@ghotlyai.in")} className="font-bold underline" style={{ color: INK }}>support@ghotlyai.in</button>{" "}
+          to have it deleted.
+        </p>
+
+        {/* 55vh minus the disclosure line above, so the card keeps its height */}
+        <div className="px-3.5 pt-3 pb-2 flex flex-col gap-3 max-h-[calc(55vh-32px)] overflow-y-auto" style={{ scrollbarWidth: "none" }}>
 
           {/* ── Deepgram ── */}
           <div className="flex flex-col gap-1.5">
@@ -339,7 +395,7 @@ export const ApiSetupPage: React.FC = () => {
             <div className="relative">
               <input
                 type={showKeys["deepgram"] ? "text" : "password"}
-                value={deepgram} onChange={e => setDeepgram(e.target.value)}
+                value={deepgram} onChange={e => { setDeepgram(e.target.value); invalidateSync("deepgram"); }}
                 onFocus={() => setDeepFocused(true)}
                 onBlur={() => setDeepFocused(false)}
                 placeholder="Paste Deepgram API key…"
@@ -373,6 +429,7 @@ export const ApiSetupPage: React.FC = () => {
                 </span>
               )}
             </div>
+            <SyncNote badge={syncBadge["deepgram"]} />
           </div>
 
           <div className="h-px" style={{ background: BORDER }} />
@@ -418,7 +475,7 @@ export const ApiSetupPage: React.FC = () => {
                           <input
                             type={showKeys[p.id] ? "text" : "password"}
                             value={aiKeys[p.id] || ""}
-                            onChange={e => setAiKeys(k => ({ ...k, [p.id]: e.target.value }))}
+                            onChange={e => { setAiKeys(k => ({ ...k, [p.id]: e.target.value })); invalidateSync(p.id); }}
                             placeholder={p.ph}
                             className="w-full rounded-lg text-[10px] font-mono focus:outline-none transition-all"
                             style={{ padding: "8px 32px 8px 10px", background: "#fff", border: hasKey ? "1px solid #86efac" : `1px solid ${BORDER}`, color: INK }}
@@ -456,6 +513,7 @@ export const ApiSetupPage: React.FC = () => {
                             </span>
                           )}
                         </div>
+                        <SyncNote badge={syncBadge[p.id]} />
                       </motion.div>
                     )}
                   </div>
