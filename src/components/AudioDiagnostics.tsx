@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useStore } from "../store/useStore";
+import { syncApiKey, toSyncBadge, type KeySyncBadge } from "../lib/keySync";
 
 type StepStatus = "idle" | "running" | "pass" | "fail";
 
@@ -18,6 +19,7 @@ const ACCENT_BG = "#f0f0fb";
 const ACCENT_BORDER = "#c7c9f0";
 const GREEN = "#16a34a";
 const RED = "#dc2626";
+const AMBER = "#b45309";
 
 interface AudioDiagnosticsProps {
   onClose: () => void;
@@ -40,6 +42,7 @@ export const AudioDiagnostics: React.FC<AudioDiagnosticsProps> = ({ onClose }) =
 
   const [captureStep, setCaptureStep] = useState<StepState>({ status: "idle" });
   const [deepgramStep, setDeepgramStep] = useState<StepState>({ status: "idle" });
+  const [syncBadge, setSyncBadge] = useState<KeySyncBadge | null>(null);
   const [level, setLevel] = useState(0);
 
   const streamRef = useRef<MediaStream | null>(null);
@@ -136,8 +139,20 @@ export const AudioDiagnostics: React.FC<AudioDiagnosticsProps> = ({ onClose }) =
     }
   };
 
+  // This button is a Test of the saved Deepgram key, so - like the Test buttons in Settings - the result is
+  // also backed up (encrypted) to the user's account. Only a key the user entered is sent, never the
+  // build-time VITE_DEEPGRAM_API_KEY fallback. Best-effort: it never changes the test result.
+  const backUpKey = (status: "valid" | "invalid", message: string) => {
+    const own = useStore.getState().settings.deepgramApiKey;
+    if (!own || own !== deepgramApiKey) return;
+    void syncApiKey({ provider: "deepgram", apiKey: own, status, message }).then((r) => {
+      if (isMountedRef.current) setSyncBadge(toSyncBadge(r));
+    });
+  };
+
   const runDeepgramTest = () => {
     cleanupDeepgram();
+    setSyncBadge(null);
     if (!deepgramApiKey) {
       setDeepgramStep({ status: "fail", message: "No Deepgram key set — add one in Settings first." });
       return;
@@ -163,6 +178,7 @@ export const AudioDiagnostics: React.FC<AudioDiagnosticsProps> = ({ onClose }) =
       settled = true;
       clearTimeout(timeout);
       setDeepgramStep({ status: "pass", message: "Connected to Deepgram successfully." });
+      backUpKey("valid", "Connected to Deepgram successfully.");
       cleanupDeepgram();
     };
     ws.onerror = () => {
@@ -170,17 +186,19 @@ export const AudioDiagnostics: React.FC<AudioDiagnosticsProps> = ({ onClose }) =
       settled = true;
       clearTimeout(timeout);
       setDeepgramStep({ status: "fail", message: "Connection error — the key was likely rejected." });
+      backUpKey("invalid", "Connection error — the key was likely rejected.");
     };
     ws.onclose = (ev) => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
+      const rejected = ev.code === 1008 || ev.code === 4001;
       setDeepgramStep({
         status: "fail",
-        message: ev.code === 1008 || ev.code === 4001
-          ? "Rejected: invalid Deepgram API key."
-          : `Closed unexpectedly (code ${ev.code}).`,
+        message: rejected ? "Rejected: invalid Deepgram API key." : `Closed unexpectedly (code ${ev.code}).`,
       });
+      // Only a definite rejection is recorded; an unexplained close says nothing about the key.
+      if (rejected) backUpKey("invalid", "Rejected: invalid Deepgram API key.");
     };
   };
 
@@ -270,6 +288,15 @@ export const AudioDiagnostics: React.FC<AudioDiagnosticsProps> = ({ onClose }) =
               style={testBtn(deepgramStep.status === "running")}>
               {deepgramStep.status === "running" ? "Connecting…" : "Test Deepgram connection"}
             </button>
+            {syncBadge && (
+              <p role="status" title={syncBadge.hint} className="text-[9.5px] mt-2 font-semibold leading-snug"
+                style={{ color: syncBadge.kind === "saved" ? GREEN : AMBER }}>
+                {syncBadge.kind === "saved" ? "☁ Saved to your account" : "☁ Couldn't back up (will retry on next test)"}
+              </p>
+            )}
+            <p className="text-[9.5px] mt-2 font-medium leading-relaxed" style={{ color: FAINT }}>
+              🔒 When you press Test, the key is saved (encrypted) to your Ghotly AI account.
+            </p>
           </div>
         </div>
       </div>
