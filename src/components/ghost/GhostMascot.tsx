@@ -1,15 +1,25 @@
 /**
- * GhostMascot - the animated Ghotly AI ghost.
+ * GhostMascot - the animated Ghotly AI ghost (glossy, sunglasses, arms crossed).
  *
- *   <GhostMascot size={96} variant="hello" />          // pop-in + friendly wave
- *   <GhostMascot size={64} />                          // idle: float, breathe, blink, smile, arm sway
- *   <GhostMascot size={28} variant="calm" />           // float + blink only (also forced for size <= 40)
+ *   <GhostMascot size={96} variant="hello" />          // pop-in, then periodically swings an arm in and
+ *                                                       // crosses it over the chest with a little bounce
+ *   <GhostMascot size={64} />                          // idle: float, breathe, tilt, gentle arm sway
+ *   <GhostMascot size={28} variant="calm" />           // float only, arm at rest (also forced for size <= 40)
  *   <GhostLogo size={20} />                            // plain static <img> for tiny / list usage
  *
  * Pure CSS animation (see ghost-mascot.css): transform / translate / rotate / scale / opacity only,
  * no framer-motion, no JS per frame. Self-contained: copy this file, ghost-mascot.css and the
  * assets/ghost folder to another Vite project and it works as-is (assets are ES-imported, so URLs
  * resolve under http dev, hashed production builds and file:// packaged apps alike).
+ *
+ * Rig: two raster layers on one shared 1024px canvas (percentage-positioned, so any `size` works) -
+ *   gm-base  the whole ghost (head, shades, the back arm, hem) with the FRONT arm's own hole inpainted shut
+ *   gm-arm   just the front arm/sleeve, rotated with a plain CSS `transform: rotate()` around its shoulder
+ *            (`transform-origin`) - a rigid cutout "paper doll" joint, not a pre-rendered pose sprite strip,
+ *            which is what makes the arm visibly swing in and cross rather than just sit crossed already.
+ *   gm-glow  soft rim halo, same recipe as the very first mascot build.
+ * `base + arm, both at rest (rotate(0))` reproduces the original artwork exactly - see src/components/
+ * ghost/README.md for how this was built and how to re-derive the numbers below if the art changes.
  */
 import {
   useEffect,
@@ -32,10 +42,7 @@ import ghost128 from "../../assets/ghost/ghost-128.png";
 import ghost256 from "../../assets/ghost/ghost-256.png";
 import ghost512 from "../../assets/ghost/ghost-512.png";
 import animBase from "../../assets/ghost/anim/base.webp";
-import animArmL from "../../assets/ghost/anim/arm-l.webp";
-import animArmR from "../../assets/ghost/anim/arm-r.webp";
-import animEyes from "../../assets/ghost/anim/eyes.webp";
-import animMouth from "../../assets/ghost/anim/mouth.webp";
+import animArm from "../../assets/ghost/anim/arm.webp";
 import animGlow from "../../assets/ghost/anim/glow.webp";
 
 export type GhostVariant = "idle" | "hello" | "calm";
@@ -43,11 +50,11 @@ export type GhostVariant = "idle" | "hello" | "calm";
 export interface GhostMascotProps {
   /** Rendered box in CSS px (the artwork is square). Default 64. Sizes <= 40 always use the calm rendering. */
   size?: number;
-  /** idle = float + breathe + blink + smile + arm sway; hello = idle + pop-in + wave; calm = float + blink. */
+  /** idle = float + breathe + tilt + arm sway; hello = idle + pop-in + periodic arm-cross gesture; calm = float only. */
   variant?: GhostVariant;
   /** false renders the still logo (no motion, no extra assets). Default true. */
   animated?: boolean;
-  /** Blink the eyes (default true). */
+  /** Reserved (no separate eye layer - the shades cover them). Accepted so older call sites keep compiling. */
   blink?: boolean;
   className?: string;
   style?: CSSProperties;
@@ -120,7 +127,7 @@ function subscribeReducedMotion(cb: () => void) {
 const getReducedMotion = () => (typeof window !== "undefined" && !!window.matchMedia ? window.matchMedia(RM_QUERY).matches : false);
 
 /* ---------- animated layer preloading (shared across instances) ---------- */
-const ANIM_URLS = [animBase, animArmL, animArmR, animEyes, animMouth, animGlow];
+const ANIM_URLS = [animBase, animArm, animGlow];
 const loadedUrls = new Set<string>();
 const failedUrls = new Set<string>();
 const pendingUrls = new Map<string, Promise<void>>();
@@ -181,19 +188,16 @@ function hashString(s: string): number {
 }
 function makeVars(id: string, size: number): CSSProperties {
   const r = mulberry32(hashString(id));
-  const blinkDur = 13 + r() * 4; // 13-17 s super-cycle -> single blinks every ~3.5-6 s, an occasional double blink
   const float = Math.min(6.5, Math.max(1.6, size * 0.045));
   const v: Record<string, string> = {
     "--gm-size": `${size}px`,
     "--gm-float": `${float.toFixed(2)}px`,
-    "--gm-blink-dur": `${blinkDur.toFixed(2)}s`,
-    "--gm-blink-delay": `${(-r() * blinkDur).toFixed(2)}s`,
     "--gm-d-float": `${(-r() * 4).toFixed(2)}s`,
     "--gm-d-breathe": `${(-r() * 3.4).toFixed(2)}s`,
     "--gm-d-tilt": `${(-r() * 6.4).toFixed(2)}s`,
     "--gm-d-glow": `${(-r() * 3.4).toFixed(2)}s`,
-    "--gm-d-sway-l": `${(-r() * 4.2).toFixed(2)}s`,
-    "--gm-d-sway-r": `${(-r() * 4.2).toFixed(2)}s`,
+    "--gm-d-sway": `${(-r() * 4.6).toFixed(2)}s`,
+    "--gm-d-cross": `${(-r() * 7.2).toFixed(2)}s`,
   };
   return v as unknown as CSSProperties;
 }
@@ -234,7 +238,6 @@ export function GhostMascot({
   size = 64,
   variant = "idle",
   animated = true,
-  blink = true,
   className,
   style,
   title,
@@ -248,7 +251,7 @@ export function GhostMascot({
 
   const eff: GhostVariant = size <= CALM_MAX_SIZE ? "calm" : variant;
   const motion = animated && !reduced;
-  const wantsFull = motion && eff !== "calm";
+  const wantsFull = motion && eff !== "calm"; // calm only ever shows the static frame + a float, no layer assets needed
   const status = useAnimAssets(wantsFull);
   const full = wantsFull && status === "ready";
   const dpr = useSyncExternalStore(subscribeDpr, getDpr, getServerDpr);
@@ -281,16 +284,24 @@ export function GhostMascot({
       ? { "aria-hidden": true as const }
       : { role: "img" as const, "aria-label": label };
 
-  // not animated / reduced motion / asset failure: the still logo (same box, same framing)
-  if (!motion || (wantsFull && status === "failed")) {
+  // not animated / reduced motion / calm / asset failure: the still logo (same box, same framing), optionally
+  // just floating (calm) via a transform on the wrapper - no extra assets loaded for that.
+  if (!motion || eff === "calm" || (wantsFull && status === "failed")) {
+    const floaty = motion && eff === "calm";
     return (
       <div className={cls} style={{ ...vars, ...style }} title={title} data-gm-state={state} {...a11y}>
-        <img className="gm-static" src={staticSrc} alt="" draggable={false} />
+        {floaty ? (
+          <div className="gm-body">
+            <img className="gm-static" src={staticSrc} alt="" draggable={false} />
+          </div>
+        ) : (
+          <img className="gm-static" src={staticSrc} alt="" draggable={false} />
+        )}
       </div>
     );
   }
 
-  const withHop = eff !== "calm";
+  const withHop = true; // idle and hello both get the hover reaction
   const stack = (
     <div className="gm-body">
       {full && size >= GLOW_MIN_SIZE && (
@@ -301,25 +312,12 @@ export function GhostMascot({
       {full ? (
         <>
           <img className="gm-base" src={animBase} alt="" draggable={false} />
-          <div className="gm-layer gm-arm gm-arm--l" aria-hidden="true">
-            <img className="gm-strip" src={animArmL} alt="" draggable={false} />
-          </div>
-          <div className="gm-layer gm-arm gm-arm--r" aria-hidden="true">
-            <img className="gm-strip" src={animArmR} alt="" draggable={false} />
+          <div className="gm-arm" aria-hidden="true">
+            <img src={animArm} alt="" draggable={false} />
           </div>
         </>
       ) : (
         <img className="gm-static" src={staticSrc} alt="" draggable={false} />
-      )}
-      {blink && (full || eff === "calm") && (
-        <div className="gm-layer gm-eyes" aria-hidden="true">
-          <img className="gm-strip" src={animEyes} alt="" draggable={false} />
-        </div>
-      )}
-      {full && (
-        <div className="gm-mouth" aria-hidden="true">
-          <img src={animMouth} alt="" draggable={false} />
-        </div>
       )}
     </div>
   );
