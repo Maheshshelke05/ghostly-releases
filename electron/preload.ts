@@ -18,6 +18,13 @@ contextBridge.exposeInMainWorld("ghostly", {
   quit: (): void => ipcRenderer.send("ghostly:quit"),
   getVersion: (): string => ipcRenderer.sendSync("ghostly:get-version"),
   getDevice: (): { id: string; label: string } => ipcRenderer.sendSync("ghostly:get-device"),
+  onMainError: (cb: (e: { kind: string; message: string; stack: string }) => void): (() => void) => {
+    const listener = (_: any, e: { kind: string; message: string; stack: string }): void => cb(e);
+    ipcRenderer.on("ghostly:main-error", listener);
+    return () => ipcRenderer.removeListener("ghostly:main-error", listener);
+  },
+  getPendingMainErrors: (): Promise<{ kind: string; message: string; stack: string }[]> =>
+    ipcRenderer.invoke("ghostly:get-main-errors"),
   onShow: (cb: () => void): (() => void) => {
     const listener = (): void => cb();
     ipcRenderer.on("ghostly:show", listener);

@@ -14,12 +14,28 @@ import { captureFullScreen } from "./capture";
 // This doesn't fix the underlying bugs (each specific one is handled at its
 // source elsewhere), it's a last-resort backstop so a future unforeseen one
 // logs and survives instead of silently killing the app.
+// v4: also handed to the renderer, which reports it to the account backend (src/lib/errorReport.ts); kept in a
+// small buffer until the window exists.
+const pendingMainErrors: { kind: string; message: string; stack: string }[] = [];
+function forwardMainError(kind: string, err: unknown): void {
+  const e = err instanceof Error ? err : new Error(String(err));
+  const item = { kind, message: e.message || String(err), stack: e.stack || "" };
+  try {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("ghostly:main-error", item);
+    else if (pendingMainErrors.length < 10) pendingMainErrors.push(item);
+  } catch {
+    /* never throw from the crash handler */
+  }
+}
 process.on("uncaughtException", (err) => {
   console.error("[Ghostly] Uncaught exception (recovered):", err);
+  forwardMainError("UncaughtException", err);
 });
 process.on("unhandledRejection", (reason) => {
   console.error("[Ghostly] Unhandled rejection (recovered):", reason);
+  forwardMainError("UnhandledRejection", reason);
 });
+ipcMain.handle("ghostly:get-main-errors", () => pendingMainErrors.splice(0, pendingMainErrors.length));
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;

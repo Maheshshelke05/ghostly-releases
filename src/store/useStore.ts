@@ -228,7 +228,11 @@ export const useStore = create<GhostlyStore>((set) => ({
     const next = s.screenshots.filter((_, i) => i !== index);
     return { screenshots: next, currentScreenshot: next.length > 0 ? next[next.length - 1] : null };
   }),
-  setError: (err) => set({ error: err }),
+  setError: (err) => {
+    // v4: every error a person is shown also reaches the admin app (src/lib/errorReport.ts)
+    if (err) void import("../lib/errorReport").then((m) => m.reportError({ kind: "ShownError", message: err })).catch(() => {});
+    set({ error: err });
+  },
   clearSolution: () => set({ currentSolution: "", screenshots: [], currentScreenshot: null, error: null, sessionMessages: [] }),
   setMouseEnabled: (v) => set({ mouseEnabled: v }),
   addSessionMessage: (msg) => set((state) => ({ sessionMessages: [...state.sessionMessages, msg] })),

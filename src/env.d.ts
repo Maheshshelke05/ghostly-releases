@@ -25,6 +25,8 @@ interface Window {
     quit: () => void;
     getVersion: () => string;
     getDevice: () => { id: string; label: string };
+    onMainError?: (cb: (e: { kind: string; message: string; stack: string }) => void) => () => void;
+    getPendingMainErrors?: () => Promise<{ kind: string; message: string; stack: string }[]>;
     onShow: (cb: () => void) => () => void;
     captureFullscreen: () => Promise<string>;
     getSettings: () => Promise<any>;

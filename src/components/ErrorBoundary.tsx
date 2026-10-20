@@ -1,4 +1,5 @@
 import React from "react";
+import { reportException } from "../lib/errorReport";
 
 interface Props {
   children: React.ReactNode;
@@ -21,6 +22,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error("[Ghostly] Renderer crashed:", error, info.componentStack);
+    reportException(error, "RenderCrash", { component_stack: (info.componentStack || "").slice(0, 1500) });
   }
 
   render() {
