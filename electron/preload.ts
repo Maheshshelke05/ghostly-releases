@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld("ghostly", {
   show: (): void => ipcRenderer.send("ghostly:show"),
   quit: (): void => ipcRenderer.send("ghostly:quit"),
   getVersion: (): string => ipcRenderer.sendSync("ghostly:get-version"),
+  getDevice: (): { id: string; label: string } => ipcRenderer.sendSync("ghostly:get-device"),
   onShow: (cb: () => void): (() => void) => {
     const listener = (): void => cb();
     ipcRenderer.on("ghostly:show", listener);

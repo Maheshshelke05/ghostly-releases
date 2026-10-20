@@ -15,6 +15,9 @@ import { useInterviewAudio } from "../hooks/useInterviewAudio";
 import { compressScreenshot } from "../lib/utils/imageCompressor";
 import GhostMascot from "../components/ghost/GhostMascot";
 import { API_BASE } from "../lib/api";
+import { SessionMeter } from "../components/SessionMeter";
+import { UpgradeSheet } from "../components/UpgradeSheet";
+import type { StopReason } from "../lib/metering";
 
 const escapeHtml = (value: string) =>
   value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char] || char));
@@ -233,6 +236,9 @@ export const Home: React.FC = () => {
   } = useStore();
 
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // v4 metering: the server said stop (free time used, PC limit...) -> the interview pauses and the plans show.
+  const [meterStop, setMeterStop] = useState<StopReason | null>(null);
+  const [meterKey, setMeterKey] = useState(0);
   // Minimized = the whole overlay collapsed to just the logo. Everything stays mounted
   // (live audio, streaming answers and the session keep running); it is only hidden.
   const [collapsed, setCollapsed] = useState(false);
@@ -827,6 +833,30 @@ export const Home: React.FC = () => {
   // Fix: removed saveSessionToHistory from deps — it was causing stale closure
   }, [clearSolution, setIsStreaming, audio]);
 
+  const goHome = useCallback(() => {
+    useStore.getState().setAppScreen("home");
+    setTimeout(() => window.ghostly.enableMouse(), 50);
+    setTimeout(() => window.ghostly.enableMouse(), 300);
+  }, []);
+
+  const handleMeterStop = useCallback((reason: StopReason) => {
+    // keep what was answered so far, stop listening, then explain why
+    saveSessionToHistory();
+    handleRestart();
+    if (reason === "signed_out") { goHome(); return; }
+    setCollapsed(false);
+    setFullyHidden(false);
+    setMeterStop(reason);
+    window.ghostly.enableMouse();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handleRestart, goHome]);
+
+  const handleUpgradeClose = useCallback((unlocked: boolean) => {
+    setMeterStop(null);
+    if (unlocked) { setMeterKey((k) => k + 1); return; } // a new, paid session - the interview carries on
+    goHome();
+  }, [goHome]);
+
   // ── Chat Send ────────────────────────────────────────────────────────────
   const handleChatSend = useCallback(async (text: string) => {
     if (!text.trim() || chatStreaming) return;
@@ -1000,6 +1030,8 @@ export const Home: React.FC = () => {
 
   return (
     <div className="h-screen w-full bg-transparent text-white font-mono pointer-events-none flex flex-col" style={{ userSelect: "none", WebkitUserSelect: "none" } as React.CSSProperties}>
+      {meterStop === null && <SessionMeter key={meterKey} onStop={handleMeterStop} hidden={collapsed} />}
+      <AnimatePresence>{meterStop !== null && <UpgradeSheet reason={meterStop} onClose={handleUpgradeClose} />}</AnimatePresence>
 
       {/* Everything except the logo collapses toward the top-left corner. `visibility`
           (not just opacity) is switched off once the fade finishes so nothing invisible

@@ -4,6 +4,8 @@ import { updateHotkeys, DEFAULT_SHORTCUTS, type ShortcutBindings } from "./hotke
 import Store from "electron-store";
 import https from "https";
 import http from "http";
+import os from "os";
+import crypto from "crypto";
 
 const store = new Store({
   name: "ghostly-data",
@@ -38,7 +40,22 @@ export function getStoredShortcuts(): ShortcutBindings {
   return { ...DEFAULT_SHORTCUTS, ...(store.get("shortcuts") as Partial<ShortcutBindings> | undefined) };
 }
 
+// A stable id for this PC, for the account backend's device rules (a paid plan works on 2 PCs; a PC's free minutes
+// can't be reused by a second account). Derived from the machine - not stored - so reinstalling the app or
+// clearing its data gives the same id. Only the hash leaves the PC, never the hostname/MACs themselves.
+function deviceInfo(): { id: string; label: string } {
+  const macs = Object.values(os.networkInterfaces())
+    .flat()
+    .filter((n): n is os.NetworkInterfaceInfo => !!n && !n.internal && !!n.mac && n.mac !== "00:00:00:00:00:00")
+    .map((n) => n.mac.toLowerCase());
+  const basis = [os.platform(), os.arch(), os.hostname(), os.userInfo().username, os.cpus()[0]?.model || "",
+                 ...Array.from(new Set(macs)).sort()].join("|");
+  const id = crypto.createHash("sha256").update(`ghostly-device:${basis}`).digest("hex").slice(0, 32);
+  return { id, label: `${os.hostname()} (${os.platform() === "win32" ? "Windows" : os.platform()})`.slice(0, 120) };
+}
+
 export function registerIpcHandlers(): void {
+  ipcMain.on("ghostly:get-device", (event) => { event.returnValue = deviceInfo(); });
   // User / Auth
   ipcMain.handle("get-user", () => store.get("user") || null);
   ipcMain.handle("save-user", (_event, user: any) => { store.set("user", user); });

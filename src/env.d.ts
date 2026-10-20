@@ -24,6 +24,7 @@ interface Window {
     show: () => void;
     quit: () => void;
     getVersion: () => string;
+    getDevice: () => { id: string; label: string };
     onShow: (cb: () => void) => () => void;
     captureFullscreen: () => Promise<string>;
     getSettings: () => Promise<any>;

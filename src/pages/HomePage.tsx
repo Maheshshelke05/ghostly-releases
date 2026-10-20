@@ -10,6 +10,8 @@ import { AI_PROVIDERS } from "./ApiSetupPage";
 import { activeProviderKey, isProviderDisabled } from "../lib/providerState";
 import GhostMascot from "../components/ghost/GhostMascot";
 import { API_BASE, adoptSession } from "../lib/api";
+import { UpgradeSheet } from "../components/UpgradeSheet";
+import type { StopReason } from "../lib/metering";
 
 // Same light palette as LoginPage.tsx. Layout: greeting + readiness chips, the one
 // primary action (Start Interview), History / Job Portal, then a Tools & help grid
@@ -112,6 +114,8 @@ export const HomePage: React.FC = () => {
   const [gateAd, setGateAd] = useState<Ad | null>(null);
   const displayAd = gateAd || activeAd;
   const [adGate, setAdGate] = useState(false);
+  // v4: no plan and no free time left -> the plans, before any setup screen
+  const [upgradeReason, setUpgradeReason] = useState<StopReason | null>(null);
   const [adClicked, setAdClicked] = useState(false);
   const continueRef = useRef<HTMLButtonElement>(null);
 
@@ -158,7 +162,11 @@ export const HomePage: React.FC = () => {
     if (startStatus === "syncing") return;
     setStartStatus("syncing");
     try {
-      const { latestAds } = await refreshAccount();
+      const { latestAds, access } = await refreshAccount() as { latestAds: any[]; access?: any };
+      if (access && !access.can_start_session) {
+        setUpgradeReason("no_time");
+        return;
+      }
       const latestActiveAd = latestAds.find((a: any) => a.is_active) || null;
       if (!latestActiveAd) { setGateAd(null); setAppScreen("interview-setup"); return; }
       setGateAd(latestActiveAd); setAdGate(true); setAdClicked(false);
@@ -366,6 +374,14 @@ export const HomePage: React.FC = () => {
       {settingsOpen && <HomeSettingsPanel onClose={() => setSettingsOpen(false)} />}
 
       {/* ── Ad Gate Overlay ── */}
+      <AnimatePresence>
+        {upgradeReason !== null && (
+          <UpgradeSheet
+            reason={upgradeReason}
+            onClose={(unlocked) => { setUpgradeReason(null); if (unlocked) handleStartInterview(); }}
+          />
+        )}
+      </AnimatePresence>
       <AnimatePresence>
         {adGate && displayAd && (
           <motion.div
