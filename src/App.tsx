@@ -9,6 +9,7 @@ import { AudioSetupPage } from "./pages/AudioSetupPage";
 import { Home } from "./pages/Home";
 import { UpdateAnimation } from "./components/UpdateAnimation";
 import { SplashScreen } from "./components/SplashScreen";
+import { API_BASE, adoptSession } from "./lib/api";
 import "./styles/global.css";
 
 type UpdateState = "idle" | "checking" | "available" | "downloading" | "installing" | "ready" | "error";
@@ -44,6 +45,8 @@ const App: React.FC = () => {
   // blocking native alert().
 
   const applyAccountPayload = async (data: any) => {
+    if (data?.access) useStore.getState().setAccess(data.access);
+    await adoptSession(data);
     const savedAds = await window.ghostly.getAds().catch(() => []);
     const currentAds = useStore.getState().ads;
     const latestAds = Array.isArray(data.ads)
@@ -155,7 +158,7 @@ const App: React.FC = () => {
   const handleAuthToken = async ({ token, user }: { token: string; user: any }) => {
     setLoginError(null);
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/subscription`, {
+      const res = await fetch(`${API_BASE}/subscription`, {
         headers: { Authorization: `Bearer ${token}` },
         // OAuth had already succeeded by the time this runs — an unbounded
         // fetch here used to mean a slow/unreachable backend left the user
@@ -180,7 +183,9 @@ const App: React.FC = () => {
         return;
       }
       const data = await res.json();
-      const fullUser = { ...user, idToken: token };
+      // The backend's 30-day session replaces Google's 1-hour token (see src/lib/api.ts).
+      const session = typeof data?.session?.token === "string" ? data.session.token : null;
+      const fullUser = { ...user, idToken: session || token };
       setUser(fullUser);
       await window.ghostly.saveUser(fullUser);
       await applyAccountPayload(data);
@@ -252,7 +257,7 @@ const App: React.FC = () => {
       }, 60);
       const { user: currentUser } = useStore.getState();
       if (currentUser?.idToken) {
-        fetch(`${import.meta.env.VITE_API_URL}/subscription`, {
+        fetch(`${API_BASE}/subscription`, {
           headers: { Authorization: `Bearer ${currentUser.idToken}` },
           signal: AbortSignal.timeout(10000),
         })
@@ -270,7 +275,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!appReady || !user?.idToken) return;
-    fetch(`${import.meta.env.VITE_API_URL}/subscription`, {
+    fetch(`${API_BASE}/subscription`, {
       headers: { Authorization: `Bearer ${user.idToken}` },
       signal: AbortSignal.timeout(10000),
     })
@@ -289,7 +294,7 @@ const App: React.FC = () => {
     const appVersion = window.ghostly?.getVersion ? window.ghostly.getVersion() : "v3.4.0";
     
     const sendHeartbeat = () => {
-      fetch(`${import.meta.env.VITE_API_URL}/heartbeat`, {
+      fetch(`${API_BASE}/heartbeat`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

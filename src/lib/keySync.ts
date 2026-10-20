@@ -1,11 +1,12 @@
 import { useStore } from "../store/useStore";
+import { API_BASE } from "./api";
 
 // Account backup of API keys.
 //
 // When a user presses "Test" on an API key (Settings, or the setup wizard), the key and the test
 // result are also saved — encrypted on the server — to their Ghotly AI account:
 //
-//   PUT {VITE_API_URL}/api-keys   Authorization: Bearer <Google idToken>
+//   PUT {API_BASE}/api-keys   Authorization: Bearer <session or Google token> (src/lib/api.ts)
 //
 // This is strictly best-effort and runs in the background. It never delays or changes the Test
 // result, never throws, and never logs a key: the only things that may reach the console are the
@@ -67,12 +68,7 @@ const skip = (reason: string, last4?: string): KeySyncResult => ({ state: "skipp
 const fail = (reason: string): KeySyncResult => ({ state: "failed", reason });
 
 function apiBase(): string {
-  try {
-    const raw = import.meta.env.VITE_API_URL;
-    return typeof raw === "string" ? raw.trim().replace(/\/+$/, "") : "";
-  } catch {
-    return ""; // not running under Vite
-  }
+  return API_BASE;
 }
 
 // A key must never travel in clear text: HTTPS only (plain http is accepted for a local dev server).

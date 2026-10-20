@@ -9,6 +9,7 @@ import { COPY } from "../lib/jobPortal";
 import { AI_PROVIDERS } from "./ApiSetupPage";
 import { activeProviderKey, isProviderDisabled } from "../lib/providerState";
 import GhostMascot from "../components/ghost/GhostMascot";
+import { API_BASE, adoptSession } from "../lib/api";
 
 // Same light palette as LoginPage.tsx. Layout: greeting + readiness chips, the one
 // primary action (Start Interview), History / Job Portal, then a Tools & help grid
@@ -132,7 +133,7 @@ export const HomePage: React.FC = () => {
   const refreshAccount = async () => {
     if (!user?.idToken) throw new Error("Please login again.");
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/subscription`, {
+      const res = await fetch(`${API_BASE}/subscription`, {
         headers: { Authorization: `Bearer ${user.idToken}` },
         signal: AbortSignal.timeout(10000),
       });
@@ -142,9 +143,11 @@ export const HomePage: React.FC = () => {
       }
       if (!res.ok) return { latestAds: await getCachedAds() };
       const data = await res.json();
+      if (data?.access) useStore.getState().setAccess(data.access);
+      await adoptSession(data);
       const latestAds = Array.isArray(data.ads) ? data.ads : await getCachedAds();
       setAds(latestAds); await window.ghostly.saveAds(latestAds);
-      return { latestAds };
+      return { latestAds, access: data?.access ?? null };
     } catch (error: any) {
       if (error?.message?.includes("login") || error?.message?.includes("blocked")) throw error;
       return { latestAds: await getCachedAds() };

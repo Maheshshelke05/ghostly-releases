@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { ProviderName } from "../lib/ai";
+import type { Access } from "../lib/api";
 
 export interface QAPair {
   question: string;
@@ -130,6 +131,8 @@ interface GhostlyStore {
   mouseEnabled: boolean;
   user: AppUser | null;
   subscription: Subscription;
+  // v4: plan + free time from the account backend (null until the first /subscription answer).
+  access: Access | null;
   ads: Ad[];
   // A known, real login/account failure (blocked account, server error) —
   // shared across App.tsx and HomePage.tsx (both can trigger a forced
@@ -161,6 +164,7 @@ interface GhostlyStore {
   setSettings: (settings: Settings) => void;
   setUser: (user: AppUser | null) => void;
   setSubscription: (sub: Subscription) => void;
+  setAccess: (access: Access | null) => void;
   setAds: (ads: Ad[]) => void;
   setLoginError: (err: string | null) => void;
 }
@@ -186,6 +190,7 @@ export const useStore = create<GhostlyStore>((set) => ({
   mouseEnabled: false,
   user: null,
   subscription: { plan: "free", status: "active", expires_at: null },
+  access: null,
   ads: [],
   loginError: null,
   settings: {
@@ -238,6 +243,7 @@ export const useStore = create<GhostlyStore>((set) => ({
   setSettings: (settings) => set({ settings }),
   setUser: (user) => set({ user }),
   setSubscription: (subscription) => set({ subscription }),
+  setAccess: (access) => set({ access }),
   setAds: (ads) => set({ ads }),
   setLoginError: (loginError) => set({ loginError }),
 }));

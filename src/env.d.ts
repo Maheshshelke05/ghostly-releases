@@ -4,7 +4,10 @@ interface ImportMetaEnv {
   readonly VITE_GROQ_API_KEY: string;
   readonly VITE_GEMINI_API_KEY: string;
   readonly VITE_WEBSITE_URL: string;
+  /** Old builds' Lambda URL - no longer read (see src/lib/api.ts). */
   readonly VITE_API_URL: string;
+  /** Optional override of https://api.ghotlyai.in (local / staging backend). */
+  readonly VITE_GHOSTLY_API_URL?: string;
 }
 
 interface ImportMeta {

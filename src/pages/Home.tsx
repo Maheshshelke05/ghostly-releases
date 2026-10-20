@@ -14,6 +14,7 @@ import { SolutionCard } from "../components/SolutionCard";
 import { useInterviewAudio } from "../hooks/useInterviewAudio";
 import { compressScreenshot } from "../lib/utils/imageCompressor";
 import GhostMascot from "../components/ghost/GhostMascot";
+import { API_BASE } from "../lib/api";
 
 const escapeHtml = (value: string) =>
   value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char] || char));
@@ -620,7 +621,7 @@ export const Home: React.FC = () => {
     setSupportError("");
 
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/support`, {
+      const res = await fetch(`${API_BASE}/support`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
