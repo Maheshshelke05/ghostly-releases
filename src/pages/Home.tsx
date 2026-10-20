@@ -605,7 +605,11 @@ export const Home: React.FC = () => {
   }, [runAIStream, setError, addScreenshot, liveActive, audio, setCurrentSolution, clearScreenshots, setIsStreaming, interviewSession]);
 
   // ── Tab change ──────────────────────────────────────────────────────────────
-  const supportAd = useMemo(() => ads.find((ad) => ad.is_active && ad.script_url && ad.container_id), [ads]);
+  const showAds = useStore((s) => s.access?.show_ads !== false); // v4: ads only for free accounts
+  const supportAd = useMemo(
+    () => (showAds ? ads.find((ad) => ad.is_active && ad.script_url && ad.container_id) : undefined),
+    [ads, showAds],
+  );
   const [supportCategory, setSupportCategory] = useState("Bug report");
   const [supportSubject, setSupportSubject] = useState("");
   const [supportMessage, setSupportMessage] = useState("");

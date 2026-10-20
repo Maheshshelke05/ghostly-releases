@@ -11,6 +11,7 @@ import { activeProviderKey, isProviderDisabled } from "../lib/providerState";
 import GhostMascot from "../components/ghost/GhostMascot";
 import { API_BASE, adoptSession } from "../lib/api";
 import { UpgradeSheet } from "../components/UpgradeSheet";
+import { PlanStrip } from "../components/PlanStrip";
 import type { StopReason } from "../lib/metering";
 
 // Same light palette as LoginPage.tsx. Layout: greeting + readiness chips, the one
@@ -115,7 +116,7 @@ export const HomePage: React.FC = () => {
   const displayAd = gateAd || activeAd;
   const [adGate, setAdGate] = useState(false);
   // v4: no plan and no free time left -> the plans, before any setup screen
-  const [upgradeReason, setUpgradeReason] = useState<StopReason | null>(null);
+  const [upgrade, setUpgrade] = useState<{ reason: StopReason | null } | null>(null);
   const [adClicked, setAdClicked] = useState(false);
   const continueRef = useRef<HTMLButtonElement>(null);
 
@@ -164,10 +165,12 @@ export const HomePage: React.FC = () => {
     try {
       const { latestAds, access } = await refreshAccount() as { latestAds: any[]; access?: any };
       if (access && !access.can_start_session) {
-        setUpgradeReason("no_time");
+        setUpgrade({ reason: access.free_seconds_total > 0 || access.expired ? "no_time" : null });
         return;
       }
-      const latestActiveAd = latestAds.find((a: any) => a.is_active) || null;
+      // ads are for free accounts only (the server already sends none to a paid plan; this also covers cached ones)
+      const showAds = (access ?? useStore.getState().access)?.show_ads !== false;
+      const latestActiveAd = showAds ? latestAds.find((a: any) => a.is_active) || null : null;
       if (!latestActiveAd) { setGateAd(null); setAppScreen("interview-setup"); return; }
       setGateAd(latestActiveAd); setAdGate(true); setAdClicked(false);
     } catch (error: any) {
@@ -250,6 +253,11 @@ export const HomePage: React.FC = () => {
               <p className="text-[15px] font-extrabold leading-tight truncate" style={{ color: INK }}>Welcome back, {user?.name?.split(" ")[0] || "there"} 👋</p>
               <p className="text-[11px] font-medium mt-0.5" style={{ color: SUBTLE }}>Ready when you are.</p>
             </div>
+          </motion.div>
+
+          {/* Plan (v4) */}
+          <motion.div variants={ITEM}>
+            <PlanStrip onUpgrade={() => setUpgrade({ reason: null })} />
           </motion.div>
 
           {/* Readiness */}
@@ -375,10 +383,10 @@ export const HomePage: React.FC = () => {
 
       {/* ── Ad Gate Overlay ── */}
       <AnimatePresence>
-        {upgradeReason !== null && (
+        {upgrade !== null && (
           <UpgradeSheet
-            reason={upgradeReason}
-            onClose={(unlocked) => { setUpgradeReason(null); if (unlocked) handleStartInterview(); }}
+            reason={upgrade.reason}
+            onClose={(unlocked) => { setUpgrade(null); if (unlocked) handleStartInterview(); }}
           />
         )}
       </AnimatePresence>
