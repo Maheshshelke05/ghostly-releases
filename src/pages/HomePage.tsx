@@ -98,6 +98,7 @@ const ToolTile: React.FC<{ icon: React.ReactNode; title: string; desc: string; e
 
 export const HomePage: React.FC = () => {
   const { setAppScreen, user, ads, setUser, setAds, setLoginError, settings } = useStore();
+  const access = useStore((s) => s.access);
   const [startStatus, setStartStatus] = useState<"idle" | "syncing">("idle");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyCount, setHistoryCount] = useState(0);
@@ -116,7 +117,8 @@ export const HomePage: React.FC = () => {
   const displayAd = gateAd || activeAd;
   const [adGate, setAdGate] = useState(false);
   // v4: no plan and no free time left -> the plans, before any setup screen
-  const [upgrade, setUpgrade] = useState<{ reason: StopReason | null } | null>(null);
+  // `blocking`: opened by Start Interview (unlocking it starts the interview), not by the Upgrade button
+  const [upgrade, setUpgrade] = useState<{ reason: StopReason | null; blocking: boolean } | null>(null);
   const [adClicked, setAdClicked] = useState(false);
   const continueRef = useRef<HTMLButtonElement>(null);
 
@@ -165,7 +167,7 @@ export const HomePage: React.FC = () => {
     try {
       const { latestAds, access } = await refreshAccount() as { latestAds: any[]; access?: any };
       if (access && !access.can_start_session) {
-        setUpgrade({ reason: access.free_seconds_total > 0 || access.expired ? "no_time" : null });
+        setUpgrade({ reason: access.free_seconds_total > 0 || access.expired ? "no_time" : null, blocking: true });
         return;
       }
       // ads are for free accounts only (the server already sends none to a paid plan; this also covers cached ones)
@@ -257,7 +259,7 @@ export const HomePage: React.FC = () => {
 
           {/* Plan (v4) */}
           <motion.div variants={ITEM}>
-            <PlanStrip onUpgrade={() => setUpgrade({ reason: null })} />
+            <PlanStrip onUpgrade={() => setUpgrade({ reason: null, blocking: false })} />
           </motion.div>
 
           {/* Readiness */}
@@ -366,7 +368,7 @@ export const HomePage: React.FC = () => {
               </div>
               <div className="min-w-0">
                 <p className="text-[11px] font-bold leading-none truncate" style={{ color: INK }}>{user?.name || "Guest"}</p>
-                <p className="text-[9px] mt-1 font-semibold" style={{ color: SUBTLE }}>Ad-supported · Free</p>
+                <p className="text-[9px] mt-1 font-semibold" style={{ color: SUBTLE }}>{access?.paid ? "Pro plan · no ads" : "Ad-supported · Free"}</p>
               </div>
             </div>
             <button onClick={handleLogout} title="Log out" className="px-2.5 h-7 rounded-lg text-[10px] font-bold transition-colors hover:bg-[#f2f3f6]" style={{ color: SUBTLE }}>
@@ -386,7 +388,8 @@ export const HomePage: React.FC = () => {
         {upgrade !== null && (
           <UpgradeSheet
             reason={upgrade.reason}
-            onClose={(unlocked) => { setUpgrade(null); if (unlocked) handleStartInterview(); }}
+            blocking={upgrade.blocking}
+            onClose={(unlocked) => { const resume = upgrade.blocking; setUpgrade(null); if (unlocked && resume) handleStartInterview(); }}
           />
         )}
       </AnimatePresence>

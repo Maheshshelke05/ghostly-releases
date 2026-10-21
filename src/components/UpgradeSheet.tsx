@@ -20,8 +20,11 @@ const FALLBACK_PLANS: Plan[] = [
 
 export const UpgradeSheet: React.FC<{
   reason: StopReason | null;
+  /** Opened because an interview could not start or was stopped: "I've paid" then unlocks as soon as one may start
+   *  again (a plan, or time support added). Opened from the Upgrade button: only a paid plan counts. */
+  blocking?: boolean;
   onClose: (unlocked: boolean) => void;
-}> = ({ reason, onClose }) => {
+}> = ({ reason, blocking = false, onClose }) => {
   const [plans, setPlans] = useState<Plan[]>(FALLBACK_PLANS);
   const [checking, setChecking] = useState(false);
   const [note, setNote] = useState("");
@@ -42,7 +45,8 @@ export const UpgradeSheet: React.FC<{
     try {
       const access = await apiFetch<Access>("/me/access");
       setAccess(access);
-      if (access.can_start_session) { onClose(true); return; }
+      // (free minutes left are not a payment: from the Upgrade button that used to close the sheet as if paid)
+      if (access.paid || (blocking && access.can_start_session)) { onClose(true); return; }
       setNote("No active plan yet. If you just paid, wait a few seconds and try again.");
     } catch {
       setNote("Couldn't reach the server. Check your connection.");

@@ -1035,7 +1035,7 @@ export const Home: React.FC = () => {
   return (
     <div className="h-screen w-full bg-transparent text-white font-mono pointer-events-none flex flex-col" style={{ userSelect: "none", WebkitUserSelect: "none" } as React.CSSProperties}>
       {meterStop === null && <SessionMeter key={meterKey} onStop={handleMeterStop} hidden={collapsed} />}
-      <AnimatePresence>{meterStop !== null && <UpgradeSheet reason={meterStop} onClose={handleUpgradeClose} />}</AnimatePresence>
+      <AnimatePresence>{meterStop !== null && <UpgradeSheet reason={meterStop} blocking onClose={handleUpgradeClose} />}</AnimatePresence>
 
       {/* Everything except the logo collapses toward the top-left corner. `visibility`
           (not just opacity) is switched off once the fade finishes so nothing invisible
