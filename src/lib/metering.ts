@@ -11,7 +11,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useStore } from "../store/useStore";
 import { API_BASE, ApiError, apiFetch, currentToken } from "./api";
 
-export type StopReason = "no_time" | "device_limit" | "free_used_on_device" | "blocked" | "session_ended" | "offline" | "signed_out";
+export type StopReason = "no_time" | "device_limit" | "free_used_on_device" | "blocked" | "session_ended" | "offline" | "signed_out" | "support";
 
 export interface MeterState {
   status: "starting" | "running" | "stopped";
@@ -47,6 +47,7 @@ export function reasonText(reason: StopReason | null): string {
     case "blocked": return "This account has been blocked. Contact support if this is a mistake.";
     case "offline": return "Can't reach the Ghotly AI server. Check your internet connection and try again.";
     case "signed_out": return "Please sign in again.";
+    case "support": return "Support is part of Pro: 24-hour help from the Ghotly AI team. Pick a plan to unlock it.";
     case "session_ended": return "This session has ended.";
     default: return "";
   }

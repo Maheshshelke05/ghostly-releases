@@ -6,7 +6,6 @@ import { activeProviderKey, isProviderDisabled, usableApiKeys } from "../lib/pro
 import { buildPrompt, buildSessionContext, buildLiveInterviewPrompt, buildChatPrompt, buildFollowUpPrompt } from "../lib/prompts";
 import { v4 as uuidv4 } from "uuid";
 import { TopBar, type InterviewTab } from "../components/TopBar";
-import { JobPortalHeader, JobPortalPanel, JobPortalFooter } from "../components/JobPortalTab";
 import { HomeSettingsPanel } from "../components/HomeSettingsPanel";
 import { MinimizedLogo } from "../components/MinimizedLogo";
 import { useMinimizedClickThrough } from "../hooks/useMinimizedClickThrough";
@@ -18,9 +17,6 @@ import { API_BASE } from "../lib/api";
 import { SessionMeter } from "../components/SessionMeter";
 import { UpgradeSheet } from "../components/UpgradeSheet";
 import type { StopReason } from "../lib/metering";
-
-const escapeHtml = (value: string) =>
-  value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char] || char));
 
 const BASE = "#1b1b26";
 const nm = (raised = true) =>
@@ -46,40 +42,6 @@ const NavButton: React.FC<{ onClick: () => void; disabled?: boolean; children: R
     >
       {children}
     </button>
-  );
-};
-
-const SupportAdPlacement: React.FC<{ scriptUrl?: string; containerId?: string }> = ({ scriptUrl, containerId }) => {
-  const safeContainerId = (containerId || "").replace(/[^\w-]/g, "");
-  const safeScriptUrl = scriptUrl?.startsWith("https://") || scriptUrl?.startsWith("http://") ? scriptUrl : "";
-
-  if (!safeContainerId || !safeScriptUrl) return null;
-
-  const srcDoc = `<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <style>
-      html, body { margin: 0; padding: 0; width: 100%; min-height: 120px; overflow: hidden; background: transparent; }
-      body { display: flex; align-items: center; justify-content: center; }
-      #${safeContainerId} { width: 100%; min-height: 120px; }
-    </style>
-  </head>
-  <body>
-    <div id="${safeContainerId}"></div>
-    <script async="async" data-cfasync="false" src="${escapeHtml(safeScriptUrl)}"></script>
-  </body>
-</html>`;
-
-  return (
-    <iframe
-      title="Sponsored support ad"
-      srcDoc={srcDoc}
-      sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox allow-same-origin"
-      className="w-full rounded-xl border-0 bg-white"
-      style={{ height: "124px" }}
-    />
   );
 };
 
@@ -129,7 +91,9 @@ const CommunityButton: React.FC = () => (
 
 interface SupportPanelProps {
   email: string;
-  supportAd?: { script_url?: string; container_id?: string };
+  /** Support is part of Pro: a free account sees the lock and the plans instead of the form. */
+  paid: boolean;
+  onUpgrade: () => void;
   supportCategory: string;
   setSupportCategory: (value: string) => void;
   supportSubject: string;
@@ -143,7 +107,8 @@ interface SupportPanelProps {
 
 const SupportPanel: React.FC<SupportPanelProps> = ({
   email,
-  supportAd,
+  paid,
+  onUpgrade,
   supportCategory,
   setSupportCategory,
   supportSubject,
@@ -154,14 +119,28 @@ const SupportPanel: React.FC<SupportPanelProps> = ({
   supportError,
   onSubmit,
 }) => (
-  <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-4 py-1">
+  <div className="grid grid-cols-1 gap-4 py-1">
     <CommunityButton />
+    {!paid ? (
+      <div className="rounded-2xl border border-white/[0.08] p-5 text-center"
+        style={{ background: "linear-gradient(160deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03))" }}>
+        <div className="text-3xl mb-2">🔒</div>
+        <p className="text-[15px] font-black text-white leading-tight">Support is part of Pro</p>
+        <p className="text-[11px] text-white/45 mt-1.5 leading-relaxed">
+          Pro members get 24-hour support from the Ghotly AI team. Free accounts can ask other users in the community above.
+        </p>
+        <button type="button" onClick={onUpgrade}
+          className="mt-4 px-5 py-2.5 rounded-full text-[12px] font-extrabold" style={{ background: "#fff", color: "#15162b" }}>
+          See plans
+        </button>
+      </div>
+    ) : (
     <form onSubmit={onSubmit} className="rounded-2xl border border-white/[0.08] p-4"
       style={{ background: "linear-gradient(160deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03))" }}>
       <div className="mb-4">
         <p className="text-[15px] font-black text-white leading-tight">Report a problem</p>
         <p className="text-[11px] text-white/35 mt-1 leading-relaxed">
-          Send bugs, feature issues, payment problems, or anything not working. One report per day is allowed.
+          Send bugs, feature issues, payment problems, or anything not working. Pro support replies within 24 hours. One report per day is allowed.
         </p>
       </div>
 
@@ -199,7 +178,7 @@ const SupportPanel: React.FC<SupportPanelProps> = ({
       </div>
 
       {supportError && <p className="mt-3 text-[11px] font-bold text-red-300">{supportError}</p>}
-      {supportStatus === "sent" && <p className="mt-3 text-[11px] font-bold text-green-300">Report sent. Thank you, I will check it from admin panel.</p>}
+      {supportStatus === "sent" && <p className="mt-3 text-[11px] font-bold text-green-300">Report sent. Our team will reply by email within 24 hours.</p>}
 
       <button type="submit" disabled={supportStatus === "sending" || !supportSubject.trim() || supportMessage.trim().length < 10}
         className="mt-4 w-full py-2.5 rounded-xl text-[12px] font-black transition-all disabled:opacity-40"
@@ -207,23 +186,7 @@ const SupportPanel: React.FC<SupportPanelProps> = ({
         {supportStatus === "sending" ? "Sending..." : "Send Report"}
       </button>
     </form>
-
-    <div className="space-y-3">
-      <div className="rounded-2xl border border-violet-400/20 p-3"
-        style={{ background: "linear-gradient(160deg, rgba(139,92,246,0.12), rgba(255,255,255,0.04))" }}>
-        <p className="text-[10px] font-black uppercase tracking-widest text-violet-300/80">Support Ads</p>
-        <p className="mt-1 text-[11px] text-white/45 leading-relaxed">
-          Sponsored content may appear here while you send feedback. No ads are shown in the interview answer area.
-        </p>
-      </div>
-      {supportAd ? (
-        <SupportAdPlacement scriptUrl={supportAd.script_url} containerId={supportAd.container_id} />
-      ) : (
-        <div className="rounded-xl border border-white/[0.08] px-3 py-8 text-center text-[11px] font-bold text-white/25">
-          No support ad configured
-        </div>
-      )}
-    </div>
+    )}
   </div>
 );
 
@@ -605,11 +568,8 @@ export const Home: React.FC = () => {
   }, [runAIStream, setError, addScreenshot, liveActive, audio, setCurrentSolution, clearScreenshots, setIsStreaming, interviewSession]);
 
   // ── Tab change ──────────────────────────────────────────────────────────────
-  const showAds = useStore((s) => s.access?.show_ads !== false); // v4: ads only for free accounts
-  const supportAd = useMemo(
-    () => (showAds ? ads.find((ad) => ad.is_active && ad.script_url && ad.container_id) : undefined),
-    [ads, showAds],
-  );
+  const supportPaid = useStore((s) => (s.access ? s.access.paid : true)); // unknown (offline start): the server decides
+  const [supportUpgrade, setSupportUpgrade] = useState(false);
   const [supportCategory, setSupportCategory] = useState("Bug report");
   const [supportSubject, setSupportSubject] = useState("");
   const [supportMessage, setSupportMessage] = useState("");
@@ -659,6 +619,12 @@ export const Home: React.FC = () => {
       if (res.status === 401) {
         setSupportStatus("error");
         setSupportError("Your login has expired. Please log in again, then send the report (your text is kept).");
+        return;
+      }
+      if (res.status === 402) {
+        setSupportStatus("error");
+        setSupportError("Support is part of Pro. Pro members get 24-hour support.");
+        setSupportUpgrade(true);
         return;
       }
       if (res.status === 403) {
@@ -1036,6 +1002,7 @@ export const Home: React.FC = () => {
     <div className="h-screen w-full bg-transparent text-white font-mono pointer-events-none flex flex-col" style={{ userSelect: "none", WebkitUserSelect: "none" } as React.CSSProperties}>
       {meterStop === null && <SessionMeter key={meterKey} onStop={handleMeterStop} hidden={collapsed} />}
       <AnimatePresence>{meterStop !== null && <UpgradeSheet reason={meterStop} blocking onClose={handleUpgradeClose} />}</AnimatePresence>
+      <AnimatePresence>{supportUpgrade && meterStop === null && <UpgradeSheet reason="support" onClose={() => setSupportUpgrade(false)} />}</AnimatePresence>
 
       {/* Everything except the logo collapses toward the top-left corner. `visibility`
           (not just opacity) is switched off once the fade finishes so nothing invisible
@@ -1097,11 +1064,6 @@ export const Home: React.FC = () => {
                     <div style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
                       <span className="text-[11px] font-semibold text-violet-300/80 font-sans">Support & Report</span>
                     </div>
-                    <div /><div />
-                  </>
-                ) : activeTab === "jobs" ? (
-                  <>
-                    <JobPortalHeader />
                     <div /><div />
                   </>
                 ) : activeTab === "chat" ? (
@@ -1183,7 +1145,8 @@ export const Home: React.FC = () => {
                 {activeTab === "support" ? (
                   <SupportPanel
                     email={user?.email || ""}
-                    supportAd={supportAd}
+                    paid={supportPaid}
+                    onUpgrade={() => setSupportUpgrade(true)}
                     supportCategory={supportCategory}
                     setSupportCategory={setSupportCategory}
                     supportSubject={supportSubject}
@@ -1194,8 +1157,6 @@ export const Home: React.FC = () => {
                     supportError={supportError}
                     onSubmit={handleSupportSubmit}
                   />
-                ) : activeTab === "jobs" ? (
-                  <JobPortalPanel />
                 ) : (activeTab as string) === "support-old" ? (
                   /* ── SUPPORT PANEL ── */
                   <div className="flex flex-col items-center gap-5 py-2">
@@ -1411,8 +1372,7 @@ export const Home: React.FC = () => {
               </div>
 
               {/* ── Input Footer ── */}
-              {activeTab === "jobs" && <JobPortalFooter />}
-              {activeTab !== "support" && activeTab !== "jobs" && (
+              {activeTab !== "support" && (
               <>
               <div className="flex-shrink-0 px-4 py-3 border-t border-white/[0.05]"
                 style={{ background: "rgba(10,10,12,0.6)" }}>

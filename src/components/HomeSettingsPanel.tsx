@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useStore, type Settings } from "../store/useStore";
 import { AI_PROVIDERS, testApiKey, type AIProviderConfig } from "../pages/ApiSetupPage";
 import { toSyncBadge, type KeySyncBadge } from "../lib/keySync";
+import { deleteServerCopy, startCloudSync, stopCloudSync } from "../lib/cloudSync";
 import { REMAPPABLE_SHORTCUTS, formatAccelerator, keyEventToAccelerator } from "../lib/shortcuts";
 import { isProviderDisabled, withoutDisabled } from "../lib/providerState";
 import { AudioDiagnostics } from "./AudioDiagnostics";
@@ -454,6 +455,23 @@ export const HomeSettingsPanel: React.FC<HomeSettingsPanelProps> = ({ onClose, t
   // Debounced save (the old panel saved on every keystroke); a pending save is
   // flushed when the panel closes so nothing typed is ever lost.
   const saveTimer = useRef<number | undefined>(undefined);
+  // "Save my data to my account" (profile, preferences, history - never keys) and "Delete my saved data"
+  const syncOn = settings.cloudSync !== false;
+  const [deleteStep, setDeleteStep] = useState<"idle" | "confirm" | "working" | "done" | "failed">("idle");
+  const toggleSync = () => {
+    const next = !syncOn;
+    updateSettings({ cloudSync: next });
+    persist();
+    const uid = useStore.getState().user?.userId;
+    if (next && uid) void startCloudSync(uid); else stopCloudSync();
+  };
+  const deleteSaved = async () => {
+    setDeleteStep("working");
+    const ok = await deleteServerCopy();
+    if (ok) { stopCloudSync(); updateSettings({ cloudSync: false }); persist(); }
+    setDeleteStep(ok ? "done" : "failed");
+  };
+
   const persist = () => {
     window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => {
@@ -965,6 +983,41 @@ export const HomeSettingsPanel: React.FC<HomeSettingsPanelProps> = ({ onClose, t
                   </span>
                   <span className="text-[12px] opacity-40 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" style={{ color: ACCENT }}>›</span>
                 </button>
+
+                <div className="rounded-2xl px-3.5 py-3" style={{ background: PANEL_BG, border: `1px solid ${BORDER}` }} data-testid="cloud-sync-card">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-bold" style={{ color: INK }}>☁️ Save my data to my account</p>
+                      <p className="text-[10px] font-medium mt-0.5 leading-snug" style={{ color: FAINT }}>
+                        Your profile (resume details), preferences and interview history follow you to a new PC. API keys are never part of it.
+                      </p>
+                    </div>
+                    <button
+                      role="switch" aria-checked={syncOn} aria-label="Save my data to my account" onClick={toggleSync}
+                      className="relative shrink-0 w-10 h-6 rounded-full transition-colors outline-none"
+                      style={{ background: syncOn ? GREEN : "#d1d5db" }}
+                    >
+                      <span className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all" style={{ left: syncOn ? "18px" : "2px" }} />
+                    </button>
+                  </div>
+                  <div className="mt-2.5 flex items-center gap-2">
+                    {deleteStep === "confirm" ? (
+                      <>
+                        <button onClick={deleteSaved} className="h-7 px-3 rounded-lg text-[10px] font-extrabold text-white" style={{ background: RED }}>Yes, delete it</button>
+                        <button onClick={() => setDeleteStep("idle")} className="h-7 px-3 rounded-lg text-[10px] font-bold" style={{ background: "#fff", border: `1px solid ${BORDER}`, color: INK }}>Cancel</button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => setDeleteStep("confirm")} disabled={deleteStep === "working"}
+                        className="h-7 px-3 rounded-lg text-[10px] font-bold disabled:opacity-50" style={{ background: "#fff", border: `1px solid ${BORDER}`, color: INK }}
+                      >
+                        {deleteStep === "working" ? "Deleting…" : "Delete my saved data"}
+                      </button>
+                    )}
+                    {deleteStep === "done" && <span className="text-[10px] font-semibold" style={{ color: GREEN }}>Deleted from your account. Saving is now off.</span>}
+                    {deleteStep === "failed" && <span className="text-[10px] font-semibold" style={{ color: RED }}>Couldn't reach the server. Try again.</span>}
+                  </div>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>

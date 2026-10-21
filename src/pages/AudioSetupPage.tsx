@@ -1,9 +1,15 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useStore } from "../store/useStore";
+import { formatMinutes } from "../lib/api";
+import { UpgradeSheet } from "../components/UpgradeSheet";
 
 export const AudioSetupPage: React.FC = () => {
   const { setAppScreen, settings, updateSettings } = useStore();
+  // The free minutes are counted from the Start button on this page (the interview itself) - not in the setup screens.
+  const access = useStore((s) => s.access);
+  const noTimeLeft = !!access && !access.paid && access.free_seconds_left <= 0;
+  const [upgrade, setUpgrade] = useState(false);
   const [microphones, setMicrophones] = useState<MediaDeviceInfo[]>([]);
   const [selectedMic, setSelectedMic] = useState(settings.micDeviceId || "default");
   const [testing, setTesting]         = useState(false);
@@ -343,21 +349,54 @@ export const AudioSetupPage: React.FC = () => {
               Captures <b style={{ color: INK }}>all system audio</b> — Zoom, Meet, Teams transcribed automatically.
             </p>
           </div>
+
+          {/* ── Plan chip: where the free minutes begin ── */}
+          {access && (
+            <div
+              data-testid="plan-chip"
+              className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl"
+              style={{
+                background: access.paid ? "#f0fdf4" : noTimeLeft ? "#fff7ed" : "#f0f0fb",
+                border: `1px solid ${access.paid ? "#bbf7d0" : noTimeLeft ? "#fed7aa" : "#c7c9f0"}`,
+              }}
+            >
+              <span className="text-[13px] shrink-0 mt-0.5">{access.paid ? "✅" : noTimeLeft ? "⏳" : "🎁"}</span>
+              <p className="text-[9px] font-medium leading-relaxed" style={{ color: SUBTLE }}>
+                {access.paid ? (
+                  <><b style={{ color: INK }}>Pro plan</b> — no time limit on interviews.</>
+                ) : noTimeLeft ? (
+                  <>Your <b style={{ color: INK }}>free minutes are used up</b>. Pick a plan to start an interview.</>
+                ) : (
+                  <><b style={{ color: INK }}>{formatMinutes(access.free_seconds_left)} free</b> interview time. The clock starts when you press Start — setup and the audio test are free.</>
+                )}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* ── Footer ── */}
         <div className="px-3.5 pb-3.5 pt-2.5" style={{ borderTop: `1px solid ${BORDER}` }}>
           <motion.button
             whileHover={{ scale: 1.015 }} whileTap={{ scale: 0.98 }}
-            onClick={handleActivate}
+            onClick={noTimeLeft ? () => setUpgrade(true) : handleActivate}
             className="w-full py-3 rounded-full text-[12.5px] font-bold flex items-center justify-center gap-2"
             style={{ background: INK, color: "#fff", border: "none" }}
           >
-            <span className="text-[13px]">{testDone ? "🚀" : "⏭️"}</span>
-            <span>{testDone ? "Launch Interview →" : "Skip & Start →"}</span>
+            <span className="text-[13px]">{noTimeLeft ? "🔓" : testDone ? "🚀" : "⏭️"}</span>
+            <span>{noTimeLeft ? "See plans →" : testDone ? "Launch Interview →" : "Skip & Start →"}</span>
           </motion.button>
         </div>
       </motion.div>
+
+      <AnimatePresence>
+        {upgrade && (
+          <UpgradeSheet
+            reason="no_time"
+            blocking
+            onClose={(unlocked) => { setUpgrade(false); if (unlocked) handleActivate(); }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 };

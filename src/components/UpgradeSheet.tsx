@@ -74,12 +74,22 @@ export const UpgradeSheet: React.FC<{
         <div className="p-5 flex flex-col gap-3">
           <div>
             <p className="text-[16px] font-bold leading-tight" style={{ color: INK }}>
-              {reason === "no_time" || reason === "free_used_on_device" ? "Keep interviewing with a plan" : "Ghotly AI plans"}
+              {reason === "no_time" || reason === "free_used_on_device" ? "Keep interviewing with a plan" : reason === "support" ? "Support is part of Pro" : "Ghotly AI plans"}
             </p>
             {reasonText(reason) && (
               <p className="text-[11.5px] mt-1.5 leading-relaxed" style={{ color: SUBTLE }}>{reasonText(reason)}</p>
             )}
           </div>
+
+          {canBuy && (
+            <ul className="flex flex-col gap-1 text-[11.5px] font-medium" style={{ color: INK }}>
+              {["Unlimited interviews, no ads", "24-hour support from our team", "Open every job on ghotlyai.in", "Use it on up to 2 PCs"].map((line) => (
+                <li key={line} className="flex items-center gap-2">
+                  <span style={{ color: ACCENT }}>✓</span>{line}
+                </li>
+              ))}
+            </ul>
+          )}
 
           {canBuy && (
             <div className="flex flex-col gap-2">
@@ -92,7 +102,7 @@ export const UpgradeSheet: React.FC<{
                 >
                   <span>
                     <span className="block text-[13px] font-semibold" style={{ color: INK }}>{p.name}</span>
-                    <span className="block text-[10.5px]" style={{ color: SUBTLE }}>≈ ₹{p.per_month_inr}/month · no ads · 2 PCs · every job</span>
+                    <span className="block text-[10.5px]" style={{ color: SUBTLE }}>≈ ₹{p.per_month_inr}/month · one payment · {p.days} days</span>
                   </span>
                   <span className="text-[15px] font-bold" style={{ color: INK }}>₹{p.price_inr}</span>
                 </button>

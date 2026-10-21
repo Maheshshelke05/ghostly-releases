@@ -9,7 +9,8 @@ import { AudioSetupPage } from "./pages/AudioSetupPage";
 import { Home } from "./pages/Home";
 import { UpdateAnimation } from "./components/UpdateAnimation";
 import { SplashScreen } from "./components/SplashScreen";
-import { API_BASE, adoptSession } from "./lib/api";
+import { startCloudSync } from "./lib/cloudSync";
+import { API_BASE, adoptSession, markSignedIn, markSignedOut } from "./lib/api";
 import "./styles/global.css";
 
 type UpdateState = "idle" | "checking" | "available" | "downloading" | "installing" | "ready" | "error";
@@ -61,10 +62,19 @@ const App: React.FC = () => {
   };
 
   const handleBlockedAuth = async () => {
+    markSignedOut();
     await window.ghostly.logoutUser();
     useStore.getState().setUser(null);
     useStore.getState().setAds([]);
     useStore.getState().setAppScreen("login");
+  };
+
+  // The server no longer accepts the saved sign-in (the 30-day session is over, or it is an old 1-hour Google token
+  // from before v4): back to the sign-in screen with the reason, instead of a "Welcome back" screen that only fails
+  // later, at Start Interview.
+  const handleExpiredSession = async () => {
+    await handleBlockedAuth();
+    useStore.getState().setLoginError("Your session has expired. Please sign in again.");
   };
 
   useEffect(() => {
@@ -125,7 +135,8 @@ const App: React.FC = () => {
             merged.activeModel = activeProviderCfg.models[0];
           }
           setSettings(merged);
-          window.ghostly.setOpacity(1);
+          // the window opacity chosen in Settings (20-100%) comes back after a restart; 0 (hidden) never does
+          window.ghostly.setOpacity(typeof merged.opacity === "number" ? Math.min(Math.max(merged.opacity, 0.2), 1) : 1);
         }
         if (savedHistory) setHistory(savedHistory);
         if (savedUser) setUser(savedUser);
@@ -186,6 +197,7 @@ const App: React.FC = () => {
       // The backend's 30-day session replaces Google's 1-hour token (see src/lib/api.ts).
       const session = typeof data?.session?.token === "string" ? data.session.token : null;
       const fullUser = { ...user, idToken: session || token };
+      markSignedIn();
       setUser(fullUser);
       await window.ghostly.saveUser(fullUser);
       await applyAccountPayload(data);
@@ -263,6 +275,8 @@ const App: React.FC = () => {
         })
           .then(async (r) => {
             if (r.status === 403) { await handleBlockedAuth(); return null; }
+            // (a running interview has its own check: the heartbeat stops it with "Please sign in again")
+            if (r.status === 401 && useStore.getState().appScreen !== "interview") { await handleExpiredSession(); return null; }
             if (!r.ok) return null;
             return r.json();
           })
@@ -281,12 +295,23 @@ const App: React.FC = () => {
     })
       .then(async (r) => {
         if (r.status === 403) { await handleBlockedAuth(); return null; }
+        if (r.status === 401) { await handleExpiredSession(); return null; }
         if (!r.ok) return null;
         return r.json();
       })
       .then(async (data) => { if (data) await applyAccountPayload(data); })
       .catch(() => {});
-  }, [appReady, user?.idToken]);
+    // keyed on WHO is signed in, not on the token: the token is swapped for a newer one now and then, and that must not read /subscription again
+  }, [appReady, user?.userId]);
+
+  // The profile / preferences / history live on the account too: read once per sign-in, then follow every change.
+  useEffect(() => {
+    if (!appReady || !user?.userId) return;
+    let stop: (() => void) | undefined;
+    let cancelled = false;
+    startCloudSync(user.userId).then((s) => { if (cancelled) s(); else stop = s; }).catch(() => {});
+    return () => { cancelled = true; stop?.(); };
+  }, [appReady, user?.userId]);
 
   // Periodic heartbeat every 60s to track user screen time and active status
   useEffect(() => {

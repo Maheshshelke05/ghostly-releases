@@ -114,6 +114,8 @@ export interface Settings {
   opacity?: number;
   autoAI?: boolean;
   autoScroll?: boolean;
+  /** Keep the profile, preferences and history on the Ghotly AI account (default on; see lib/cloudSync.ts). */
+  cloudSync?: boolean;
 }
 
 interface GhostlyStore {

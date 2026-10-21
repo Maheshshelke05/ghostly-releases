@@ -3,19 +3,18 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Ad, useStore } from "../store/useStore";
 import { InterviewHistoryModal } from "../components/InterviewHistoryModal";
 import { HomeSettingsPanel } from "../components/HomeSettingsPanel";
-import { JobPortalModal, JobPortalPreview, BriefcaseIcon, JOB_PORTAL_URL } from "../components/JobPortalModal";
 import { AudioDiagnostics } from "../components/AudioDiagnostics";
-import { COPY } from "../lib/jobPortal";
 import { AI_PROVIDERS } from "./ApiSetupPage";
 import { activeProviderKey, isProviderDisabled } from "../lib/providerState";
 import GhostMascot from "../components/ghost/GhostMascot";
-import { API_BASE, adoptSession } from "../lib/api";
+import { API_BASE, adoptSession, markSignedOut } from "../lib/api";
 import { UpgradeSheet } from "../components/UpgradeSheet";
+import { prepareSignOut } from "../lib/cloudSync";
 import { PlanStrip } from "../components/PlanStrip";
 import type { StopReason } from "../lib/metering";
 
 // Same light palette as LoginPage.tsx. Layout: greeting + readiness chips, the one
-// primary action (Start Interview), History / Job Portal, then a Tools & help grid
+// primary action (Start Interview), History, then a Tools & help grid
 // (audio test, support, blog, demo). API keys, shortcuts and updates stay in Settings.
 const INK = "#15162b";
 const SUBTLE = "#6b7280";
@@ -103,7 +102,6 @@ export const HomePage: React.FC = () => {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyCount, setHistoryCount] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [jobOpen, setJobOpen] = useState(false);
   const [audioOpen, setAudioOpen] = useState(false);
 
   // Readiness shown before the user starts: is there a usable AI key / Deepgram key?
@@ -145,6 +143,7 @@ export const HomePage: React.FC = () => {
         signal: AbortSignal.timeout(10000),
       });
       if (res.status === 401 || res.status === 403) {
+        markSignedOut();
         await window.ghostly.logoutUser(); setUser(null); setAds([]); setAppScreen("login");
         throw new Error(res.status === 403 ? "Your account has been blocked. Contact support." : "Please login again.");
       }
@@ -173,7 +172,7 @@ export const HomePage: React.FC = () => {
       // ads are for free accounts only (the server already sends none to a paid plan; this also covers cached ones)
       const showAds = (access ?? useStore.getState().access)?.show_ads !== false;
       const latestActiveAd = showAds ? latestAds.find((a: any) => a.is_active) || null : null;
-      if (!latestActiveAd) { setGateAd(null); setAppScreen("interview-setup"); return; }
+      if (!latestActiveAd || !latestActiveAd.cta_url) { setGateAd(null); setAppScreen("interview-setup"); return; }
       setGateAd(latestActiveAd); setAdGate(true); setAdClicked(false);
     } catch (error: any) {
       setLoginError(error.message || "Please login again.");
@@ -182,7 +181,8 @@ export const HomePage: React.FC = () => {
   };
 
   const handleContinueAfterAd = () => { setAdGate(false); setGateAd(null); setAppScreen("interview-setup"); };
-  const handleAdClick = () => { window.ghostly.openExternal(JOB_PORTAL_URL); setAdClicked(true); };
+  const handleAdClick = () => { if (displayAd?.cta_url) window.ghostly.openExternal(displayAd.cta_url); setAdClicked(true); };
+  const adHost = (() => { try { return new URL(displayAd?.cta_url || "").hostname.replace(/^www\./, ""); } catch { return "the sponsor's site"; } })();
 
   useEffect(() => {
     window.ghostly.getHistory().then((h: any[]) => setHistoryCount(Array.isArray(h) ? h.length : 0)).catch(() => {});
@@ -191,9 +191,9 @@ export const HomePage: React.FC = () => {
     if (!historyOpen) window.ghostly.getHistory().then((h: any[]) => setHistoryCount(Array.isArray(h) ? h.length : 0)).catch(() => {});
   }, [historyOpen]);
 
-  useEffect(() => { window.ghostly.enableMouse(); }, [historyOpen, settingsOpen, adGate, jobOpen, audioOpen]);
+  useEffect(() => { window.ghostly.enableMouse(); }, [historyOpen, settingsOpen, adGate, audioOpen]);
 
-  const handleLogout = async () => { await window.ghostly.logoutUser(); setUser(null); setAds([]); setAppScreen("login"); };
+  const handleLogout = async () => { markSignedOut(); await prepareSignOut(); await window.ghostly.logoutUser(); setUser(null); setAds([]); setAppScreen("login"); };
 
   return (
     <div
@@ -314,8 +314,8 @@ export const HomePage: React.FC = () => {
             </motion.button>
           </motion.div>
 
-          {/* History + Job Portal */}
-          <motion.div variants={ITEM} className="grid grid-cols-2 gap-2">
+          {/* History */}
+          <motion.div variants={ITEM} className="grid grid-cols-1 gap-2">
             <motion.button
               whileHover={{ scale: 1.02, y: -1 }}
               whileTap={{ scale: 0.98 }}
@@ -329,18 +329,6 @@ export const HomePage: React.FC = () => {
                 <span className="px-1.5 py-0.5 rounded-full text-[9px] font-black" style={{ background: "#e8e8ee", color: SUBTLE }}>{historyCount}</span>
               )}
             </motion.button>
-
-            <motion.button
-              whileHover={{ scale: 1.02, y: -1 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => setJobOpen(true)}
-              className="h-11 rounded-full flex items-center justify-center gap-2 outline-none"
-              style={{ background: "#f4fbe0", color: INK, border: "1px solid #dcebb0" }}
-            >
-              <BriefcaseIcon size={13} color="#4d6b12" />
-              <span className="text-[12.5px] font-bold">Job Portal</span>
-              <span className="px-1.5 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider" style={{ background: "#a3e635", color: INK }}>New</span>
-            </motion.button>
           </motion.div>
 
           {/* Tools & help */}
@@ -348,7 +336,11 @@ export const HomePage: React.FC = () => {
             <p className="text-[9px] font-black uppercase tracking-[0.14em] mb-2 px-0.5" style={{ color: FAINT }}>Tools &amp; help</p>
             <div className="grid grid-cols-2 gap-2">
               <ToolTile icon="🎙️" title="Audio test" desc="Check mic & audio" onClick={() => setAudioOpen(true)} />
-              <ToolTile icon="💬" title="Support" desc="Talk to us" external onClick={() => window.ghostly.openExternal("https://www.ghotlyai.in/support/")} />
+              <ToolTile
+                icon={access?.paid ? "💬" : "🔒"} title="Support" desc={access?.paid ? "24-hour support" : "Pro members only"}
+                external={!!access?.paid}
+                onClick={() => (access?.paid ? window.ghostly.openExternal("https://www.ghotlyai.in/support/") : setUpgrade({ reason: "support", blocking: false }))}
+              />
               <ToolTile icon="📰" title="Blog" desc="Guides & tips" external onClick={() => window.ghostly.openExternal("https://www.ghotlyai.in/blog/")} />
               <ToolTile icon="▶️" title="Demo" desc="Watch it in action" external onClick={() => window.ghostly.openExternal("https://www.ghotlyai.in/#demo")} />
             </div>
@@ -379,7 +371,6 @@ export const HomePage: React.FC = () => {
       </motion.div>
 
       <InterviewHistoryModal open={historyOpen} onClose={() => setHistoryOpen(false)} />
-      <JobPortalModal open={jobOpen} onClose={() => setJobOpen(false)} />
       {audioOpen && <AudioDiagnostics onClose={() => setAudioOpen(false)} />}
       {settingsOpen && <HomeSettingsPanel onClose={() => setSettingsOpen(false)} />}
 
@@ -424,13 +415,17 @@ export const HomePage: React.FC = () => {
                   </motion.div>
                 </div>
 
-                <JobPortalPreview />
+                {displayAd.image_url && (
+                  <img src={displayAd.image_url} alt="" referrerPolicy="no-referrer" className="w-full h-28 object-cover rounded-xl" style={{ border: `1px solid ${BORDER}` }} />
+                )}
 
                 <div>
-                  <p className="text-[14px] font-black leading-tight" style={{ color: INK }}>{COPY.brand}</p>
-                  <p className="text-[10.5px] font-medium mt-1 leading-relaxed" style={{ color: SUBTLE }}>
-                    {COPY.blurb}
-                  </p>
+                  <p className="text-[14px] font-black leading-tight" style={{ color: INK }}>{displayAd.title}</p>
+                  {displayAd.description && (
+                    <p className="text-[10.5px] font-medium mt-1 leading-relaxed" style={{ color: SUBTLE }}>
+                      {displayAd.description}
+                    </p>
+                  )}
                 </div>
 
                 <div className="px-3 py-2.5 rounded-xl flex items-start gap-2.5 transition-colors duration-300" style={{ background: adClicked ? "#f0fdf4" : "#f7f7fa" }}>
@@ -438,7 +433,7 @@ export const HomePage: React.FC = () => {
                   <p className="text-[9.5px] font-semibold leading-relaxed transition-colors duration-300" style={{ color: adClicked ? "#16a34a" : SUBTLE }}>
                     {adClicked
                       ? "Thanks for visiting! Tap Continue to start your interview."
-                      : "Ghotly AI is free through sponsors. Tap Watch once to unlock your session."}
+                      : "Ghotly AI is free through sponsors. Tap the button once to unlock your session."}
                   </p>
                 </div>
 
@@ -456,11 +451,11 @@ export const HomePage: React.FC = () => {
                       transition: "background 0.3s, color 0.3s, border-color 0.3s",
                     }}
                   >
-                    {adClicked ? <>✓ Visited — Thank you!</> : <>Watch ↗</>}
+                    {adClicked ? <>✓ Visited — Thank you!</> : <>{displayAd.cta_text || "Visit sponsor"} ↗</>}
                   </motion.button>
 
                   {!adClicked && (
-                    <p className="text-center text-[8.5px] font-medium mt-1.5" style={{ color: "#9aa0ae" }}>Opens job.ghotlyai.in in your browser</p>
+                    <p className="text-center text-[8.5px] font-medium mt-1.5" style={{ color: "#9aa0ae" }}>Opens {adHost} in your browser</p>
                   )}
 
                   {/* Height/opacity-animated (not mounted/unmounted) so it can't stall the

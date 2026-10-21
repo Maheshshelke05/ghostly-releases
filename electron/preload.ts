@@ -64,6 +64,11 @@ contextBridge.exposeInMainWorld("ghostly", {
     ipcRenderer.on("ghostly:auth-token", listener);
     return () => ipcRenderer.removeListener("ghostly:auth-token", listener);
   },
+  onDataChanged: (cb: (kind: "profile" | "settings" | "history") => void): (() => void) => {
+    const listener = (_: any, kind: "profile" | "settings" | "history"): void => cb(kind);
+    ipcRenderer.on("ghostly:data-changed", listener);
+    return () => ipcRenderer.removeListener("ghostly:data-changed", listener);
+  },
   getPendingAuthToken: (): Promise<{ token: string; user: any } | null> =>
     ipcRenderer.invoke("ghostly:get-pending-auth-token"),
 

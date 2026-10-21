@@ -54,7 +54,10 @@ function deviceInfo(): { id: string; label: string } {
   return { id, label: `${os.hostname()} (${os.platform() === "win32" ? "Windows" : os.platform()})`.slice(0, 120) };
 }
 
-export function registerIpcHandlers(): void {
+export type DataKind = "profile" | "settings" | "history";
+
+/** `onDataChanged` tells the window that settings / history / the profile were saved (the account sync listens). */
+export function registerIpcHandlers(onDataChanged: (kind: DataKind) => void = () => {}): void {
   ipcMain.on("ghostly:get-device", (event) => { event.returnValue = deviceInfo(); });
   // User / Auth
   ipcMain.handle("get-user", () => store.get("user") || null);
@@ -147,6 +150,7 @@ export function registerIpcHandlers(): void {
     // Fix #7: validate settings is a plain object before saving
     if (settings && typeof settings === "object" && !Array.isArray(settings)) {
       store.set("settings", settings);
+      onDataChanged("settings");
     }
   });
 
@@ -159,6 +163,7 @@ export function registerIpcHandlers(): void {
     // Fix: validate history is an array and cap at 30 items to keep store JSON lightweight
     if (Array.isArray(history)) {
       store.set("history", history.slice(0, 30));
+      onDataChanged("history");
     }
   });
 
@@ -171,6 +176,7 @@ export function registerIpcHandlers(): void {
     // Fix: validate profile is object or null
     if (profile === null || (profile && typeof profile === "object" && !Array.isArray(profile))) {
       store.set("savedProfile", profile);
+      onDataChanged("profile");
     }
   });
 

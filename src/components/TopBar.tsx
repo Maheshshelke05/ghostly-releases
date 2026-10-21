@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { JobIcon } from "./JobPortalTab";
 import GhostMascot from "./ghost/GhostMascot";
 
-export type InterviewTab = "ai" | "screen" | "chat" | "jobs" | "support";
+export type InterviewTab = "ai" | "screen" | "chat" | "support";
 
 interface TopBarProps {
   onOpenSettings: () => void;
@@ -56,7 +55,6 @@ const TABS = [
   { id: "ai" as const,      label: "AI Answer", Icon: MicIcon,    color: "#a78bfa", glow: "rgba(139,92,246,0.45)" },
   { id: "screen" as const,  label: "Screen",    Icon: ScreenIcon, color: "#60a5fa", glow: "rgba(59,130,246,0.4)" },
   { id: "chat" as const,    label: "Chat",      Icon: ChatIcon,   color: "#a78bfa", glow: "rgba(167,139,250,0.4)" },
-  { id: "jobs" as const,    label: "Job Portal", Icon: JobIcon,   color: "#a3e635", glow: "rgba(163,230,53,0.4)" },
   { id: "support" as const, label: "Report",   Icon: null,       color: "#fb923c", glow: "rgba(251,146,60,0.4)" },
 ];
 
@@ -195,9 +193,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                     ) : tab.Icon ? (
                       <>
                         <tab.Icon />
-                        {/* The live-session bar (Stop + Auto) leaves no room for a
-                            fifth full label in the 700px window — icon-only there. */}
-                        {!(isLiveActive && tab.id === "jobs") && <span>{tab.label}</span>}
+                        <span>{tab.label}</span>
                       </>
                     ) : (
                       <span>{tab.label}</span>

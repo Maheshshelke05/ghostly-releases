@@ -345,7 +345,7 @@ if (!gotTheLock) {
     });
 
     startAuthServer();
-    registerIpcHandlers();
+    registerIpcHandlers((kind) => mainWindow?.webContents.send("ghostly:data-changed", kind));
     mainWindow = createMainWindow();
     tray = createTray();
     const hotkeyResult = registerHotkeys(mainWindow, getStoredShortcuts());

@@ -42,6 +42,7 @@ interface Window {
     getAds: () => Promise<any[]>;
     saveAds: (ads: any[]) => Promise<void>;
     onAuthToken: (cb: (data: { token: string; user: any }) => void) => () => void;
+    onDataChanged: (cb: (kind: "profile" | "settings" | "history") => void) => () => void;
     getPendingAuthToken: () => Promise<{ token: string; user: any } | null>;
     getPendingHotkeyConflict: () => Promise<string[] | null>;
     onHotkeyConflict: (cb: (failed: string[]) => void) => () => void;

@@ -48,10 +48,10 @@ const LightInput: React.FC<{
   return (
     <div className="flex flex-col gap-1 min-w-0">
       {label && (
-        <label className="text-[8px] font-black uppercase tracking-[0.12em]" style={{ color: SUBTLE }}>{emoji} {label}</label>
+        <label htmlFor={id} className="text-[8px] font-black uppercase tracking-[0.12em]" style={{ color: SUBTLE }}>{emoji} {label}</label>
       )}
       <motion.input
-        data-testid={id ? `field-${id}` : undefined} animate={controls}
+        id={id} data-testid={id ? `field-${id}` : undefined} animate={controls}
         type={type} value={value} onChange={e => onChange(e.target.value)}
         onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
         placeholder={placeholder}
@@ -86,10 +86,10 @@ const LightTextarea: React.FC<{
   return (
     <div className="flex flex-col gap-1">
       {label && (
-        <label className="text-[8px] font-black uppercase tracking-[0.12em]" style={{ color: SUBTLE }}>{emoji} {label}</label>
+        <label htmlFor={id} className="text-[8px] font-black uppercase tracking-[0.12em]" style={{ color: SUBTLE }}>{emoji} {label}</label>
       )}
       <motion.textarea
-        ref={ref} data-testid={id ? `field-${id}` : undefined} animate={controls}
+        ref={ref} id={id} data-testid={id ? `field-${id}` : undefined} animate={controls}
         value={value} onChange={e => onChange(e.target.value)}
         onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
         placeholder={placeholder} rows={rows}
@@ -144,7 +144,18 @@ export const InterviewSetupPage: React.FC = () => {
     window.ghostly.saveProfile(p).catch(() => {});
   }, [setSavedProfile]);
 
+  // Typed details are saved a moment after typing stops (and when this page is left), not only on Continue: closing the
+  // app or going Back must not lose a resume somebody just typed. The save also reaches the account (lib/cloudSync.ts).
+  const typed = useRef(false);
+  useEffect(() => {
+    if (!typed.current) return;
+    const t = setTimeout(() => persist(profile), 1200);
+    return () => clearTimeout(t);
+  }, [profile, persist]);
+  useEffect(() => () => { if (typed.current) persist(profileRef.current); }, [persist]);
+
   const setField = useCallback((key: ProfileKey, value: string) => {
+    typed.current = true;
     setProfile(p => ({ ...p, [key]: value }));
     setAutoKeys(s => (s.has(key) ? new Set([...s].filter(k => k !== key)) : s));
     setNotice(null);

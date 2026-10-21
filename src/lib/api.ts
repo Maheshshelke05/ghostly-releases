@@ -49,15 +49,42 @@ export function currentToken(): string | null {
   return useStore.getState().user?.idToken || null;
 }
 
+// The server hands out a NEW session token on every /subscription call. Swapping the stored one each time would rewrite the saved
+// login on every call and - since the app re-reads /subscription whenever its token changes - send the app into a request loop
+// (a measured ~3 calls a second per open app). So a session token is replaced by a newer one at most once a day, which still
+// keeps the 30 days rolling for anybody who uses the app.
+const SESSION_REFRESH_MS = 24 * 3600 * 1000;
+
+/** When a "gh1.<jwt>" session token was issued (ms since 1970), or null when it cannot be read. */
+function issuedAtMs(token: string): number | null {
+  try {
+    const part = token.slice(4).split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const iat = JSON.parse(atob(part.padEnd(part.length + ((4 - (part.length % 4)) % 4), "="))).iat;
+    return typeof iat === "number" ? iat * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+// After "Log out" nothing that is still on its way (an answer to a request sent just before) may write the login back.
+let signedOut = false;
+export function markSignedOut(): void { signedOut = true; }
+export function markSignedIn(): void { signedOut = false; }
+
 /** Swaps the stored sign-in token for the backend's 30-day session token when an answer carries one. */
 export async function adoptSession(data: any): Promise<void> {
   const token = data?.session?.token;
   const user = useStore.getState().user;
-  if (typeof token !== "string" || !token.startsWith("gh1.") || !user || user.idToken === token) return;
+  if (signedOut || typeof token !== "string" || !token.startsWith("gh1.") || !user || user.idToken === token) return;
+  if (user.idToken.startsWith("gh1.")) {
+    const at = issuedAtMs(user.idToken);
+    if (at !== null && Date.now() - at < SESSION_REFRESH_MS) return;   // the stored session is fresh: keep it
+  }
   const next = { ...user, idToken: token };
   useStore.getState().setUser(next);
   try {
     await window.ghostly.saveUser(next);
+    if (signedOut) await window.ghostly.logoutUser();   // logged out while this was being saved: take it back
   } catch {
     /* kept in memory; the next /subscription stores it again */
   }
