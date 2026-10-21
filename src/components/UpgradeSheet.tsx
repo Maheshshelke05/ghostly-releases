@@ -88,7 +88,7 @@ export const UpgradeSheet: React.FC<{
                 >
                   <span>
                     <span className="block text-[13px] font-semibold" style={{ color: INK }}>{p.name}</span>
-                    <span className="block text-[10.5px]" style={{ color: SUBTLE }}>≈ ₹{p.per_month_inr}/month · no ads · 2 PCs</span>
+                    <span className="block text-[10.5px]" style={{ color: SUBTLE }}>≈ ₹{p.per_month_inr}/month · no ads · 2 PCs · every job</span>
                   </span>
                   <span className="text-[15px] font-bold" style={{ color: INK }}>₹{p.price_inr}</span>
                 </button>
