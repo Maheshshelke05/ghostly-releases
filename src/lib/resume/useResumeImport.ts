@@ -1,6 +1,5 @@
-// State machine for "upload a resume -> read it -> analyze it -> fill the profile".
-// Lives in the PAGE (not in the Profile tab) so switching tabs mid-analysis neither loses progress nor
-// leaves a result with nowhere to go.
+// State machine for "upload a resume -> read it -> analyze it -> fill the profile". Lives in the PAGE, not the
+// Profile tab, so switching tabs mid-analysis neither loses progress nor leaves a result with nowhere to go.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useStore } from "../../store/useStore";
 import type { CandidateProfile } from "../../store/useStore";

@@ -1,11 +1,7 @@
 import type { Settings } from "../store/useStore";
 
-// A provider is "deactivated" when the user double-clicked its Active button in
-// Settings: its key stays saved, but it is never used — not as the answering
-// provider, and not as a quota/vision fallback either. Kept as a plain list on
-// Settings (persisted with everything else) rather than a separate store so a
-// missing field on older saved settings simply means "nothing deactivated".
-
+// "Deactivated" (double-click on Active in Settings) keeps the key saved but never uses it,
+// not even as a quota/vision fallback; the list lives on Settings so older saves mean none deactivated.
 export function isProviderDisabled(settings: Pick<Settings, "disabledProviders">, id: string): boolean {
   return !!settings.disabledProviders?.includes(id);
 }

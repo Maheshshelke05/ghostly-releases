@@ -6,9 +6,8 @@ import { useMinimizedClickThrough } from "../hooks/useMinimizedClickThrough";
 import GhostMascot from "../components/ghost/GhostMascot";
 
 interface LoginPageProps {
-  // A known, real failure (auth server down, backend error, timeout) reported
-  // by App.tsx — shown immediately instead of the generic "still waiting"
-  // message, since we actually know what went wrong here.
+  // Known failure from App.tsx (auth server down, backend error, timeout) shown immediately
+  // instead of the generic "still waiting" message.
   externalError?: string | null;
   onClearExternalError?: () => void;
 }
@@ -74,16 +73,11 @@ const ITEM = { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0, transiti
 export const LoginPage: React.FC<LoginPageProps> = ({ externalError, onClearExternalError }) => {
   const { setAppScreen, user } = useStore();
   const [status, setStatus] = useState<"idle" | "waiting">("idle");
-  // No way back if the browser tab is closed, the local auth callback (port
-  // 7842) gets blocked by a firewall/antivirus, or anything else in the OAuth
-  // handoff fails silently — this screen used to just say "Waiting..." forever
-  // with no retry, so a user in that state had to force-quit the whole app.
+  // No way back if the browser tab closes, the local callback (port 7842) is blocked, or OAuth
+  // stalls silently; the failsafe timer below offers a retry instead of "Waiting..." forever.
   const [timedOut, setTimedOut] = useState(false);
-  // Bumped on every handleLogin() call (including "Try Again"). The failsafe
-  // timer effect below used to key only on [status] — since status is already
-  // "waiting" when Try Again is clicked, React saw no dependency change and
-  // never re-armed the timer, so a second stall left the user permanently
-  // stuck with no banner and no way out except Quit.
+  // Bumped on every handleLogin (including Try Again). The failsafe effect keys on it because
+  // status is already "waiting" then, so [status] alone would never re-arm the timer.
   const [attempt, setAttempt] = useState(0);
 
   // Minimized = the card has shrunk into the logo so the browser (where the login
@@ -178,7 +172,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ externalError, onClearExte
         }}
         onMouseEnter={() => window.ghostly.enableMouse()}
       >
-        {/* ── Header: logo + name (click to minimize), move / minimize / close ── */}
+        {/* Header: click the logo to minimize. */}
         <div
           className="flex items-center justify-between px-3.5 py-2.5"
           style={{ WebkitAppRegion: "drag", borderBottom: `1px solid ${BORDER}` } as React.CSSProperties}
@@ -208,9 +202,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ externalError, onClearExte
           </div>
         </div>
 
-        {/* ── Body ── */}
         <motion.div variants={CONTAINER} initial="hidden" animate="show" className="px-7 pt-5 pb-4 flex flex-col items-center gap-3.5">
-          {/* Mascot */}
           <motion.div variants={ITEM} className="relative flex items-center justify-center">
             <motion.span
               aria-hidden
@@ -317,7 +309,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ externalError, onClearExte
             )}
           </motion.div>
 
-          {/* ── Feature list — folds away while waiting / on an error so the card never outgrows the window ── */}
+          {/* Folds away while waiting or on an error so the card never outgrows the window. */}
           <motion.div variants={ITEM} className="w-full">
           <AnimatePresence initial={false}>
             {status !== "waiting" && !externalError && (
@@ -346,7 +338,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ externalError, onClearExte
           </AnimatePresence>
           </motion.div>
 
-          {/* ── Footer: quit + help ── */}
           <motion.div variants={ITEM} className="w-full flex items-center justify-between pt-2" style={{ borderTop: `1px solid ${BORDER}` }}>
             <button
               onClick={() => window.ghostly.quit()}
@@ -366,7 +357,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ externalError, onClearExte
         </motion.div>
       </motion.div>
 
-      {/* ── Minimized: the logo, where the card's own logo was ── */}
       <AnimatePresence>
         {collapsed && (
           <MinimizedLogo

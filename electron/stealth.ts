@@ -1,19 +1,8 @@
-/**
- * Native Win32 stealth utilities for Ghostly.
- *
- * Uses SetWindowDisplayAffinity (user32.dll) to apply the strongest
- * capture-exclusion flag available on the current Windows version.
- *
- * Flag hierarchy:
- *   WDA_EXCLUDEFROMCAPTURE (0x11) — Win10 2004+ — completely invisible in any capture
- *   WDA_MONITOR            (0x01) — Win10 older  — hidden from most capture APIs
- *   WDA_NONE               (0x00) — normal window
- *
- * Uses `koffi` for FFI (no gyp compilation needed, works on all Node versions).
- */
+/** Win32 capture exclusion via SetWindowDisplayAffinity (koffi FFI, no gyp build):
+ * WDA_EXCLUDEFROMCAPTURE on Win10 2004+, WDA_MONITOR on older builds. */
 import { app, BrowserWindow } from "electron";
+import log from "electron-log";
 
-// Win32 affinity constants
 const WDA_NONE = 0x00000000;
 const WDA_MONITOR = 0x00000001;
 const WDA_EXCLUDEFROMCAPTURE = 0x00000011;
@@ -47,36 +36,31 @@ function getSetWindowDisplayAffinity():
   }
 }
 
-/**
- * Extract the HWND integer value from Electron's getNativeWindowHandle() Buffer.
- * On x64 Windows, HWND is 8 bytes; on x86 it's 4 bytes.
- */
+/** HWND from getNativeWindowHandle(): 8 bytes on x64/arm64, 4 on x86. */
 function readHWND(hwndBuffer: Buffer): number {
   if (process.arch === "x64" || process.arch === "arm64") {
-    // 8-byte handle — read as BigInt, convert to Number
-    // Window handles are small values, safe to convert
+    // 8-byte handle; values are small, so Number conversion is safe.
     return Number(hwndBuffer.readBigUInt64LE(0));
   }
   return hwndBuffer.readUInt32LE(0);
 }
 
-// HWNDs for which SetWindowDisplayAffinity has already succeeded.
-// The affinity flag persists for the entire life of the HWND — Windows does NOT
-// reset it on show/hide/focus/blur/minimize/restore. Re-issuing the native call on
-// every one of those events (as this used to do, guarded only by a 3s time debounce)
-// still made repeated calls during normal navigation and glitched the DWM compositor
-// badly enough that the window would drop out of its own screen's rendering too.
-// Calling it once per HWND for real removes the repeat calls entirely instead of just
-// throttling them.
+// HWNDs already stealthed. The flag persists for the HWND's whole life (show/hide/
+// focus never reset it), and repeated calls glitch DWM into dropping the window entirely.
 const appliedHWnds = new Set<number>();
 
-/**
- * Force Windows' DWM to recomposite this window right after its display-affinity flag
- * changes. SetWindowDisplayAffinity can leave the compositor holding a stale frame for
- * the HWND it was just applied to, which is what makes the window vanish from the
- * user's own screen. An imperceptible opacity nudge (1 -> 0.999 -> 1) forces a fresh
- * composite pass without any visible flicker, and reliably brings the window back.
- */
+/** Forget the HWND when its window closes: Windows recycles handles, and a stale
+ * entry would make applyStealthMode() skip an unrelated new window. */
+function rememberHWnd(win: BrowserWindow, hwnd: number): void {
+  appliedHWnds.add(hwnd);
+  win.once("closed", () => {
+    appliedHWnds.delete(hwnd);
+    lastNudgeAt.delete(hwnd);
+  });
+}
+
+/** DWM can hold a stale frame after SetWindowDisplayAffinity, making the window vanish
+ * from the user's own screen; an opacity nudge (1 -> 0.999 -> 1) forces a recomposite. */
 function nudgeRepaint(win: BrowserWindow): void {
   try {
     if (win.isDestroyed()) return;
@@ -84,35 +68,27 @@ function nudgeRepaint(win: BrowserWindow): void {
     win.setOpacity(Math.max(0, opacity - 0.001));
     setTimeout(() => {
       try {
-        if (!win.isDestroyed()) win.setOpacity(opacity);
+        if (win.isDestroyed()) return;
+        // Re-read instead: hiding the overlay (Ctrl+B) during the 30ms set opacity to 0,
+        // and restoring the stale value popped it back onto a shared screen.
+        const current = win.getOpacity();
+        if (current <= 0.001) return;
+        win.setOpacity(Math.min(1, current));
       } catch {
-        // Best-effort
       }
     }, 30);
   } catch {
-    // Best-effort
   }
 }
 
-/**
- * Apply the strongest available capture exclusion to a BrowserWindow.
- * Only ever issues the native SetWindowDisplayAffinity call once per HWND — safe to
- * call from show/focus/restore handlers as a no-op safety net without risking the
- * compositor glitch that repeated calls caused. Every successful call is followed by a
- * repaint nudge so the window can never get stuck invisible on the real screen.
- */
+/** Applies the strongest available capture exclusion; only calls the native API once
+ * per HWND, then nudges a repaint so the window can't stick invisible. */
 export function applyStealthMode(win: BrowserWindow): void {
-  // Dev-only escape hatch so a design/screenshot session can actually see the
-  // real rendered window — WDA_EXCLUDEFROMCAPTURE blocks every screen-capture
-  // API, including the one used to visually verify UI changes. Requires
-  // BOTH an explicit env var AND a non-packaged build, so this can never
-  // affect a real installed app regardless of the env var's value.
+  // Dev-only escape hatch: WDA_EXCLUDEFROMCAPTURE blocks every capture API, so UI
+  // verification needs this. Requires the env var AND a non-packaged build.
   if (!app.isPackaged && process.env.GHOSTLY_DISABLE_STEALTH === "1") return;
-  // Called from deferred timers (warmScreenSource's 800ms reapply, the 2s
-  // startup kickoff) against the module-level mainWindow, which main.ts never
-  // nulls on destroy — if the window closes while one of those is pending,
-  // this would otherwise throw synchronously on a destroyed BrowserWindow
-  // with no top-level error handler to catch it, crashing the whole process.
+  // Deferred timers can call this on a window destroyed in the meantime; throwing
+  // on a destroyed BrowserWindow would crash the process.
   if (win.isDestroyed()) return;
   // Always set Electron's built-in protection as baseline (uses WDA_MONITOR internally)
   win.setContentProtection(true);
@@ -129,33 +105,26 @@ export function applyStealthMode(win: BrowserWindow): void {
     const hwndBuffer = win.getNativeWindowHandle();
     const hwnd = readHWND(hwndBuffer);
 
-    // Already applied successfully for this window handle — nothing to do.
     if (appliedHWnds.has(hwnd)) return;
 
-    // Try strongest flag first — WDA_EXCLUDEFROMCAPTURE (Win10 2004+)
     let success = SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE);
     if (success) {
-      appliedHWnds.add(hwnd);
-      console.log(
-        "[Ghostly Stealth] ✅ WDA_EXCLUDEFROMCAPTURE applied — fully invisible to capture",
-      );
+      rememberHWnd(win, hwnd);
+      log.info("[Ghostly Stealth] Applied WDA_EXCLUDEFROMCAPTURE - fully invisible to capture");
       setTimeout(() => nudgeRepaint(win), 50);
       return;
     }
 
-    // Fall back to WDA_MONITOR for older Windows builds
     success = SetWindowDisplayAffinity(hwnd, WDA_MONITOR);
     if (success) {
-      appliedHWnds.add(hwnd);
-      console.log(
-        "[Ghostly Stealth] ⚠️ WDA_MONITOR applied — standard stealth",
-      );
+      rememberHWnd(win, hwnd);
+      log.info("[Ghostly Stealth] Warning: WDA_MONITOR applied - standard stealth");
       setTimeout(() => nudgeRepaint(win), 50);
       return;
     }
 
     console.warn(
-      "[Ghostly Stealth] ❌ SetWindowDisplayAffinity failed, relying on Electron fallback",
+      "[Ghostly Stealth] Warning: SetWindowDisplayAffinity failed, relying on Electron fallback",
     );
   } catch (err) {
     console.warn("[Ghostly Stealth] FFI call error:", err);
@@ -164,12 +133,8 @@ export function applyStealthMode(win: BrowserWindow): void {
 
 const lastNudgeAt = new Map<number, number>();
 
-/**
- * Cheap, throttled safety net — call freely from show/focus/restore handlers. Unlike
- * applyStealthMode (which touches the native API at most once per HWND), this only
- * ever calls Electron's own setOpacity, so it's safe to run on every such event; it's
- * throttled purely to avoid pointless work, not to dodge a compositor risk.
- */
+/** Cheap throttled safety net for show/focus/restore handlers: only calls setOpacity,
+ * so the 2s throttle avoids pointless work rather than a compositor risk. */
 export function safeguardVisibility(win: BrowserWindow): void {
   if (process.platform !== "win32") return;
   try {
@@ -181,13 +146,10 @@ export function safeguardVisibility(win: BrowserWindow): void {
     lastNudgeAt.set(hwnd, now);
     nudgeRepaint(win);
   } catch {
-    // Best-effort
   }
 }
 
-/**
- * Remove capture exclusion (restore normal window behavior).
- */
+/** Remove capture exclusion (restore normal window behavior). */
 export function removeStealthMode(win: BrowserWindow): void {
   if (win.isDestroyed()) return;
   win.setContentProtection(false);
@@ -202,6 +164,5 @@ export function removeStealthMode(win: BrowserWindow): void {
     SetWindowDisplayAffinity(hwnd, WDA_NONE);
     appliedHWnds.delete(hwnd);
   } catch {
-    // Best-effort
   }
 }

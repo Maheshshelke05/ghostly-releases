@@ -5,6 +5,12 @@ interface ImportMetaEnv {
   readonly VITE_GEMINI_API_KEY: string;
   readonly VITE_WEBSITE_URL: string;
   readonly VITE_API_URL: string;
+  // Read by App.tsx:109-110, useStore.ts:171-172, useInterviewAudio.ts:86.
+  // Declaring them keeps a typo a compile error instead of a silent `undefined`.
+  readonly VITE_OPENAI_API_KEY: string;
+  readonly VITE_ANTHROPIC_API_KEY: string;
+  readonly VITE_OPENROUTER_API_KEY: string;
+  readonly VITE_DEEPGRAM_API_KEY: string;
 }
 
 interface ImportMeta {

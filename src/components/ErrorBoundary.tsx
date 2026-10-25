@@ -8,10 +8,8 @@ interface State {
   error: Error | null;
 }
 
-// A transparent, frameless window that fails to render looks identical to one that's
-// simply "not visible" — there's no frame or chrome to hint anything is wrong. Without
-// this, an uncaught render error unmounts the whole tree and leaves a fully blank
-// window with no on-screen indication of what happened.
+// A render error here would unmount the whole tree and leave a fully blank transparent
+// window with no on-screen hint of what happened.
 export class ErrorBoundary extends React.Component<Props, State> {
   state: State = { error: null };
 
@@ -25,16 +23,8 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
   render() {
     if (this.state.error) {
-      // Used to be a full h-screen w-full div with pointerEvents:"auto" — since
-      // stealth (WDA_EXCLUDEFROMCAPTURE) applies to the whole window regardless
-      // of what's rendered inside it, this was never actually visible to a
-      // screen-share, but it DID eat every mouse click across the entire
-      // ~700x600 overlay window the instant any render error occurred — during
-      // a live interview, that's real screen space suddenly blocking clicks to
-      // Zoom/Meet underneath it. (Not re-rendering this.props.children here —
-      // the crashed subtree is in an inconsistent state and would very likely
-      // throw again immediately, looping. The wrapper stays transparent and
-      // click-through; only the small toast itself is interactive.)
+      // Wrapper stays transparent and click-through so the overlay never blocks clicks during
+      // an interview; only the toast is interactive, and the crashed subtree is not re-rendered (it would throw again).
       return (
         <div className="fixed inset-0" style={{ pointerEvents: "none", background: "transparent" }}>
           <div

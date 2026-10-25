@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useStore } from "../store/useStore";
 import { streamWithFallback, warmProviderConnection, type ProviderName } from "../lib/ai";
 import { activeProviderKey, isProviderDisabled, usableApiKeys } from "../lib/providerState";
-import { buildPrompt, buildSessionContext, buildLiveInterviewPrompt, buildChatPrompt, buildFollowUpPrompt } from "../lib/prompts";
+import { buildPrompt, buildLiveInterviewPrompt, buildChatPrompt, buildFollowUpPrompt } from "../lib/prompts";
 import { v4 as uuidv4 } from "uuid";
 import { TopBar, type InterviewTab } from "../components/TopBar";
 import { JobPortalHeader, JobPortalPanel, JobPortalFooter } from "../components/JobPortalTab";
@@ -17,33 +17,6 @@ import GhostMascot from "../components/ghost/GhostMascot";
 
 const escapeHtml = (value: string) =>
   value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char] || char));
-
-const BASE = "#1b1b26";
-const nm = (raised = true) =>
-  raised
-    ? "6px 6px 14px rgba(0,0,0,0.55), -3px -3px 8px rgba(255,255,255,0.04)"
-    : "inset 4px 4px 10px rgba(0,0,0,0.5), inset -2px -2px 6px rgba(255,255,255,0.04)";
-
-const NavButton: React.FC<{ onClick: () => void; disabled?: boolean; children: React.ReactNode; title?: string }> = ({ onClick, disabled = false, children, title }) => {
-  const [hovered, setHovered] = useState(false);
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      title={title}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      className="w-7 h-7 flex items-center justify-center rounded-lg transition-all text-sm font-bold select-none outline-none"
-      style={{
-        background: BASE,
-        boxShadow: disabled ? "none" : hovered ? nm(false) : nm(true),
-        color: disabled ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.5)",
-      }}
-    >
-      {children}
-    </button>
-  );
-};
 
 const SupportAdPlacement: React.FC<{ scriptUrl?: string; containerId?: string }> = ({ scriptUrl, containerId }) => {
   const safeContainerId = (containerId || "").replace(/[^\w-]/g, "");
@@ -72,7 +45,9 @@ const SupportAdPlacement: React.FC<{ scriptUrl?: string; containerId?: string }>
     <iframe
       title="Sponsored support ad"
       srcDoc={srcDoc}
-      sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox allow-same-origin"
+      // allow-scripts WITHOUT allow-same-origin: together they'd give the ad a
+      // same-origin document and access to window.parent.ghostly (saved API keys).
+      sandbox="allow-scripts allow-popups"
       className="w-full rounded-xl border-0 bg-white"
       style={{ height: "124px" }}
     />
@@ -163,12 +138,12 @@ const SupportPanel: React.FC<SupportPanelProps> = ({
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <label className="text-[9px] font-bold uppercase tracking-widest text-white/30">Your email</label>
-          <input value={email} readOnly className="mt-1 w-full rounded-xl px-3 py-2 text-[12px] font-semibold bg-white/[0.06] border border-white/[0.08] text-white/60 outline-none" />
+          <label htmlFor="support-email" className="text-[9px] font-bold uppercase tracking-widest text-white/30">Your email</label>
+          <input id="support-email" value={email} readOnly className="mt-1 w-full rounded-xl px-3 py-2 text-[12px] font-semibold bg-white/[0.06] border border-white/[0.08] text-white/60 outline-none" />
         </div>
         <div>
-          <label className="text-[9px] font-bold uppercase tracking-widest text-white/30">Category</label>
-          <select value={supportCategory} onChange={(e) => setSupportCategory(e.target.value)}
+          <label htmlFor="support-category" className="text-[9px] font-bold uppercase tracking-widest text-white/30">Category</label>
+          <select id="support-category" value={supportCategory} onChange={(e) => setSupportCategory(e.target.value)}
             className="mt-1 w-full rounded-xl px-3 py-2 text-[12px] font-semibold bg-white/[0.06] border border-white/[0.08] text-white/80 outline-none">
             <option>Bug report</option>
             <option>Feature not working</option>
@@ -181,15 +156,15 @@ const SupportPanel: React.FC<SupportPanelProps> = ({
       </div>
 
       <div className="mt-3">
-        <label className="text-[9px] font-bold uppercase tracking-widest text-white/30">Subject</label>
-        <input value={supportSubject} onChange={(e) => setSupportSubject(e.target.value)}
+        <label htmlFor="support-subject" className="text-[9px] font-bold uppercase tracking-widest text-white/30">Subject</label>
+        <input id="support-subject" value={supportSubject} onChange={(e) => setSupportSubject(e.target.value)}
           required maxLength={120} placeholder="Example: Screenshot capture is not working"
           className="mt-1 w-full rounded-xl px-3 py-2 text-[12px] font-semibold bg-white/[0.06] border border-white/[0.08] text-white/85 placeholder:text-white/20 outline-none focus:border-violet-400/40" />
       </div>
 
       <div className="mt-3">
-        <label className="text-[9px] font-bold uppercase tracking-widest text-white/30">Message</label>
-        <textarea value={supportMessage} onChange={(e) => setSupportMessage(e.target.value)}
+        <label htmlFor="support-message" className="text-[9px] font-bold uppercase tracking-widest text-white/30">Message</label>
+        <textarea id="support-message" value={supportMessage} onChange={(e) => setSupportMessage(e.target.value)}
           required minLength={10} maxLength={1200} placeholder="Tell what happened, what you clicked, and what you expected."
           className="mt-1 w-full h-28 rounded-xl px-3 py-2 text-[12px] font-semibold bg-white/[0.06] border border-white/[0.08] text-white/85 placeholder:text-white/20 outline-none resize-none focus:border-violet-400/40" />
       </div>
@@ -224,12 +199,27 @@ const SupportPanel: React.FC<SupportPanelProps> = ({
 );
 
 export const Home: React.FC = () => {
-  const {
-    currentSolution, isStreaming, screenshots, error, settings,
-    sessionMessages, addScreenshot, setCurrentSolution, appendToSolution,
-    setIsStreaming, setError, clearSolution, clearScreenshots, addToHistory, addSessionMessage, updateSettings, interviewSession,
-    user, ads,
-  } = useStore();
+  // Per-field selectors, not useStore(): a bare useStore() re-rendered this whole
+  // screen on every unrelated store write, including while an answer streams.
+  const currentSolution = useStore((s) => s.currentSolution);
+  const isStreaming = useStore((s) => s.isStreaming);
+  const screenshots = useStore((s) => s.screenshots);
+  const error = useStore((s) => s.error);
+  const settings = useStore((s) => s.settings);
+  const sessionMessages = useStore((s) => s.sessionMessages);
+  const interviewSession = useStore((s) => s.interviewSession);
+  const user = useStore((s) => s.user);
+  const ads = useStore((s) => s.ads);
+  const addScreenshot = useStore((s) => s.addScreenshot);
+  const setCurrentSolution = useStore((s) => s.setCurrentSolution);
+  const appendToSolution = useStore((s) => s.appendToSolution);
+  const setIsStreaming = useStore((s) => s.setIsStreaming);
+  const setError = useStore((s) => s.setError);
+  const clearSolution = useStore((s) => s.clearSolution);
+  const clearScreenshots = useStore((s) => s.clearScreenshots);
+  const addSessionMessage = useStore((s) => s.addSessionMessage);
+  const addToHistory = useStore((s) => s.addToHistory);
+  const updateSettings = useStore((s) => s.updateSettings);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Minimized = the whole overlay collapsed to just the logo. Everything stays mounted
@@ -244,12 +234,11 @@ export const Home: React.FC = () => {
     window.ghostly.enableMouse();
   }, []);
   const [followUpText, setFollowUpText] = useState("");
-  const [followUpFocused, setFollowUpFocused] = useState(false);
-  const [chatFocused, setChatFocused] = useState(false);
   const [activeTab, setActiveTab] = useState<InterviewTab>("ai");
   const [liveActive, setLiveActive] = useState(false);
-  // Fix: load autoAI from saved settings instead of hardcoded true
-  const [autoAI, setAutoAI] = useState(() => settings.autoAI ?? true);
+  // Read straight from the store, not a local copy seeded once: toggling Auto-AI
+  // mid-interview reset it, and useStore persists every updateSettings.
+  const autoAI = settings.autoAI ?? true;
   const [qaPages, setQaPages] = useState<{ question: string; answer: string }[]>([]);
   // Shown briefly whenever streamWithFallback actually switches provider —
   // this is the whole point of making the switch visible instead of silent.
@@ -260,15 +249,15 @@ export const Home: React.FC = () => {
     return () => clearTimeout(t);
   }, [fallbackNotice]);
 
-  // ── Session tracking ────────────────────────────────────────────────────────
   const sessionStartRef   = useRef<number>(Date.now());
   const featuresUsedRef   = useRef<Set<"ai-answer" | "screen" | "chat">>(new Set());
   const sessionQARef      = useRef<{ question: string; answer: string; feature: "ai-answer" | "screen" | "chat" | "follow-up"; timestamp: number }[]>([]);
   const [pageIndex, setPageIndex] = useState(0);
-  const [userNavigated, setUserNavigated] = useState(false); // user manually changed page
+  const [userNavigated, setUserNavigated] = useState(false);
   const [pendingTranscript, setPendingTranscript] = useState("");
-  // Chat state
-  const [chatMessages, setChatMessages] = useState<{ role: "user" | "assistant"; text: string }[]>([]);
+  // Chat state — every message carries an id so React keys bubbles by identity:
+  // indexed keys made SolutionCard's "Copied" state stick to the wrong bubble.
+  const [chatMessages, setChatMessages] = useState<{ id: string; role: "user" | "assistant"; text: string }[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatStreaming, setChatStreaming] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -280,21 +269,27 @@ export const Home: React.FC = () => {
   const answerEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { screenshotsRef.current = screenshots; }, [screenshots]);
-  useEffect(() => () => { abortControllerRef.current?.abort(); }, []);
+  // Guards async hotkey handlers against setError/setState after unmount; re-armed
+  // on mount because React 18 StrictMode mounts → unmounts → mounts in dev.
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      abortControllerRef.current?.abort();
+    };
+  }, []);
 
-  // Auto scroll answer
   useEffect(() => {
     answerEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [currentSolution]);
 
-  // Auto scroll chat
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages, chatStreaming]);
 
-  // Keep the answering provider's connection warm for the whole interview, so the
-  // first Screen/AI answer doesn't spend its first ~0.2s+ on DNS/TCP/TLS. Idle
-  // connections get dropped after a few minutes, hence the periodic refresh.
+  // Keep the provider's connection warm during the interview so the first answer
+  // doesn't spend ~0.2s+ on DNS/TCP/TLS; idle connections drop after a few minutes.
   useEffect(() => {
     const name = settings.activeProvider as ProviderName;
     warmProviderConnection(name);
@@ -302,7 +297,6 @@ export const Home: React.FC = () => {
     return () => window.clearInterval(t);
   }, [settings.activeProvider]);
 
-  // ── Core AI Stream ──────────────────────────────────────────────────────────
   const runAIStream = useCallback(async (
     screenshotList: string[],
     transcriptOverride?: string,
@@ -339,13 +333,8 @@ export const Home: React.FC = () => {
     setFollowUpText("");
 
     let prompt = "";
-    // Screen analysis (and any other caller that hands runAIStream a fully-built
-    // prompt via followUpQuery) is detected here once, and reused below for the
-    // saved questionText too — previously questionText had its own, narrower
-    // "staff engineer" -only check, so every screen-analysis answer for any
-    // interviewType other than system_design stored/displayed the entire raw
-    // prompt ("You are an expert python developer...") as if it were the
-    // interviewer's question.
+    // Detect a fully-built prompt once and reuse it for questionText too, so screen
+    // analysis doesn't store the raw "You are an expert..." prompt as the question.
     const isFormattedPrompt = !!followUpQuery && (
       followUpQuery.includes("## Approach") ||
       followUpQuery.includes("You are an expert") ||
@@ -353,7 +342,7 @@ export const Home: React.FC = () => {
     );
     if (followUpQuery) {
       if (isFormattedPrompt) {
-        prompt = followUpQuery; // Already built prompt — directly use karo
+        prompt = followUpQuery;
       } else {
         prompt = buildFollowUpPrompt(followUpQuery, interviewSession);
       }
@@ -377,13 +366,8 @@ export const Home: React.FC = () => {
           apiKey: activeKey,
           mimeType: latestScreenshot?.includes("image/jpeg") ? "image/jpeg" : "image/png",
           maxTokens: transcriptOverride ? 2048 : 4096,
-          // Previously this AbortController only got checked between chunks
-          // inside the loop below (`if (signal.aborted) break`) — it never
-          // actually reached the network call, so a request that simply never
-          // received a response (not aborted, just stalled) would hang the
-          // await forever. Composed with a 60s hard timeout — generous enough
-          // that a normal (even slow) streaming answer won't hit it — so a
-          // genuinely stalled connection eventually fails instead of hanging.
+          // AbortController alone was only checked between chunks, so a stalled
+          // request hung forever; compose a 60s hard timeout so it eventually fails.
           signal: AbortSignal.any([signal, AbortSignal.timeout(60000)]),
         },
         usableApiKeys(settings),
@@ -422,12 +406,10 @@ export const Home: React.FC = () => {
       if (transcriptOverride) featuresUsedRef.current.add("ai-answer");
       else if (screenshotList.length) featuresUsedRef.current.add("screen");
 
-      // Save Q&A to session history
       const questionText = transcriptOverride || (followUpQuery && !isFormattedPrompt ? followUpQuery : "Screen Analysis");
       const featureTag = transcriptOverride ? "ai-answer" : screenshotList.length ? "screen" : "follow-up";
       sessionQARef.current.push({ question: questionText, answer: fullSolution, feature: featureTag, timestamp: Date.now() });
 
-      // Commit answer to QA page
       if (transcriptOverride) {
         setQaPages(prev => {
           const last = prev[prev.length - 1];
@@ -437,15 +419,13 @@ export const Home: React.FC = () => {
         });
       }
 
-      addSessionMessage({ id: uuidv4(), role: "user", content: questionText, screenshotBase64: latestScreenshot });
+      // No screenshotBase64 here: nothing reads it, and one base64 frame per
+      // transcript entry kept every capture alive in memory for the whole session.
+      addSessionMessage({ id: uuidv4(), role: "user", content: questionText });
       addSessionMessage({ id: uuidv4(), role: "assistant", content: fullSolution });
 
-      // Clear the streaming buffer + used screenshots on completion, WITHOUT wiping
-      // sessionMessages — that history is exactly what powers Q1/Q2/Q3 pagination for
-      // Screen Analysis and AI-answer follow-ups. This used to call clearSolution(),
-      // which also resets sessionMessages to [] — deleting the answer just added to
-      // history (lines above) a moment after adding it, which is why a completed
-      // Screen Analysis answer would flash on screen and then vanish entirely.
+      // Clear the streaming buffer and screenshots only — sessionMessages powers
+      // Q1/Q2 pagination; clearSolution() wiped the answer just added to history.
       if (!liveActive) {
         setCurrentSolution("");
         clearScreenshots();
@@ -455,30 +435,33 @@ export const Home: React.FC = () => {
       if (signal.aborted) return;
       setError(err instanceof Error ? err.message : "AI streaming failed");
     } finally {
-      if (!signal.aborted) { setIsStreaming(false); }
+      // Cleared on the abort path too; only the stream that still owns the
+      // controller may clear it, or an aborted run left isStreaming stuck true.
+      if (abortControllerRef.current === ctrl) {
+        abortControllerRef.current = null;
+        setIsStreaming(false);
+      }
     }
   }, [settings, sessionMessages, interviewSession, setCurrentSolution, setError, setIsStreaming, appendToSolution, addToHistory, addSessionMessage, liveActive, clearScreenshots, setFallbackNotice]);
 
-  // ── Auto AI: silence detection — 2.5s after last transcript change ──────────
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastLiveTextRef = useRef("");
-  // Fix: stable ref to avoid stale closure inside setTimeout
+  // Stable ref avoids a stale closure inside setTimeout.
   const runAIStreamRef = useRef(runAIStream);
   useEffect(() => { runAIStreamRef.current = runAIStream; }, [runAIStream]);
 
-  // Read inside the setTimeout below instead of the closed-over `liveActive` —
-  // React's effect-cleanup (which clears silenceTimerRef) is a passive effect,
-  // not guaranteed to run before an already-scheduled timer fires. If the user
-  // switches to Screen/Chat (or clicks Stop) in the ~1 second right before a
-  // pending silence timer was due, the stale timer could still fire an extra
-  // live AI-answer request after the tab switch — racing the Screen Analysis
-  // request that just started and burning through the AI provider's quota for
-  // no visible reason (reported as "screen capture fails + false daily limit").
+  // Read liveActive through a ref: passive effect cleanup may not run before an
+  // already-scheduled timer, letting a stale timer fire an extra AI request.
   const liveActiveRef = useRef(liveActive);
   useEffect(() => { liveActiveRef.current = liveActive; }, [liveActive]);
 
+  // Same for stream/answer state. Keeping these as effect deps broke auto-submit:
+  // any change during the delay cleared the timer and the guard refused to re-arm.
+  const liveStateRef = useRef({ isStreaming, pendingTranscript, currentSolution });
+  useEffect(() => { liveStateRef.current = { isStreaming, pendingTranscript, currentSolution }; });
+
   useEffect(() => {
-    if (!liveActive || !autoAI || isStreaming) return;
+    if (!liveActive || !autoAI) return;
     const text = audio.liveText.trim();
     if (!text || text === lastLiveTextRef.current) return;
     lastLiveTextRef.current = text;
@@ -487,31 +470,35 @@ export const Home: React.FC = () => {
     const endsWithQuestion = text.endsWith("?") || text.includes("?");
     const silenceDelay = endsWithQuestion ? 800 : 2200;
 
-    silenceTimerRef.current = setTimeout(() => {
+    const fire = () => {
       if (!liveActiveRef.current) return;
-      const current = audio.liveText.trim();
-      if (!current || isStreaming) return;
+      const { isStreaming: streaming, pendingTranscript: pending, currentSolution: solution } = liveStateRef.current;
+      // Someone spoke while the previous answer was still streaming: re-check
+      // shortly instead of dropping the question (the old effect never re-armed).
+      if (streaming) {
+        silenceTimerRef.current = setTimeout(fire, 500);
+        return;
+      }
 
       // Filter out short filler interjections (< 4 words unless ends with ?)
-      const words = current.split(/\s+/).filter(Boolean);
-      const isShortFiller = words.length < 4 && !current.endsWith("?");
+      const words = text.split(/\s+/).filter(Boolean);
+      const isShortFiller = words.length < 4 && !text.endsWith("?");
       if (isShortFiller) return;
 
-      // Auto-save previous Q&A into QA History Pages before starting new question
-      if (pendingTranscript && currentSolution) {
-        setQaPages(prev => [...prev, { question: pendingTranscript, answer: currentSolution }]);
+      if (pending && solution) {
+        setQaPages(prev => [...prev, { question: pending, answer: solution }]);
         setPageIndex(prev => prev + 1);
       }
 
       audio.clearLiveText();
-      setPendingTranscript(current);
-      runAIStreamRef.current([], current);
-    }, silenceDelay);
+      setPendingTranscript(text);
+      runAIStreamRef.current([], text);
+    };
+    silenceTimerRef.current = setTimeout(fire, silenceDelay);
 
     return () => { if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current); };
-  }, [audio.liveText, liveActive, autoAI, isStreaming, pendingTranscript, currentSolution]);
+  }, [audio.liveText, liveActive, autoAI]);
 
-  // ── Toggle Live Mode (AI Answer tab click) ──────────────────────────────────
   const handleToggleLive = useCallback(async () => {
     if (liveActive) {
       audio.stopInterview();
@@ -525,7 +512,6 @@ export const Home: React.FC = () => {
         : "Deepgram API key missing — add it in Api Setup.");
       return;
     }
-    // Reset session tracking when starting fresh
     sessionStartRef.current = Date.now();
     featuresUsedRef.current = new Set();
     sessionQARef.current = [];
@@ -534,10 +520,8 @@ export const Home: React.FC = () => {
     setPageIndex(0);
     setPendingTranscript("");
     setLiveActive(true);
-    // Used to fire-and-forget this — if capture genuinely failed to start
-    // (getDisplayMedia rejected, zero audio tracks), liveActive stayed stuck
-    // true with nothing telling the UI, so "Listening…" pulsed forever with
-    // no error and no way to tell it apart from real silence.
+    // Awaited: if capture fails (getDisplayMedia rejected, no audio tracks),
+    // liveActive stayed stuck true with "Listening…" pulsing and no error.
     const started = await audio.startInterview();
     if (!started) {
       setLiveActive(false);
@@ -545,7 +529,6 @@ export const Home: React.FC = () => {
     }
   }, [liveActive, audio, clearSolution, setError]);
 
-  // ── Manual Send — liveText AI ko bhejo, same screen pe answer dikhe ─────────
   const handleManualSend = useCallback(() => {
     const t = audio.liveText.trim();
     if (!t) return;
@@ -554,7 +537,6 @@ export const Home: React.FC = () => {
     runAIStream([], t);
   }, [audio, runAIStream]);
 
-  // ── Next Question — current Q&A save, screen clear ────────────────────────
   const handleNextQuestion = useCallback(() => {
     if (pendingTranscript && currentSolution) {
       setQaPages(prev => [...prev, { question: pendingTranscript, answer: currentSolution }]);
@@ -565,39 +547,37 @@ export const Home: React.FC = () => {
     audio.clearLiveText();
   }, [pendingTranscript, currentSolution, clearSolution, audio]);
 
-  // ── Screen Analysis ─────────────────────────────────────────────────────────
   const handleScreenAnalysis = useCallback(async () => {
     try {
-      // Abort any ongoing AI stream first
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
         setIsStreaming(false);
       }
-      // Pause live audio mode if currently running so feature calls never collide
+      // Pause live audio so feature calls never collide.
       if (liveActive) {
         audio.stopInterview();
         setLiveActive(false);
       }
-      // Reset just the streaming buffer + screenshots for the NEW capture — not
-      // sessionMessages, which would erase every previous screen-analysis page
-      // (Q1, Q2...) each time a fresh screenshot is taken.
+      // Reset only the streaming buffer and screenshots for the new capture, not
+      // sessionMessages — that would erase every previous Q1/Q2 screen-analysis page.
       setCurrentSolution("");
       clearScreenshots();
       setError(null);
       const rawB64 = await window.ghostly.captureFullscreen();
+      if (!isMountedRef.current) return;
       const compressedB64 = await compressScreenshot(rawB64);
+      if (!isMountedRef.current) return;
       addScreenshot(compressedB64);
-      // interviewSession carries the candidate's custom instructions / job
-      // description / profile — this used to be omitted here, so Screen
-      // Analysis silently ignored any custom instructions the user set in
-      // Interview Setup (only the live "AI Answer" path included them).
+      // interviewSession carries the job description/profile/custom instructions;
+      // omitting it here made Screen Analysis ignore everything set in Setup.
       const screenPrompt = buildPrompt(interviewSession);
-      runAIStream([compressedB64], undefined, screenPrompt);
-    } catch { setError("Failed to capture screen."); }
+      // Awaited so a failure inside the stream is actually visible to this
+      // try/catch — fire-and-forget made the surrounding catch unreachable.
+      await runAIStream([compressedB64], undefined, screenPrompt);
+    } catch { if (isMountedRef.current) setError("Failed to capture screen."); }
   }, [runAIStream, setError, addScreenshot, liveActive, audio, setCurrentSolution, clearScreenshots, setIsStreaming, interviewSession]);
 
-  // ── Tab change ──────────────────────────────────────────────────────────────
   const supportAd = useMemo(() => ads.find((ad) => ad.is_active && ad.script_url && ad.container_id), [ads]);
   const [supportCategory, setSupportCategory] = useState("Bug report");
   const [supportSubject, setSupportSubject] = useState("");
@@ -643,8 +623,7 @@ export const Home: React.FC = () => {
         return;
       }
       // Sign-in tokens last about an hour, so a long session can outlive its token —
-      // say so instead of showing the raw "Invalid token: ..." from the server.
-      // The typed text is kept so nothing is lost.
+      // say so instead of showing the server's raw "Invalid token"; typed text is kept.
       if (res.status === 401) {
         setSupportStatus("error");
         setSupportError("Your login has expired. Please log in again, then send the report (your text is kept).");
@@ -680,21 +659,18 @@ export const Home: React.FC = () => {
       setIsStreaming(false);
     }
 
-    // Stop live audio listening when switching away from AI Answer tab
+    // Stop live audio when switching away from AI Answer tab.
     if (tab !== "ai" && liveActive) {
       audio.stopInterview();
       setLiveActive(false);
     }
 
     setActiveTab(tab);
-    // Note: TopBar's handleTabClick already calls onScreenAnalysis() directly when
-    // the Screen tab is clicked (same pattern as "ai" calling onToggleLive()) — this
-    // function used to ALSO trigger handleScreenAnalysis() here, so every single
-    // click fired two full capture+AI cycles back to back, racing each other and
-    // causing the just-shown answer to get wiped and replaced mid-flight.
+    // TopBar already calls onScreenAnalysis() directly on the Screen tab; this used
+    // to trigger it too, firing two capture+AI cycles that raced and wiped answers.
   }, [liveActive, audio, setIsStreaming]);
 
-  // ── Normal mode QA pairs — Fix #17: only recalc when streaming done, not every chunk
+  // Recalc only when streaming finishes, not on every chunk.
   const sessionMessagesForPairs = isStreaming ? undefined : sessionMessages;
   const normalQaPairs = useMemo(() => {
     const src = sessionMessagesForPairs ?? sessionMessages;
@@ -709,63 +685,45 @@ export const Home: React.FC = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionMessagesForPairs]);
 
-  // ── Page navigation ─────────────────────────────────────────────────────────
-  // In live mode: qaPages. In normal mode: normalQaPairs
   const pages = liveActive ? qaPages : normalQaPairs.map(p => ({
     question: p.user?.content || "",
     answer: p.assistant?.content || "",
   }));
 
   const livePageIndex = pages.length;
-  // "screen" used to be hard-capped at a single page (always showing pages[0], the
-  // very first screen analysis ever taken) instead of accumulating Q1/Q2/Q3 pages
-  // the same way AI Answer already does. That special-casing was originally papering
-  // over a different bug — sessionMessages (which normalQaPairs is built from) was
-  // being wiped on every screen-analysis completion, so pages was always empty for
-  // this tab anyway. Now that history persists correctly, Screen uses the exact same
-  // pagination as any other non-live tab.
+  // Screen uses the same pagination as other tabs; it used to be capped at page 0
+  // because sessionMessages was wiped on each screen analysis.
   const totalPages = liveActive
     ? pages.length + (audio.liveText || pendingTranscript || isStreaming || currentSolution ? 1 : 0)
     : Math.max(1, pages.length + (isStreaming ? 1 : 0));
 
   const isOnLivePage = pageIndex >= pages.length;
-  // Fix: clamp pageIndex to prevent out-of-bounds blank screen
+  // Clamp pageIndex to prevent an out-of-bounds blank screen.
   const safePageIndex = Math.min(pageIndex, Math.max(0, pages.length - 1));
   const activePage = !isOnLivePage ? (pages[safePageIndex] ?? null) : null;
 
-  // In live mode: current screen = pendingTranscript + currentSolution (same screen)
   const liveQuestion = pendingTranscript || audio.liveText;
   const liveAnswer = currentSolution;
 
-  // Auto jump to live page when new question arrives — only if user hasn't manually navigated.
-  // This only watched qaPages.length before, so a new Screen Analysis or AI-answer
-  // follow-up page (built from normalQaPairs/sessionMessages, not qaPages) never
-  // triggered the auto-jump — pageIndex would silently go stale after each new page.
+  // Auto-jump to the newest page unless the user navigated by hand. Two effects
+  // used to fight here; one of them set pageIndex one past the end.
   useEffect(() => {
-    if (!userNavigated) setPageIndex(livePageIndex);
-  }, [pages.length, livePageIndex]);
+    if (userNavigated) return;
+    setPageIndex(liveActive ? livePageIndex : Math.max(0, pages.length - 1));
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- userNavigated is read, not a trigger: re-running on it would undo a manual page click.
+  }, [liveActive, pages.length, livePageIndex]);
 
-  useEffect(() => {
-    if (normalQaPairs.length > 0 && !isStreaming && !liveActive)
-      setPageIndex(normalQaPairs.length - 1);
-  }, [normalQaPairs.length, isStreaming, liveActive]);
-
-  // Reset userNavigated when a new answer starts streaming
   useEffect(() => {
     if (isStreaming) setUserNavigated(false);
   }, [isStreaming]);
 
-  // Bare Left/Right arrow Q-navigation — only fires while the overlay window has
-  // keyboard focus (unlike Ctrl+8/Ctrl+2 below, which work from anywhere via a
-  // global shortcut). This used to be registered a second time further down in
-  // this component with near-identical logic, which made every arrow press
-  // double-fire (advancing/rewinding two pages instead of one) — this is now the
-  // only registration.
+  // Bare arrows only fire while this overlay has focus (Ctrl+8/Ctrl+2 are global).
+  // Registered once: a duplicate registration made every press advance two pages.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (e.key === "ArrowLeft") { setUserNavigated(true); setPageIndex(p => Math.max(0, p - 1)); }
-      // Fix: guard against totalPages=0 to avoid -1 index
+      // Guard totalPages=0 to avoid a -1 index.
       if (e.key === "ArrowRight") { setUserNavigated(true); setPageIndex(p => Math.min(Math.max(0, totalPages - 1), p + 1)); }
     };
     window.addEventListener("keydown", onKey);
@@ -781,7 +739,6 @@ export const Home: React.FC = () => {
     const qaList = sessionQARef.current;
     if (!qaList.length) return;
     const duration = Math.round((Date.now() - sessionStartRef.current) / 1000);
-    // Determine interviewType: if any ai-answer feature used, mark as live-interview
     const hasLive = featuresUsedRef.current.has("ai-answer");
     const sessionEntry = {
       id: uuidv4(),
@@ -799,11 +756,11 @@ export const Home: React.FC = () => {
     addToHistory(sessionEntry);
     try {
       const h = await window.ghostly.getHistory();
-      // Deduplicate: remove any existing entry with same session start timestamp
-      const filtered = h.filter((x: any) => x.timestamp !== sessionEntry.timestamp && x.id !== sessionEntry.id);
+      // Deduplicate by session timestamp or id — `&&` here would keep an entry
+      // matching either one, the opposite of the intent (id was dead code anyway).
+      const filtered = h.filter((x: any) => x.timestamp !== sessionEntry.timestamp || x.id !== sessionEntry.id);
       await window.ghostly.saveHistory([sessionEntry, ...filtered]);
     } catch { /* best-effort */ }
-    // Reset tracking for next session
     sessionStartRef.current = Date.now();
     featuresUsedRef.current = new Set();
     sessionQARef.current = [];
@@ -811,7 +768,7 @@ export const Home: React.FC = () => {
 
   const handleRestart = useCallback(() => {
     abortControllerRef.current?.abort();
-    // Fix: null out ref after abort to prevent double-abort
+    // Null the ref after abort so it isn't aborted twice.
     abortControllerRef.current = null;
     if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
     lastLiveTextRef.current = "";
@@ -823,14 +780,12 @@ export const Home: React.FC = () => {
     setPageIndex(0);
     setUserNavigated(false);
     setPendingTranscript("");
-  // Fix: removed saveSessionToHistory from deps — it was causing stale closure
   }, [clearSolution, setIsStreaming, audio]);
 
-  // ── Chat Send ────────────────────────────────────────────────────────────
   const handleChatSend = useCallback(async (text: string) => {
     if (!text.trim() || chatStreaming) return;
     featuresUsedRef.current.add("chat");
-    const userMsg = { role: "user" as const, text: text.trim() };
+    const userMsg = { id: uuidv4(), role: "user" as const, text: text.trim() };
     setChatMessages(prev => [...prev, userMsg]);
     setChatInput("");
     setChatStreaming(true);
@@ -838,6 +793,7 @@ export const Home: React.FC = () => {
     const activeKey = activeProviderKey(settings);
     if (!activeKey) {
       setChatMessages(prev => [...prev, {
+        id: uuidv4(),
         role: "assistant",
         text: isProviderDisabled(settings, settings.activeProvider)
           ? `${settings.activeProvider} is deactivated. Open Settings → API Keys and activate a provider.`
@@ -853,9 +809,8 @@ export const Home: React.FC = () => {
         settings.activeProvider as ProviderName,
         {
           prompt: buildChatPrompt(text.trim(), interviewSession), messages: history, model: settings.activeModel, apiKey: activeKey, maxTokens: 2048,
-          // Same "stalled connection hangs the chat input forever" gap as the
-          // main AI-answer path — chat has no cancel button, so this timeout
-          // is its only way out of a dead request.
+          // Same stalled-connection gap as the AI-answer path; chat has no cancel
+          // button, so this timeout is its only way out of a dead request.
           signal: AbortSignal.timeout(60000),
         },
         usableApiKeys(settings),
@@ -869,7 +824,8 @@ export const Home: React.FC = () => {
 
       let full = "";
       let lastChatFlush = Date.now();
-      setChatMessages(prev => [...prev, { role: "assistant", text: "" }]);
+      const assistantId = uuidv4();
+      setChatMessages(prev => [...prev, { id: assistantId, role: "assistant", text: "" }]);
       for await (const chunk of stream) {
         full += chunk;
         const now = Date.now();
@@ -877,40 +833,31 @@ export const Home: React.FC = () => {
           const currentText = full;
           setChatMessages(prev => [
             ...prev.slice(0, -1),
-            { role: "assistant", text: currentText },
+            { id: assistantId, role: "assistant", text: currentText },
           ]);
           lastChatFlush = now;
         }
       }
       setChatMessages(prev => [
         ...prev.slice(0, -1),
-        { role: "assistant", text: full },
+        { id: assistantId, role: "assistant", text: full },
       ]);
-      // Save chat Q&A to session history
       sessionQARef.current.push({ question: text.trim(), answer: full, feature: "chat", timestamp: Date.now() });
     } catch (err) {
-      setChatMessages(prev => [...prev, { role: "assistant", text: `Error: ${err instanceof Error ? err.message : "AI failed"}` }]);
+      setChatMessages(prev => [...prev, { id: uuidv4(), role: "assistant", text: `Error: ${err instanceof Error ? err.message : "AI failed"}` }]);
     } finally {
       setChatStreaming(false);
     }
   }, [chatStreaming, chatMessages, settings, setFallbackNotice, interviewSession]);
 
-  // Force show window, opacity 1, and enable mouse on mount when entering interview screen
   useEffect(() => {
     window.ghostly.setOpacity(1);
     window.ghostly.show();
     window.ghostly.enableMouse();
   }, []);
 
-  // After Ctrl+E/Ctrl+Enter show the answer, hotkeys.ts deliberately puts the
-  // window into click-through mode so the meeting app underneath stays
-  // clickable — but every interactive element's onMouseEnter calls
-  // enableMouse() (full mouse capture) the moment the pointer enters it, and
-  // nothing ever restored click-through afterward. A single window-level
-  // listener here (rather than one per element) restores it once the pointer
-  // actually leaves the overlay entirely. `relatedTarget === null` is the
-  // standard way to distinguish "left the window" from "moved between
-  // child elements" for a mouseout event.
+  // After Ctrl+E/Ctrl+Enter the window goes click-through; interactive elements
+  // re-enable mouse on hover, so restore click-through when the pointer leaves.
   useEffect(() => {
     const onMouseOut = (e: MouseEvent) => {
       if (e.relatedTarget === null) window.ghostly.disableMouse();
@@ -919,56 +866,54 @@ export const Home: React.FC = () => {
     return () => window.removeEventListener("mouseout", onMouseOut);
   }, []);
 
-  // Hotkeys — all of these arrive as IPC events from Electron's system-wide
-  // globalShortcut registrations (electron/hotkeys.ts), so they work regardless
-  // of which window has OS focus (Zoom, the browser, your IDE). Renderer-side
-  // `window.addEventListener('keydown', ...)` handlers used to be registered
-  // here for Ctrl+N/Ctrl+0/Ctrl+E/Ctrl+8/Ctrl+2, which only fired while this
-  // (usually invisible) overlay window itself happened to have keyboard focus —
-  // effectively never during a real interview.
+  // Hotkeys arrive as IPC from Electron's globalShortcut, so they work regardless
+  // of OS focus; a ref keeps this effect registered once instead of per chunk.
+  const hotkeyRef = useRef({ liveActive, isStreaming, currentSolution, pendingTranscript, totalPages, interviewSession, handleManualSend, handleRestart, clearLiveText: audio.clearLiveText });
   useEffect(() => {
-    // Ctrl+E / Ctrl+Shift+S / Ctrl+Shift+Enter (main process) both funnel through
-    // here. Same compression as handleScreenAnalysis (imageCompressor defaults) so
-    // both capture paths send an identical, text-legible payload (this used to be
-    // sent uncompressed for the hotkey path only, several times larger).
+    hotkeyRef.current = { liveActive, isStreaming, currentSolution, pendingTranscript, totalPages, interviewSession, handleManualSend, handleRestart, clearLiveText: audio.clearLiveText };
+  });
+
+  useEffect(() => {
+    // Ctrl+E / Ctrl+Shift+S / Ctrl+Shift+Enter all funnel here; same compression as
+    // handleScreenAnalysis so both paths send an identical, text-legible payload.
     const offScreenshot = window.ghostly.onScreenshot(async (b64) => {
       const compressed = await compressScreenshot(b64);
+      if (!isMountedRef.current) return;
       addScreenshot(compressed);
     });
-    // Ctrl+Enter — solve whatever's already captured/transcribed. If it's a
-    // screenshot-driven solve, use the same adaptive prompt handleScreenAnalysis
-    // builds instead of an empty one.
+    // Ctrl+Enter solves what's already captured; for a screenshot use the same
+    // adaptive prompt handleScreenAnalysis builds instead of an empty one.
     const offSolve = window.ghostly.onSolve(async () => {
+      const { interviewSession: session } = hotkeyRef.current;
       const followUp = screenshotsRef.current.length > 0
-        ? buildPrompt(interviewSession)
+        ? buildPrompt(session)
         : undefined;
-      await runAIStream(screenshotsRef.current, undefined, followUp);
+      await runAIStreamRef.current(screenshotsRef.current, undefined, followUp);
     });
-    const offStartOver = window.ghostly.onStartOver(handleRestart);
+    const offStartOver = window.ghostly.onStartOver(() => hotkeyRef.current.handleRestart());
 
-    // Ctrl+E capture failing (e.g. desktopCapturer erroring) used to only log
-    // to the terminal — invisible in a packaged app, so it looked exactly
-    // like the hotkey silently doing nothing.
+    // Capture errors used to only log to the terminal — invisible in a packaged
+    // app, where it looked like the hotkey silently did nothing.
     const offCaptureError = window.ghostly.onCaptureError((message) => setError(message));
 
-    // Ctrl+N — Next Question (only meaningful while live-listening)
+    // Ctrl+N — Next Question (only while live-listening)
     const offNextQuestion = window.ghostly.onNextQuestion(() => {
-      if (!liveActive) return;
-      if (currentSolution && pendingTranscript) {
-        setQaPages(prev => [...prev, { question: pendingTranscript, answer: currentSolution }]);
+      const { liveActive: live, currentSolution: solution, pendingTranscript: pending, clearLiveText } = hotkeyRef.current;
+      if (!live) return;
+      if (solution && pending) {
+        setQaPages(prev => [...prev, { question: pending, answer: solution }]);
       }
       setPendingTranscript("");
       clearSolution();
-      audio.clearLiveText();
+      clearLiveText();
       lastLiveTextRef.current = "";
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
     });
 
-    // Ctrl+0 — Manual Send (skip waiting for silence detection)
+    // Ctrl+0 — Manual Send (skip silence detection)
     const offManualSend = window.ghostly.onManualSend(() => {
-      if (liveActive && audio.liveText.trim() && !isStreaming) {
-        handleManualSend();
-      }
+      const { liveActive: live, isStreaming: streaming, handleManualSend: send } = hotkeyRef.current;
+      if (live && !streaming) send();
     });
 
     // Ctrl+8 — Previous Question page
@@ -980,7 +925,7 @@ export const Home: React.FC = () => {
     // Ctrl+2 — Next Question page
     const offNextQuestionPage = window.ghostly.onNextQuestionPage(() => {
       setUserNavigated(true);
-      setPageIndex(p => Math.min(Math.max(0, totalPages - 1), p + 1));
+      setPageIndex(p => Math.min(Math.max(0, hotkeyRef.current.totalPages - 1), p + 1));
     });
 
     return () => {
@@ -993,16 +938,17 @@ export const Home: React.FC = () => {
       offPrevQuestion();
       offNextQuestionPage();
     };
-  }, [runAIStream, addScreenshot, handleRestart, liveActive, isStreaming, currentSolution, pendingTranscript, handleManualSend, audio.liveText, totalPages, interviewSession]);
+    // Only stable references here (zustand actions + setState), so this runs once
+    // and once only: on unmount, to remove every listener.
+  }, [addScreenshot, setError, clearSolution]);
 
   const displayLiveText = audio.liveText || pendingTranscript;
 
   return (
     <div className="h-screen w-full bg-transparent text-white font-mono pointer-events-none flex flex-col" style={{ userSelect: "none", WebkitUserSelect: "none" } as React.CSSProperties}>
 
-      {/* Everything except the logo collapses toward the top-left corner. `visibility`
-          (not just opacity) is switched off once the fade finishes so nothing invisible
-          can still catch the mouse. */}
+      {/* Everything except the logo collapses toward the top-left. `visibility` (not
+          just opacity) switches off after the fade so nothing invisible catches the mouse. */}
       <motion.div
         className="flex-1 min-h-0 flex flex-col"
         initial={false}
@@ -1011,7 +957,6 @@ export const Home: React.FC = () => {
         onAnimationComplete={() => { if (collapsed) setFullyHidden(true); }}
         style={{ transformOrigin: "28px 28px", visibility: fullyHidden ? "hidden" : "visible" }}
       >
-      {/* ── TopBar ── */}
       <div className="flex-none">
         <TopBar
           onOpenSettings={() => setSettingsOpen((v) => !v)}
@@ -1027,31 +972,25 @@ export const Home: React.FC = () => {
           onTabChange={handleTabChange}
           onStop={() => { saveSessionToHistory(); handleRestart(); useStore.getState().setAppScreen("home"); setTimeout(() => window.ghostly.enableMouse(), 50); setTimeout(() => window.ghostly.enableMouse(), 300); }}
           autoAI={autoAI}
-          onToggleAutoAI={() => setAutoAI(v => !v)}
+          onToggleAutoAI={() => updateSettings({ autoAI: !autoAI })}
           onMinimize={handleMinimize}
         />
       </div>
 
-      {/* ── Settings ── the same panel as the home screen (API keys with Active/Off,
-           shortcuts, opacity, audio test). Not wrapped in AnimatePresence: it plays
-           its own exit, and a parent-driven exit can hang behind its tab switcher.
-           topInset keeps it clear of the top bar above. */}
+      {/* Same panel as the home screen. Not wrapped in AnimatePresence: it plays its
+           own exit, and a parent-driven exit can hang behind its tab switcher. */}
       {settingsOpen && <HomeSettingsPanel onClose={() => setSettingsOpen(false)} topInset={56} />}
 
-      {/* ── Main Content ── */}
       {!settingsOpen && (
         <div className="flex-1 min-h-0 flex justify-center px-3 pb-3 mt-1 pointer-events-auto overflow-hidden">
           <div className="w-full flex flex-col h-full">
             <div
               className="flex-1 min-h-0 flex flex-col rounded-2xl overflow-hidden"
-              // Fully opaque. backdrop-filter can't blur whatever real window sits
-              // behind this transparent Electron overlay, and even a 0.94 alpha
-              // still let that window's text ghost through the card, so there's no
-              // transparency here at all (and no blur — it has nothing to blur).
+              // Fully opaque: backdrop-filter can't blur the real window behind this
+              // transparent overlay, and 0.94 alpha still let its text ghost through.
               style={{ background: "#0e0e12", border: "1px solid rgba(255,255,255,0.07)", boxShadow: "0 20px 50px rgba(0,0,0,0.45)" }}
               onMouseEnter={() => window.ghostly.enableMouse()}
             >
-              {/* ── Card Header ── */}
               <div className="flex items-center justify-between px-4 h-11 flex-shrink-0"
                 style={{ WebkitAppRegion: "drag", borderBottom: "1px solid rgba(255,255,255,0.06)" } as React.CSSProperties}>
 
@@ -1068,7 +1007,6 @@ export const Home: React.FC = () => {
                     <div /><div />
                   </>
                 ) : activeTab === "chat" ? (
-                  /* Chat header */
                   <>
                     <div className="flex items-center gap-2" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
                       <span className="text-[11px] font-semibold text-white/50 font-sans">Chat</span>
@@ -1082,6 +1020,7 @@ export const Home: React.FC = () => {
                       <div className="flex items-center gap-1.5">
                         <span className="text-[9px] text-white/25 uppercase tracking-wider">Opacity</span>
                         <input type="range" min="20" max="100"
+                          aria-label="Overlay opacity"
                           value={Math.round((settings.opacity ?? 1) * 100)}
                           onChange={(e) => { const v = parseInt(e.target.value)/100; updateSettings({opacity:v}); window.ghostly.setOpacity(v); }}
                           className="w-14 h-1 accent-violet-400 cursor-pointer" />
@@ -1092,12 +1031,14 @@ export const Home: React.FC = () => {
                 <>
                   <div className="flex items-center gap-1.5" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
                     <button onClick={() => { setUserNavigated(true); setPageIndex(p => Math.max(0, p - 1)); }}
+                      aria-label="Previous question"
                       disabled={pageIndex === 0 || totalPages === 0}
                       className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-white/10 text-white/30 hover:text-white/70 disabled:opacity-20 transition-colors text-sm">‹</button>
                     <span className="text-[11px] text-white/30 font-mono tabular-nums min-w-[40px] text-center">
                       {totalPages === 0 ? "—" : `${Math.min(pageIndex + 1, totalPages)} / ${totalPages}`}
                     </span>
                     <button onClick={() => { setUserNavigated(true); setPageIndex(p => Math.min(Math.max(0, totalPages - 1), p + 1)); }}
+                      aria-label="Next question"
                       disabled={pageIndex >= totalPages - 1 || totalPages === 0}
                       className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-white/10 text-white/30 hover:text-white/70 disabled:opacity-20 transition-colors text-sm">›</button>
                   </div>
@@ -1107,6 +1048,8 @@ export const Home: React.FC = () => {
                     <div className="flex gap-1.5 items-center" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
                       {Array.from({ length: Math.min(totalPages, 10) }).map((_, i) => (
                         <button key={i} onClick={() => { setUserNavigated(true); setPageIndex(i); }}
+                          aria-label={`Question ${i + 1} of ${Math.min(totalPages, 10)}`}
+                          aria-current={i === pageIndex ? "page" : undefined}
                           className={`rounded-full transition-all ${
                             i === pageIndex ? "w-5 h-1.5 bg-violet-400" :
                             i === livePageIndex && liveActive ? "w-1.5 h-1.5 bg-green-400/70" :
@@ -1121,6 +1064,7 @@ export const Home: React.FC = () => {
                     <div className="flex items-center gap-1.5">
                       <span className="text-[9px] text-white/25 uppercase tracking-wider">Opacity</span>
                       <input type="range" min="20" max="100"
+                        aria-label="Overlay opacity"
                         value={Math.round((settings.opacity ?? 1) * 100)}
                         onChange={(e) => {
                           const v = parseInt(e.target.value) / 100;
@@ -1138,10 +1082,9 @@ export const Home: React.FC = () => {
                     </button>
                   </div>
                 </>
-                )} {/* end chat/normal header */}
+                )}
               </div>
 
-              {/* ── Card Body ── */}
               <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4">
                 {activeTab === "support" ? (
                   <SupportPanel
@@ -1160,7 +1103,6 @@ export const Home: React.FC = () => {
                 ) : activeTab === "jobs" ? (
                   <JobPortalPanel />
                 ) : (activeTab as string) === "support-old" ? (
-                  /* ── SUPPORT PANEL ── */
                   <div className="flex flex-col items-center gap-5 py-2">
                     <div className="text-center">
                       <div className="text-3xl mb-1.5">💛</div>
@@ -1197,7 +1139,7 @@ export const Home: React.FC = () => {
                         </div>
                         <button
                           onClick={() => {
-                            navigator.clipboard.writeText("mahishelke0505@ybl");
+                            navigator.clipboard.writeText("mahishelke0505@ybl").catch(() => {});
                             setCopied(true);
                             setTimeout(() => setCopied(false), 2000);
                           }}
@@ -1218,7 +1160,6 @@ export const Home: React.FC = () => {
                     </div>
                   </div>
                 ) : activeTab === "chat" ? (
-                  /* ── CHAT PANEL ── */
                   <div className="flex flex-col h-full">
                     {chatMessages.length === 0 ? (
                       <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center">
@@ -1229,7 +1170,7 @@ export const Home: React.FC = () => {
                     ) : (
                       <div className="flex flex-col gap-4 pb-2">
                         {chatMessages.map((msg, i) => (
-                          <div key={i} className={`flex flex-col gap-1.5 ${msg.role === "user" ? "items-end" : "items-start"}`}>
+                          <div key={msg.id} className={`flex flex-col gap-1.5 ${msg.role === "user" ? "items-end" : "items-start"}`}>
                             <span className={`text-[9px] font-bold uppercase tracking-widest ${
                               msg.role === "user" ? "text-violet-400/60" : "text-blue-400/60"
                             }`}>
@@ -1260,7 +1201,6 @@ export const Home: React.FC = () => {
                 ) : (
                 <AnimatePresence mode="wait">
                   {totalPages === 0 && !isStreaming ? (
-                    /* Empty state */
                     <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                       className="h-full flex flex-col items-center justify-center gap-4 text-center py-8">
                       <GhostMascot size={84} variant="hello" alt="" />
@@ -1296,11 +1236,8 @@ export const Home: React.FC = () => {
                       exit={{ opacity: 0, x: -6 }} transition={{ duration: 0.1 }}
                       className="flex flex-col gap-5">
 
-                      {/* ── Interviewer Question ── */}
-                      {/* Hide question box for Screen Analysis — questionText is always
-                          the literal "Screen Analysis" for any built-prompt answer now
-                          (see isFormattedPrompt in runAIStream), so this one check covers
-                          every interviewType, not just system_design. */}
+                      {/* Hide the question box for Screen Analysis: questionText is the
+                          literal "Screen Analysis" for any built-prompt answer. */}
                       {!(isOnLivePage && liveActive) &&
                         (isOnLivePage ? liveQuestion : activePage?.question) &&
                         activePage?.question !== "Screen Analysis" && (
@@ -1320,7 +1257,6 @@ export const Home: React.FC = () => {
                         </div>
                       )}
 
-                      {/* ── AI Answer ── clean main area ── */}
                       {(isOnLivePage ? (isStreaming || liveAnswer) : activePage?.answer) && (
                         <div>
                           <div className="flex items-center justify-between mb-2">
@@ -1345,7 +1281,6 @@ export const Home: React.FC = () => {
                         </div>
                       )}
 
-                      {/* Waiting state on live page — clean empty screen */}
                       {isOnLivePage && !isStreaming && !liveAnswer && (
                         <div className="flex flex-col items-center justify-center gap-3 py-12 text-center px-4">
                           <span className="text-3xl">🎙️</span>
@@ -1355,9 +1290,8 @@ export const Home: React.FC = () => {
                               {liveActive ? "Listening… speak and click Send to AI" : "Click AI Answer to start listening"}
                             </span>
                           </div>
-                          {/* Was previously silent — an active session with zero
-                              audio detected for 12s now surfaces exactly why
-                              instead of leaving the user staring at nothing. */}
+                          {/* Was silent before: an active session with no audio for 12s
+                              now says why instead of leaving the user staring at nothing. */}
                           {liveActive && audio.statusWarning && (
                             <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl border border-amber-400/25 max-w-[380px]"
                               style={{ background: "rgba(251,191,36,0.08)" }}>
@@ -1370,10 +1304,9 @@ export const Home: React.FC = () => {
                     </motion.div>
                   )}
                 </AnimatePresence>
-                )} {/* end chat conditional */}
+                )}
               </div>
 
-              {/* ── Input Footer ── */}
               {activeTab === "jobs" && <JobPortalFooter />}
               {activeTab !== "support" && activeTab !== "jobs" && (
               <>
@@ -1422,13 +1355,10 @@ export const Home: React.FC = () => {
 
       </motion.div>
 
-      {/* ── Minimized: just the logo, in the spot the top bar's brand was ── */}
       <AnimatePresence>
         {collapsed && <MinimizedLogo key="minimized-logo" onExpand={handleExpand} live={liveActive} busy={isStreaming} />}
       </AnimatePresence>
 
-      {/* ── Provider Fallback Notice — visible, unlike the old silent Groq
-          fallback bug this deliberately avoids repeating ── */}
       <AnimatePresence>
         {fallbackNotice && !error && (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
@@ -1441,7 +1371,6 @@ export const Home: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* ── Error Banner ── */}
       <AnimatePresence>
         {error && (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}

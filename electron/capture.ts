@@ -1,20 +1,15 @@
-import { desktopCapturer, screen } from "electron";
+import { desktopCapturer, screen, type BrowserWindow } from "electron";
 
-export async function captureFullScreen(): Promise<string> {
-  // The screen the user is actually looking at, not necessarily Windows' designated
-  // "primary" monitor. This used to always capture getPrimaryDisplay() and always take
-  // sources[0] regardless of how many screens desktopCapturer returned — on any
-  // multi-monitor setup where the interview/assessment window was on a secondary
-  // display, every single screenshot silently captured the wrong (often blank or
-  // unrelated) screen, which the AI then correctly reports as "Nothing actionable -
-  // screenshot not visible" since there genuinely was no question on what it saw.
-  const activeDisplay = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+export async function captureFullScreen(win?: BrowserWindow | null): Promise<string> {
+  // Match on the window's own display, not the cursor's: the mouse drifts to
+  // another monitor and captures a screen the user isn't looking at.
+  const activeDisplay = win && !win.isDestroyed()
+    ? screen.getDisplayMatching(win.getBounds())
+    : screen.getPrimaryDisplay();
   const { width, height } = activeDisplay.size;
 
-  // 1600px is what the renderer sends to the AI (imageCompressor's default), so
-  // capture at that size directly instead of grabbing 2560px, JPEG-encoding it,
-  // shipping ~1MB over IPC, and then downscaling it again in the renderer — the
-  // extra capture/encode/transfer work only added latency to every screenshot.
+  // 1600px matches imageCompressor's default, so capture at that size directly —
+  // grabbing 2560px and downscaling in the renderer only adds capture/IPC latency.
   const MAX_WIDTH = 1600;
   const targetWidth = Math.min(width, MAX_WIDTH);
   const targetHeight = Math.round((targetWidth / width) * height);
@@ -31,13 +26,18 @@ export async function captureFullScreen(): Promise<string> {
     throw new Error("No screen source found");
   }
 
-  // Match the source to the active display by its display_id (desktopCapturer's one
-  // property that ties a capture source back to a specific electron `screen` display).
-  // Falls back to the first source if a single-screen setup leaves it unset/unmatched.
+  // display_id is the only property tying a capture source to an electron `screen`
+  // display; fall back to the first source if it's unset or unmatched.
   const match = sources.find((s) => s.display_id && String(activeDisplay.id) === s.display_id);
   const source = match ?? sources[0];
 
-  // 85% JPEG keeps code/text crisp for vision models at a much smaller payload.
+  // 85% JPEG keeps code/text crisp for vision models at a smaller payload; an empty
+  // thumbnail means Windows returned no pixels (locked, DRM-protected, desktop switched).
+  if (source.thumbnail.isEmpty()) {
+    throw new Error(
+      "Screen capture came back empty — the screen is locked or protected. Unlock it and try again.",
+    );
+  }
   const jpegBuffer = source.thumbnail.toJPEG(85);
   return `data:image/jpeg;base64,${jpegBuffer.toString("base64")}`;
 }

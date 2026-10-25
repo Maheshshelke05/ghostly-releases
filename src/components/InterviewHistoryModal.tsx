@@ -23,7 +23,6 @@ interface InterviewRecord {
   qaHistory?: QAPair[];
 }
 
-/* ─── Design system ─── */
 const INK = "#15162b";
 const MUTED = "#6b7280";
 const SUBTLE = "#9ca3af";
@@ -97,7 +96,6 @@ function groupByDay(records: InterviewRecord[]) {
   return groups;
 }
 
-/* ─── Small building blocks ─── */
 function CompanyAvatar({ name, tone }: { name?: string; tone: Tone }) {
   const initials = name ? name.trim().slice(0, 2).toUpperCase() : "IN";
   return (
@@ -165,9 +163,8 @@ export const InterviewHistoryModal: React.FC<Props> = ({ open, onClose }) => {
   };
   const closeRecord = () => { setSelected(null); setExpandedQA(null); };
 
-  // Escape steps back: clears an active search, then leaves a session, then
-  // closes the modal. (There's no dimmed backdrop to click any more, so this
-  // is the keyboard equivalent of clicking outside.)
+  // Escape steps back: clears an active search, then leaves a session, then closes
+  // the modal (no dimmed backdrop, so this is the keyboard equivalent).
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -234,7 +231,6 @@ export const InterviewHistoryModal: React.FC<Props> = ({ open, onClose }) => {
             onMouseEnter={() => window.ghostly.enableMouse()}
             onMouseLeave={() => window.ghostly.disableMouse()}
           >
-            {/* ── Header ── */}
             <div className="flex items-center justify-between gap-3 px-5 py-4 shrink-0" style={{ borderBottom: `1px solid ${BORDER}` }}>
               <div className="flex items-center gap-3 min-w-0">
                 {selected && (
@@ -273,7 +269,6 @@ export const InterviewHistoryModal: React.FC<Props> = ({ open, onClose }) => {
               </button>
             </div>
 
-            {/* ── List toolbar: stats + search + clear ── */}
             {!selected && !loading && records.length > 0 && (
               <div className="px-4 pt-3 pb-2 shrink-0 flex flex-col gap-2.5">
                 <div
@@ -343,7 +338,6 @@ export const InterviewHistoryModal: React.FC<Props> = ({ open, onClose }) => {
               </div>
             )}
 
-            {/* ── Body ── */}
             <div ref={bodyRef} className="flex-1 min-h-0 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
               {loading ? (
                 <div className="flex flex-col items-center justify-center py-20 gap-3">
@@ -408,7 +402,6 @@ export const InterviewHistoryModal: React.FC<Props> = ({ open, onClose }) => {
   );
 };
 
-/* ─── Session card (list row) ─── */
 const SessionCard: React.FC<{ rec: InterviewRecord; index: number; onOpen: () => void }> = ({ rec, index, onOpen }) => {
   const tone = typeStyle(rec.interviewType);
   const dur = formatDuration(rec.durationSeconds);
@@ -466,7 +459,6 @@ const SessionCard: React.FC<{ rec: InterviewRecord; index: number; onOpen: () =>
   );
 };
 
-/* ─── Detail View ─── */
 const DetailView: React.FC<{
   record: InterviewRecord;
   expandedQA: number | null;
@@ -486,9 +478,8 @@ const DetailView: React.FC<{
     } catch {}
   };
 
-  // The date/time already sits under the title in the header, and each
-  // exchange below is tagged with its own feature, so the summary keeps only
-  // what isn't shown anywhere else.
+  // The date/time already sits under the title and each exchange is tagged with its
+  // feature, so the summary keeps only what isn't shown elsewhere.
   const facts = [
     { label: "Position", value: record.position || "—", icon: "💼" },
     { label: "AI Model", value: [record.provider, record.model].filter(Boolean).join(" · ") || "—", icon: "🤖" },
@@ -496,7 +487,6 @@ const DetailView: React.FC<{
 
   return (
     <div className="p-4 flex flex-col gap-4">
-      {/* ── Session summary ── */}
       <div className="rounded-[20px] p-3.5 flex flex-col gap-3.5" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
         <div className="grid grid-cols-3 gap-2">
           <StatTile icon="⏱" label="Duration" value={formatDuration(record.durationSeconds) || "—"} />
@@ -517,7 +507,6 @@ const DetailView: React.FC<{
 
       </div>
 
-      {/* ── Q&A History ── */}
       {record.qaHistory && record.qaHistory.length > 0 ? (
         <div className="flex flex-col gap-2.5">
           <div className="flex items-center justify-between px-1">
@@ -547,7 +536,6 @@ const DetailView: React.FC<{
                   boxShadow: isOpen ? "0 6px 18px rgba(109,111,176,0.10)" : "none",
                 }}
               >
-                {/* Question header */}
                 <button
                   className="w-full flex items-start gap-3 p-3.5 text-left outline-none"
                   aria-expanded={isOpen}
@@ -581,7 +569,6 @@ const DetailView: React.FC<{
                   </div>
                 </button>
 
-                {/* Expanded content */}
                 <AnimatePresence>
                   {isOpen && (
                     <motion.div
@@ -590,7 +577,6 @@ const DetailView: React.FC<{
                       exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.22, ease: "easeInOut" }}
                     >
                       <div className="px-3.5 pb-3.5 flex flex-col gap-2.5">
-                        {/* Full question */}
                         <div
                           className="rounded-[13px] p-3.5"
                           style={{
@@ -603,7 +589,6 @@ const DetailView: React.FC<{
                           <p className="text-[12.5px] leading-relaxed font-medium" style={{ color: "#374151" }}>{qa.question}</p>
                         </div>
 
-                        {/* AI Answer */}
                         <div
                           className="rounded-[13px] p-3.5 relative"
                           style={{
@@ -654,7 +639,6 @@ const DetailView: React.FC<{
         </div>
       )}
 
-      {/* ── Delete ── */}
       <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: "14px" }}>
         {confirmDelete ? (
           <div className="flex items-center gap-3 justify-center">

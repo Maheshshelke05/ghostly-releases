@@ -1,8 +1,5 @@
-// "Upload your resume" card for the Profile tab of Interview Setup.
-//   - no usable AI key  -> locked: explains why and offers an inline "add a key" block (no navigation)
-//   - key present       -> drag & drop / file picker
-//   - working           -> Reading file > Analyzing with <Provider> > Filling your profile (+ Cancel)
-//   - done / error      -> banner with Replace / Undo / Remove, or a friendly message + Try again
+// "Upload your resume" card: locked without a usable AI key (inline add-key block); otherwise drop zone, then
+// Reading > Analyzing > Filling (+ Cancel), then a done banner with Replace / Undo / Remove or an error + Try again.
 import React, { useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { useStore } from "../../store/useStore";
@@ -16,7 +13,6 @@ import type { ImportState } from "./useResumeImport";
 const INK = "#15162b";
 const SUBTLE = "#6b7280";
 const BORDER = "#e8e8ee";
-const PANEL_BG = "#f7f7fa";
 const TINT_BG = "#f0f0fb";
 const TINT_BORDER = "#c7c9f0";
 
@@ -29,8 +25,6 @@ export function fmtSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
-
-// ───────────────────────── small pieces ─────────────────────────
 
 const SmallButton: React.FC<{
   onClick: () => void; children: React.ReactNode; testId?: string; primary?: boolean; disabled?: boolean; title?: string;
@@ -73,8 +67,6 @@ const StepRow: React.FC<{ state: "done" | "active" | "todo"; label: string; note
   </div>
 );
 
-// ───────────────────────── inline "add an API key" ─────────────────────────
-
 const QuickAddKey: React.FC<{ onSaved: (providerLabel: string) => void }> = ({ onSaved }) => {
   const [providerId, setProviderId] = useState<string>("gemini");
   const [key, setKey] = useState("");
@@ -94,8 +86,7 @@ const QuickAddKey: React.FC<{ onSaved: (providerLabel: string) => void }> = ({ o
       setMessage(res.message || "That key didn't work.");
       return;
     }
-    // Persist exactly like ApiSetupPage.handleSave: key -> store, make that provider the active one (re-enabling it
-    // if it had been deactivated), then write settings to disk.
+    // Persist exactly like ApiSetupPage.handleSave: key to the store, that provider active (re-enabled), then disk.
     const store = useStore.getState();
     store.setApiKey(provider.id, k);
     store.updateSettings({
@@ -169,8 +160,6 @@ const QuickAddKey: React.FC<{ onSaved: (providerLabel: string) => void }> = ({ o
   );
 };
 
-// ───────────────────────── the card ─────────────────────────
-
 export interface ResumeCardProps {
   state: ImportState;
   /** At least one usable (saved, not deactivated) AI key exists. */
@@ -207,7 +196,6 @@ export const ResumeCard: React.FC<ResumeCardProps> = ({
       className="rounded-2xl flex flex-col gap-2.5"
       style={{ background: TINT_BG, border: `1px solid ${TINT_BORDER}`, padding: "11px 11px 10px" }}
     >
-      {/* header */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-[16px] leading-none">📄</span>
@@ -224,7 +212,6 @@ export const ResumeCard: React.FC<ResumeCardProps> = ({
         </span>
       </div>
 
-      {/* locked: why, the (visibly disabled) upload control, then an inline "add a key" block */}
       {locked && (
         <div className="flex flex-col gap-2" data-testid="resume-locked">
           <div>
@@ -250,14 +237,12 @@ export const ResumeCard: React.FC<ResumeCardProps> = ({
         </div>
       )}
 
-      {/* just unlocked */}
       {!locked && justSaved && !working && state.status === "idle" && (
         <p className="text-[9px] font-bold leading-snug" role="status" data-testid="resume-key-saved" style={{ color: "#16a34a" }}>
           ✓ {justSaved} key saved — upload your resume below.
         </p>
       )}
 
-      {/* working: file chip, steps, indeterminate bar, cancel */}
       {state.status === "working" && (
         <div className="flex flex-col gap-2" data-testid="resume-working" role="status" aria-live="polite">
           <div className="flex items-center gap-2 rounded-lg px-2 py-1.5" style={{ background: "#fff", border: `1px solid ${BORDER}` }}>
@@ -286,7 +271,6 @@ export const ResumeCard: React.FC<ResumeCardProps> = ({
         </div>
       )}
 
-      {/* done */}
       {state.status === "done" && (
         <motion.div
           initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }}
@@ -307,7 +291,6 @@ export const ResumeCard: React.FC<ResumeCardProps> = ({
         </motion.div>
       )}
 
-      {/* error */}
       {state.status === "error" && (
         <motion.div
           initial={{ opacity: 0, y: 3 }} animate={{ opacity: 1, y: 0 }}
@@ -323,7 +306,6 @@ export const ResumeCard: React.FC<ResumeCardProps> = ({
         </motion.div>
       )}
 
-      {/* neutral notice after Undo / Remove */}
       {state.status === "idle" && notice && (
         <div className="rounded-xl px-2.5 py-1.5 flex items-center justify-between gap-2" data-testid="resume-notice" role="status" style={{ background: "#fff", border: `1px solid ${BORDER}` }}>
           <p className="text-[9px] font-semibold leading-snug" style={{ color: INK }}>{notice.text}</p>
@@ -331,7 +313,6 @@ export const ResumeCard: React.FC<ResumeCardProps> = ({
         </div>
       )}
 
-      {/* drop zone (not while locked — see above — nor while a run is in progress or a result banner is showing) */}
       {!locked && !working && state.status !== "done" && (
         <div
           data-testid="resume-dropzone" data-disabled="false" role="button" tabIndex={0}

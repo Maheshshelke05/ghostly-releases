@@ -1,11 +1,5 @@
 // Sends the extracted resume to the user's own AI provider and turns the answer into a CandidateProfile.
-//
-// - Uses the app's existing provider layer (streamWithFallback): the user's active provider/model first,
-//   quota fallback and the Groq/NVIDIA -> vision-capable rescue come for free.
-// - Every model call has its own 45 s timeout and honours the caller's AbortSignal (Cancel button).
-//   Anthropic/NVIDIA go through the main-process proxy and ignore `signal`, so the stream is also raced
-//   against the abort - the UI never waits on a request that was cancelled or timed out.
-// - Resume text and API keys are never written to the console.
+// Each call times out at 45 s and is raced against Cancel (proxy providers ignore `signal`); no resume text or keys reach the console.
 import { streamWithFallback, getProvider } from "../ai";
 import type { FallbackEvent, ProviderName } from "../ai";
 import { isRateLimitError } from "../ai/types";
@@ -54,8 +48,6 @@ export interface AnalyzeResult {
   provider: ProviderInfo;
 }
 
-// ───────────────────────── which provider/model ─────────────────────────
-
 /** The provider that should answer: the user's active one if usable, else the best configured one. */
 export function planProvider(settings: Settings, needsVision: boolean): ProviderInfo {
   const keys = usableApiKeys(settings);
@@ -78,8 +70,6 @@ export function planProvider(settings: Settings, needsVision: boolean): Provider
   const best = ORDER.find((id) => pool.includes(id)) ?? pool[0];
   return { provider: best, label: labelOf(best), model: getProvider(best).listModels()[0] };
 }
-
-// ───────────────────────── one model call ─────────────────────────
 
 function abortReasonError(userSignal: AbortSignal | undefined, timeoutMs: number): ResumeError {
   if (userSignal?.aborted) return new ResumeError("cancelled", "Cancelled.");
@@ -206,8 +196,6 @@ async function structure(ctx: Ctx, make: (retry: boolean) => Call): Promise<{ pr
   throw lastErr!;
 }
 
-// ───────────────────────── public entry point ─────────────────────────
-
 export async function analyzeResume(extracted: ExtractedResume, opts: AnalyzeOptions): Promise<AnalyzeResult> {
   const needsVision = extracted.kind === "images";
   const plan = planProvider(opts.settings, needsVision);
@@ -220,9 +208,8 @@ export async function analyzeResume(extracted: ExtractedResume, opts: AnalyzeOpt
   } else if (extracted.pages.length === 1) {
     result = await structure(ctx, (retry) => ({ prompt: buildImageResumePrompt(retry), image: extracted.pages[0] }));
   } else {
-    // A model call carries ONE image, and stitching pages into one tall image would shrink the text below
-    // what vision models (which downscale to ~1.5-2k px) can read. So: transcribe each page on its own
-    // (sequentially - gentler on free-tier rate limits), then structure the combined text in a final call.
+    // A model call carries ONE image, and stitching pages into one tall image would shrink the text below what vision
+    // models can read, so each page is transcribed on its own (sequentially - gentler on free-tier rate limits).
     const total = extracted.pages.length;
     const parts: string[] = [];
     for (let i = 0; i < total; i++) {

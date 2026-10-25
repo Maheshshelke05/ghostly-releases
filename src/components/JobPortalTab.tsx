@@ -16,8 +16,7 @@ import {
   type PortalJob,
 } from "../lib/jobPortal";
 
-// Everything on this tab is either quoted from https://job.ghotlyai.in (shared copy lives next to the fetch code in
-// src/lib/jobPortal.ts; the feature cards and pricing bullets are below) or comes from the live public API at runtime.
+// Copy is quoted from https://job.ghotlyai.in (shared copy in src/lib/jobPortal.ts) or comes from the live public API.
 // Short labels, buttons and status messages are the only wording that is not a site quote.
 
 const LIME = "#a3e635";
@@ -53,8 +52,6 @@ export const JobIcon = () => (
     <path d="M2 13h20" />
   </svg>
 );
-
-/* ── small building blocks ─────────────────────────────────────────────── */
 
 const Reveal: React.FC<{ i?: number; children: React.ReactNode; className?: string; busy?: boolean }> = ({ i = 0, children, className, busy }) => (
   <motion.section
@@ -173,16 +170,12 @@ const Lock: React.FC = () => (
   </span>
 );
 
-/* ── static copy quoted from /features.html ────────────────────────────── */
-
 const FEATURES = [
   { kicker: "Alerts", title: "Every two minutes, only what is new", body: "A background worker runs every two minutes. A job is never sent to the same student twice." },
   { kicker: "Resume", title: "A resume that reads itself", body: "Upload a PDF, a Word file or a clear photo. Google's Gemini AI extracts what matters and fills in your profile, so you never type it all out." },
   { kicker: "Ranking", title: "Jobs that fit your skills come first", body: "Jobs that mention your skills or projects are pushed to the top of each page and marked Matches your profile." },
   { kicker: "Applying", title: "The safe way to apply", body: "Every job links to the employer's or exam board's own application page. We never take fees on an employer's behalf." },
 ];
-
-/* ── page pieces ───────────────────────────────────────────────────────── */
 
 const FeatureCard: React.FC<{ f: { kicker: string; title: string; body: string } }> = ({ f }) => (
   <div className="rounded-xl px-3.5 py-3" style={SURFACE}>
@@ -253,8 +246,6 @@ const JobSkeleton: React.FC = () => (
   </div>
 );
 
-/* ── header / footer (hosted by Home.tsx) ──────────────────────────────── */
-
 export const JobPortalHeader: React.FC = () => (
   <div className="flex items-center gap-2" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
     <span className="relative flex w-1.5 h-1.5">
@@ -278,8 +269,6 @@ export const JobPortalFooter: React.FC = () => (
     <LinkButton url={LINKS.androidApk} title="Android app (APK)">Download APK</LinkButton>
   </div>
 );
-
-/* ── the tab ───────────────────────────────────────────────────────────── */
 
 export const JobPortalPanel: React.FC = () => {
   const { data, status, parts, retry } = useJobPortalData();
@@ -305,7 +294,6 @@ export const JobPortalPanel: React.FC = () => {
     <div className="flex flex-col gap-5 pb-2 font-sans">
       {status === "fallback" && <Notice onRetry={retry} />}
 
-      {/* ── Hero ── */}
       <Reveal i={next()}>
         <div
           className="relative rounded-2xl overflow-hidden px-5 py-4"
@@ -356,7 +344,6 @@ export const JobPortalPanel: React.FC = () => {
         </div>
       </Reveal>
 
-      {/* ── Stats (live) ── */}
       <Reveal i={next()} busy={statsLoading}>
         <div className="grid grid-cols-4 gap-2">
           {statTiles.map((s) => (
@@ -370,7 +357,6 @@ export const JobPortalPanel: React.FC = () => {
         </div>
       </Reveal>
 
-      {/* ── What it is / who it's for ── */}
       <Reveal i={next()}>
         <SectionTitle kicker="Why it exists" title={COPY.whyTitle} />
         <div className="rounded-xl px-3.5 py-3" style={SURFACE}>
@@ -380,7 +366,6 @@ export const JobPortalPanel: React.FC = () => {
         </div>
       </Reveal>
 
-      {/* ── How it works ── */}
       <Reveal i={next()}>
         <SectionTitle
           kicker="How it works"
@@ -407,7 +392,6 @@ export const JobPortalPanel: React.FC = () => {
         </div>
       </Reveal>
 
-      {/* ── What you get ── */}
       <Reveal i={next()}>
         <SectionTitle kicker="Features" title="Everything the app does for you." right={<TextLink url={LINKS.features}>All features</TextLink>} />
         <div className="grid grid-cols-2 gap-2">
@@ -433,7 +417,6 @@ export const JobPortalPanel: React.FC = () => {
         </div>
       </Reveal>
 
-      {/* ── Categories (live) ── */}
       <Reveal i={next()} busy={catsLoading}>
         <SectionTitle
           kicker="Coverage"
@@ -469,7 +452,6 @@ export const JobPortalPanel: React.FC = () => {
         </div>
       </Reveal>
 
-      {/* ── Pricing (live) ── */}
       <Reveal i={next()} busy={settingsLoading}>
         <SectionTitle
           kicker="Pricing"
@@ -536,7 +518,6 @@ export const JobPortalPanel: React.FC = () => {
         </div>
       </Reveal>
 
-      {/* ── Latest openings (live) ── */}
       <Reveal i={next()} busy={jobsLoading}>
         <SectionTitle kicker="Live" title="Just posted" right={<TextLink url={LINKS.site}>More on job.ghotlyai.in</TextLink>} />
         <div className="flex flex-col gap-1.5" role={jobsLoading ? "status" : undefined} aria-label={jobsLoading ? "Loading the latest openings" : undefined}>
@@ -555,7 +536,7 @@ export const JobPortalPanel: React.FC = () => {
         <p className="mt-2 text-[10.5px] leading-relaxed text-white/50">A plan is needed to open a job's details and its apply link, and to receive alerts.</p>
       </Reveal>
 
-      {/* ── Courses (link only — the live catalogue is read on the site) ── */}
+      {/* Courses: the live catalogue is read on the site. */}
       <Reveal i={next()}>
         <SectionTitle kicker="Courses" title="Learn something worth adding to a resume." right={<TextLink url={LINKS.courses}>See courses</TextLink>} />
         <div className="rounded-xl px-3.5 py-3" style={SURFACE}>
@@ -568,13 +549,11 @@ export const JobPortalPanel: React.FC = () => {
         </div>
       </Reveal>
 
-      {/* ── FAQ ── */}
       <Reveal i={next()}>
         <SectionTitle kicker="Questions" title="Everything students ask before they start." />
         <Faq />
       </Reveal>
 
-      {/* ── Links ── */}
       <Reveal i={next()}>
         <SectionTitle kicker="Links" title="Get the app, get help" />
         <div className="grid grid-cols-2 gap-2">
@@ -615,7 +594,7 @@ export const JobPortalPanel: React.FC = () => {
         </p>
       </Reveal>
 
-      {/* ── Disclaimer (the site's own wording) ── */}
+      {/* Disclaimer uses the site's own wording. */}
       <Reveal i={next()}>
         <p className="text-[10px] leading-relaxed text-white/50 px-1">{COPY.disclaimer}</p>
       </Reveal>

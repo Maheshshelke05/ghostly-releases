@@ -1,20 +1,8 @@
-/**
- * GhotlyAI Job Portal (https://job.ghotlyai.in) — live data + official links for the desktop app.
- *
- * Rule for everything the Job Portal tab / popup shows: a statement is either quoted from the live website
- * (the page is noted next to the copy below) or it is a value the live public API returns at runtime — the very same
- * endpoints the website's own script (assets/js/site.js) calls. Nothing is invented. When unsure, it is left out.
- *
- * Network behaviour (the public endpoints are rate-limited per IP on the server, so this is deliberately gentle):
- *  - one request per endpoint, cached for 5 minutes at module level, so re-opening the tab costs nothing;
- *  - concurrent callers share the in-flight request (de-dupe); there is no polling and no background timer;
- *  - every request is aborted after 8 s; any failure (offline, timeout, 4xx/5xx, malformed JSON) falls back to the
- *    snapshot constants below — the same "baked values stay if the live call fails" approach the website uses.
- */
+/** Copy quoted from https://job.ghotlyai.in or returned by its public API. Endpoints are IP
+ *  rate-limited: one cached request per endpoint (5 min), de-duped, 8 s timeout, snapshot fallback. */
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 
-/* ── official links (every one of these is linked from the live site) ───────────────────────────────────────────── */
-
+// Every link here is linked from the live site.
 export const SITE_URL = "https://job.ghotlyai.in/";
 export const API_URL = "https://api.ghotlyai.in";
 export const SUPPORT_EMAIL = "support@ghotlyai.in";
@@ -36,8 +24,6 @@ export const LINKS = {
   androidApk: `${API_URL}/releases/student/latest`,
   support: `mailto:${SUPPORT_EMAIL}`,
 } as const;
-
-/* ── types ──────────────────────────────────────────────────────────────────────────────────────────────────────── */
 
 export interface PortalStats {
   students: number;
@@ -85,8 +71,8 @@ export interface PortalState {
   retry: () => void;
 }
 
-/* ── fallback snapshot (the live API on 2026-10-07) — used only when the API cannot be reached ───────────────────
-   The tab labels these as "Saved" figures. students / jobsWeek drift every day; everything else rarely changes. */
+// Snapshot from the live API on 2026-10-07, used only when the API cannot be reached.
+// The tab labels these "Saved"; students / jobsWeek drift daily, everything else rarely changes.
 
 export const FALLBACK_STATS: PortalStats = { students: 214, jobsWeek: 5603, categories: 40, delaySec: 120 };
 
@@ -112,8 +98,6 @@ export const FALLBACK_CATEGORIES: string[] = [
 
 /** Never made up: with no live answer there are simply no openings to show. */
 export const FALLBACK_JOBS: PortalJob[] = [];
-
-/* ── fetching ───────────────────────────────────────────────────────────────────────────────────────────────────── */
 
 const TIMEOUT_MS = 8_000;
 const TTL_OK_MS = 5 * 60_000; // successful answers are reused for 5 minutes
@@ -210,8 +194,6 @@ const SPECS: { [K in PartKey]: { path: string; parse: (raw: unknown) => PortalDa
   jobs: { path: `/public/jobs/recent?limit=${RECENT_JOBS_LIMIT}`, parse: parseJobs, fallback: FALLBACK_JOBS },
 };
 
-/* ── module-level cache + in-flight de-dupe, exposed to React through a tiny external store ────────────────────── */
-
 interface Entry {
   value: unknown;
   ok: boolean;
@@ -269,10 +251,8 @@ function load(key: PartKey, force = false): Promise<void> {
 
 const ALL_PARTS: readonly PartKey[] = ["stats", "settings", "categories", "jobs"];
 
-/**
- * Live Job Portal data. `parts` limits which endpoints this caller needs (the sponsor preview only needs "jobs"),
- * and nothing is fetched until a component using the hook is actually mounted.
- */
+// Live Job Portal data. `parts` limits the endpoints this caller needs (the sponsor preview only
+// wants "jobs"); nothing is fetched until a component using the hook mounts.
 export function useJobPortalData(parts: readonly PartKey[] = ALL_PARTS): PortalState {
   useSyncExternalStore(subscribe, getVersion);
   const wanted = parts.join(",");
@@ -312,8 +292,6 @@ export function useJobPortalData(parts: readonly PartKey[] = ALL_PARTS): PortalS
   };
 }
 
-/* ── formatting ─────────────────────────────────────────────────────────────────────────────────────────────────── */
-
 /** "₹99" — the website formats rupees with Indian digit grouping too. */
 export const inr = (n: number) => `₹${n.toLocaleString("en-IN")}`;
 export const num = (n: number) => n.toLocaleString("en-IN");
@@ -340,12 +318,10 @@ export const jobTypeIcon = (type: string): string => {
 /** "Rentomojo · Bengaluru · 14h ago" — built exactly like the website's "Just posted" ticker. */
 export const jobMeta = (j: PortalJob) => [j.company, j.city, j.postedAgo].filter(Boolean).join(" · ");
 
-/* ── copy quoted from the live site (page noted) — shared by the tab and the popup ──────────────────────────────── */
-
 export const COPY = {
   /** job.ghotlyai.in — page <title> and nav */
   brand: "GhotlyAI Job Portal",
-  /** job.ghotlyai.in — <title>: "GhotlyAI Job Portal — Job alerts for students, matched to your resume" */
+  /** job.ghotlyai.in — <title> */
   tagline: "Job alerts for students",
   /** every page footer — the site's own one-line description (HomePage.tsx's sponsor popup can show this under COPY.brand) */
   blurb: "Government, private, internship and work-from-home jobs for students and freshers, scam-checked, matched to your resume and sent within minutes.",
@@ -429,10 +405,7 @@ export const COPY = {
     "GhotlyAI is an alert and information service. We are not a recruitment agency or a consultancy, and we do not promise employment.",
 } as const;
 
-/**
- * /how-it-works.html "Set up in four steps". "{max}" is replaced by the live category limit
- * (the website fills the same number in from /student/settings) — see `fillMax`.
- */
+// /how-it-works.html steps. "{max}" is the live category limit from /student/settings (filled by splitMax).
 export const HOW_IT_WORKS = [
   {
     title: "Sign in with Google",

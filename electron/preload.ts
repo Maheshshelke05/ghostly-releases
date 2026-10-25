@@ -4,7 +4,6 @@ contextBridge.exposeInMainWorld("ghostly", {
   // Open URL in system browser (Chrome etc)
   openExternal: (url: string): void => ipcRenderer.send("ghostly:open-external", url),
 
-  // System Audio source fetcher
   getDesktopSources: (): Promise<{id: string, name: string}[]> =>
     ipcRenderer.invoke("ghostly:get-desktop-sources"),
 
@@ -23,7 +22,6 @@ contextBridge.exposeInMainWorld("ghostly", {
     return () => ipcRenderer.removeListener("ghostly:show", listener);
   },
 
-  // Capture
   captureFullscreen: (): Promise<string> =>
     ipcRenderer.invoke("ghostly:capture-fullscreen"),
 
@@ -32,7 +30,6 @@ contextBridge.exposeInMainWorld("ghostly", {
   saveSettings: (settings: any): Promise<void> =>
     ipcRenderer.invoke("save-settings", settings),
 
-  // Opacity control
   setOpacity: (value: number): void => ipcRenderer.send("ghostly:set-opacity", value),
 
   // History persistence
@@ -68,9 +65,8 @@ contextBridge.exposeInMainWorld("ghostly", {
     return () => ipcRenderer.removeListener("ghostly:hotkey-conflict", listener);
   },
 
-  // Local OAuth-callback server (port 7842) failed to start — login can never
-  // complete until this is surfaced, since the previous behavior was an
-  // undiagnosable, permanent "Waiting for browser login..." hang.
+  // Local OAuth-callback server (port 7842) failed to start — surfaced here because
+  // login can otherwise hang on "Waiting for browser login..." forever.
   getPendingAuthServerError: (): Promise<string | null> =>
     ipcRenderer.invoke("ghostly:get-pending-auth-server-error"),
   onAuthServerError: (cb: (message: string) => void): (() => void) => {

@@ -1,26 +1,5 @@
-/**
- * GhostMascot - the animated Ghotly AI ghost (glossy, sunglasses, arms crossed).
- *
- *   <GhostMascot size={96} variant="hello" />          // pop-in, then periodically swings an arm in and
- *                                                       // crosses it over the chest with a little bounce
- *   <GhostMascot size={64} />                          // idle: float, breathe, tilt, gentle arm sway
- *   <GhostMascot size={28} variant="calm" />           // float only, arm at rest (also forced for size <= 40)
- *   <GhostLogo size={20} />                            // plain static <img> for tiny / list usage
- *
- * Pure CSS animation (see ghost-mascot.css): transform / translate / rotate / scale / opacity only,
- * no framer-motion, no JS per frame. Self-contained: copy this file, ghost-mascot.css and the
- * assets/ghost folder to another Vite project and it works as-is (assets are ES-imported, so URLs
- * resolve under http dev, hashed production builds and file:// packaged apps alike).
- *
- * Rig: two raster layers on one shared 1024px canvas (percentage-positioned, so any `size` works) -
- *   gm-base  the whole ghost (head, shades, the back arm, hem) with the FRONT arm's own hole inpainted shut
- *   gm-arm   just the front arm/sleeve, rotated with a plain CSS `transform: rotate()` around its shoulder
- *            (`transform-origin`) - a rigid cutout "paper doll" joint, not a pre-rendered pose sprite strip,
- *            which is what makes the arm visibly swing in and cross rather than just sit crossed already.
- *   gm-glow  soft rim halo, same recipe as the very first mascot build.
- * `base + arm, both at rest (rotate(0))` reproduces the original artwork exactly - see src/components/
- * ghost/README.md for how this was built and how to re-derive the numbers below if the art changes.
- */
+/** GhostMascot - animated ghoul. Pure CSS, no JS per frame: two raster layers on one shared canvas
+ *  where base + arm at rest reproduces the original art. */
 import {
   useEffect,
   useId,
@@ -89,7 +68,7 @@ function pickStatic(cssSize: number, dpr: number): string {
   return ghost512;
 }
 
-/* ---------- pixel density: SSR/hydration safe (server snapshot = 2), follows zoom / monitor changes ---------- */
+// SSR/hydration safe: server snapshot is 2; follows zoom and monitor changes.
 const dprListeners = new Set<() => void>();
 let dprBound = false;
 function subscribeDpr(cb: () => void) {
@@ -106,7 +85,7 @@ function subscribeDpr(cb: () => void) {
 const getDpr = () => Math.min(Math.max(typeof window !== "undefined" ? window.devicePixelRatio || 1 : 2, 1), 3);
 const getServerDpr = () => 2;
 
-/* ---------- one shared visibility listener: pauses every mascot while the page is hidden ---------- */
+// One shared listener pauses every mascot while the page is hidden.
 let visibilityBound = false;
 function bindVisibilityOnce() {
   if (visibilityBound || typeof document === "undefined") return;
@@ -116,7 +95,6 @@ function bindVisibilityOnce() {
   apply();
 }
 
-/* ---------- reduced motion ---------- */
 const RM_QUERY = "(prefers-reduced-motion: reduce)";
 function subscribeReducedMotion(cb: () => void) {
   if (typeof window === "undefined" || !window.matchMedia) return () => {};
@@ -126,7 +104,6 @@ function subscribeReducedMotion(cb: () => void) {
 }
 const getReducedMotion = () => (typeof window !== "undefined" && !!window.matchMedia ? window.matchMedia(RM_QUERY).matches : false);
 
-/* ---------- animated layer preloading (shared across instances) ---------- */
 const ANIM_URLS = [animBase, animArm, animGlow];
 const loadedUrls = new Set<string>();
 const failedUrls = new Set<string>();
@@ -170,7 +147,7 @@ function useAnimAssets(enabled: boolean): AnimStatus {
   return enabled ? status : "idle";
 }
 
-/* ---------- per-instance randomness (deterministic from useId -> SSR/prerender safe) ---------- */
+// Deterministic from useId, so SSR/prerender safe.
 function mulberry32(seed: number) {
   let a = seed >>> 0;
   return () => {

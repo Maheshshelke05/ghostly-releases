@@ -1,14 +1,14 @@
-# Contributing to Ghostly AI Desktop App 👻
+# Contributing to Ghostly AI Desktop App
 
-Thank you for your interest in contributing to **Ghostly AI Desktop App**! Ghostly AI is a 100% free and open-source stealth AI interview copilot for Windows designed to help students and software engineers ace technical interviews.
+Thank you for your interest in contributing to **Ghostly AI Desktop App**. Ghostly AI is a free and open-source stealth interview assistant for Windows, built to help students and software engineers with technical interviews.
 
 ---
 
-## 🛠️ Project Architecture
+## Project architecture
 
 Ghostly AI Desktop App is an Electron app built with:
 
-- **Framework**: Electron 34 + React 18 + Vite 5 + TypeScript
+- **Framework**: Electron 28 + React 18 + Vite 5 + TypeScript
 - **Styling**: TailwindCSS + Framer Motion
 - **Stealth Engine**: Windows Win32 `WDA_EXCLUDEFROMCAPTURE` API (`electron/stealth.ts`)
 - **Speech-to-Text**: Deepgram WebSocket API (`src/hooks/useInterviewAudio.ts`)
@@ -16,20 +16,20 @@ Ghostly AI Desktop App is an Electron app built with:
 
 ---
 
-## 🚀 Getting Started Locally
+## Getting started locally
 
 ### Prerequisites
 
-- **Node.js**: v18.x or v20.x
+- **Node.js**: v20.x or newer
 - **npm**: v9+ or v10+
 - **OS**: Windows 10/11 (required for native `WDA_EXCLUDEFROMCAPTURE` stealth testing)
 
-### Local Setup
+### Local setup
 
 1. **Clone the repository:**
    ```bash
    git clone https://github.com/Maheshshelke05/ghostly-releases.git
-   cd ghostly-desktop-app
+   cd ghostly-releases
    ```
 
 2. **Install dependencies:**
@@ -55,19 +55,19 @@ Ghostly AI Desktop App is an Electron app built with:
 
 ---
 
-## 💡 Key Areas for Community Contributions
+## Key areas for contributions
 
-- 🎤 **Local STT**: Integrating Whisper.cpp or Web Speech API for offline speech-to-text.
-- 🤖 **New LLM Connectors**: Supporting new providers (DeepSeek V3/R1, Claude 3.7, local Ollama models).
-- 🥷 **Cross-Platform Stealth**: Porting stealth overlay functionality to macOS / Linux.
-- 🎨 **UI Improvements**: Shortcut remapping UI, dark modes, response text readability.
+- **Local STT**: integrating Whisper.cpp or Web Speech API for offline speech-to-text.
+- **New LLM connectors**: supporting new providers (DeepSeek V3/R1, Claude 3.7, local Ollama models).
+- **Cross-platform stealth**: porting the stealth overlay to macOS and Linux.
+- **UI improvements**: dark mode, response text readability and layout polish.
 
 ---
 
-## 📝 Pull Request Checklist
+## Pull request checklist
 
-1. Run TypeScript checks: `npx tsc --noEmit`
+1. Run the TypeScript checks for both projects: `npx tsc -p tsconfig.node.json --noEmit` and `npx tsc -p tsconfig.web.json --noEmit`. The root `tsconfig.json` is solution-style (`files: []`), so a bare `npx tsc --noEmit` checks nothing.
 2. Test keyboard hotkeys and stealth window behavior in dev mode.
 3. Ensure no hardcoded API keys or personal secrets are committed.
 
-Thank you for contributing! 🚀
+Thanks for contributing.

@@ -3,25 +3,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useStore, type Settings } from "../store/useStore";
 import { AI_PROVIDERS, testApiKey, type AIProviderConfig } from "../pages/ApiSetupPage";
 import { toSyncBadge, type KeySyncBadge } from "../lib/keySync";
-import { REMAPPABLE_SHORTCUTS, formatAccelerator, keyEventToAccelerator } from "../lib/shortcuts";
+import { REMAPPABLE_SHORTCUTS, formatAccelerator, keyEventToAccelerator, isUnsupportedKey } from "../lib/shortcuts";
 import { isProviderDisabled, withoutDisabled } from "../lib/providerState";
 import { AudioDiagnostics } from "./AudioDiagnostics";
 import GhostMascot from "./ghost/GhostMascot";
 
-// Light-theme Settings reachable straight from HomePage — API Keys (with a
-// per-provider Active switch), Keyboard Shortcuts, and app info in one place a
-// user can open any time, without starting an interview first. Reuses the same
-// provider list / real key-test / shortcut-remap logic as the setup wizard and
-// the in-interview panel (AI_PROVIDERS, testApiKey, REMAPPABLE_SHORTCUTS) so
-// there is still exactly one source of truth for those.
-//
-// The same panel is opened from the live-interview screen's gear button
-// (topInset keeps it clear of that screen's top bar), so every setting —
-// keys, Active/Off, shortcuts, opacity, audio test — is reachable in both places.
-//
-// No dimmed backdrop: the window is transparent and click-through everywhere
-// except over the card itself, so whatever is underneath stays visible and
-// clickable. Esc (or the X) closes it.
+// Settings panel shared by HomePage and the interview gear button. No dimmed
+// backdrop: the window is click-through except over the card; Esc or X closes.
 
 const INK = "#15162b";
 const SUBTLE = "#6b7280";
@@ -40,8 +28,6 @@ const AMBER = "#b45309";
 type TestState = { status: "idle" | "testing" | "valid" | "invalid"; message?: string };
 type ProviderState = "active" | "ready" | "off" | "empty";
 type Tab = "keys" | "shortcuts" | "more";
-
-/* ─── Small building blocks ─── */
 
 function Spinner({ size = 12, color = "currentColor" }: { size?: number; color?: string }) {
   return (
@@ -158,7 +144,7 @@ function Keycaps({ combo, dim }: { combo: string; dim?: boolean }) {
 function SectionLabel({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between px-0.5">
-      <span className="text-[9px] font-black uppercase tracking-[0.14em]" style={{ color: FAINT }}>{children}</span>
+      <span role="heading" aria-level={3} className="text-[9px] font-black uppercase tracking-[0.14em]" style={{ color: FAINT }}>{children}</span>
       {right}
     </div>
   );
@@ -188,9 +174,8 @@ function ResultLine({ test, okHint }: { test: TestState; okHint?: string }) {
   );
 }
 
-// "☁ Saved to your account" (green) / "☁ Couldn't back up…" (amber) under a Test result — pressing Test
-// also saves the key to the user's account (lib/keySync.ts). Renders nothing when there is nothing to
-// say (not signed in, still in flight…), so the Test row layout is never disturbed.
+// "☁ Saved to your account" / "☁ Couldn't back up…" under a Test result (Test also
+// saves the key, lib/keySync.ts); renders nothing when there's nothing to say.
 function SyncNote({ badge }: { badge?: KeySyncBadge }) {
   if (!badge) return null;
   return (
@@ -251,8 +236,6 @@ function ModelPicker({ provider, value, onChange }: { provider: AIProviderConfig
   );
 }
 
-/* ─── One AI provider ─── */
-
 interface ProviderCardProps {
   p: AIProviderConfig;
   state: ProviderState;
@@ -278,9 +261,8 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
   const [nudge, setNudge] = useState(false);
   const lastActivatedAt = useRef(0);
 
-  // Single click activates. Once active, a single click only reminds how to
-  // deactivate; a double-click deactivates. The two clicks of a double-click
-  // that ACTIVATED a provider must not immediately deactivate it again.
+  // Single click activates; once active, one click just nudges and a double-click
+  // deactivates. The second click of an activating double-click must not undo it.
   const handleActiveClick = () => {
     if (!hasKey) return;
     if (state === "active") {
@@ -374,7 +356,6 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
                 </div>
               </div>
 
-              {/* Test + Active side by side */}
               <div className="grid grid-cols-2 gap-2">
                 <motion.button
                   whileTap={hasKey ? { scale: 0.97 } : undefined}
@@ -417,8 +398,6 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
   );
 };
 
-/* ─── Panel ─── */
-
 interface HomeSettingsPanelProps {
   onClose: () => void;
   // Pixels reserved above the card (the interview screen's top bar).
@@ -428,10 +407,8 @@ interface HomeSettingsPanelProps {
 export const HomeSettingsPanel: React.FC<HomeSettingsPanelProps> = ({ onClose, topInset = 0 }) => {
   const { settings, updateSettings } = useStore();
   const [tab, setTab] = useState<Tab>("keys");
-  // The exit animation lives here (not in an outer AnimatePresence): with the
-  // tab switcher's own AnimatePresence nested inside, a parent-driven exit could
-  // hang after switching tabs and leave an invisible card that still grabbed the
-  // mouse. onClose (which unmounts us) only fires once the fade-out has played.
+  // Exit animation lives here, not in an outer AnimatePresence: a parent-driven
+  // exit could hang after switching tabs and leave an invisible card grabbing mouse.
   const bodyRef = useRef<HTMLDivElement>(null);
   useEffect(() => { bodyRef.current?.scrollTo({ top: 0 }); }, [tab]);
   const [closing, setClosing] = useState(false);
@@ -468,7 +445,6 @@ export const HomeSettingsPanel: React.FC<HomeSettingsPanelProps> = ({ onClose, t
     }
   }, []);
 
-  // ── API Keys state ──────────────────────────────────────────────────────
   const [deepgram, setDeepgram] = useState(settings.deepgramApiKey || "");
   const [aiKeys, setAiKeys] = useState<Record<string, string>>(() => {
     const k: Record<string, string> = {};
@@ -485,9 +461,8 @@ export const HomeSettingsPanel: React.FC<HomeSettingsPanelProps> = ({ onClose, t
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [expanded, setExpanded] = useState<string | null>(null);
   const [testStatus, setTestStatus] = useState<Record<string, TestState>>({});
-  // How the background "save to your account" went for each provider's latest Test. testSeq numbers the
-  // Tests per provider so a late answer to an older Test (or to a key that has since been edited) can't
-  // overwrite what the indicator shows now.
+  // testSeq numbers Tests per provider so a late answer to an older Test (or an
+  // edited key) can't overwrite the indicator shown now.
   const [syncBadge, setSyncBadge] = useState<Record<string, KeySyncBadge | undefined>>({});
   const testSeq = useRef<Record<string, number>>({});
   const invalidateSync = (providerId: string) => {
@@ -541,10 +516,8 @@ export const HomeSettingsPanel: React.FC<HomeSettingsPanelProps> = ({ onClose, t
     const st = useStore.getState().settings;
     const trimmed = v.trim();
     const patch: Partial<Settings> = { apiKeys: { ...st.apiKeys, [id]: trimmed } };
-    // If nothing usable is answering yet (the chosen provider has no key and
-    // wasn't deliberately deactivated), the first key you add takes over so a
-    // fresh setup works without a separate Activate press. Never switches away
-    // from a provider that already has a key.
+    // If nothing usable is answering yet, the first key added takes over so a fresh
+    // setup works without Activate. Never switches away from a provider with a key.
     const activeHasKey = !!st.apiKeys[st.activeProvider]?.trim();
     if (trimmed && !activeHasKey && id !== st.activeProvider && !isProviderDisabled(st, st.activeProvider)) {
       patch.activeProvider = id as Settings["activeProvider"];
@@ -572,13 +545,17 @@ export const HomeSettingsPanel: React.FC<HomeSettingsPanelProps> = ({ onClose, t
   const addedCount = AI_PROVIDERS.filter((p) => aiKeys[p.id]?.trim()).length;
   const hasReady = AI_PROVIDERS.some((p) => stateOf(p) === "ready");
 
-  // ── Shortcuts state ─────────────────────────────────────────────────────
   const [shortcuts, setShortcuts] = useState<Record<string, string>>({});
   const [recordingAction, setRecordingAction] = useState<string | null>(null);
   const [shortcutError, setShortcutError] = useState<string | null>(null);
   const [resetDone, setResetDone] = useState(false);
 
-  useEffect(() => { window.ghostly.getShortcuts().then(setShortcuts); }, []);
+  useEffect(() => {
+    window.ghostly
+      .getShortcuts()
+      .then(setShortcuts)
+      .catch(() => setShortcutError("Couldn't read your shortcuts — reopen Settings to try again."));
+  }, []);
 
   useEffect(() => {
     if (!recordingAction) return;
@@ -586,7 +563,12 @@ export const HomeSettingsPanel: React.FC<HomeSettingsPanelProps> = ({ onClose, t
       e.preventDefault();
       if (e.key === "Escape") { setRecordingAction(null); return; }
       const accelerator = keyEventToAccelerator(e);
-      if (!accelerator) return;
+      if (!accelerator) {
+        // Modifier-only presses keep waiting silently; an unusable key needs an
+        // explanation or the recorder just looks broken.
+        if (isUnsupportedKey(e)) setShortcutError("That key can't be used — try a letter, number, F-key or arrow.");
+        return;
+      }
       const action = recordingAction;
       setRecordingAction(null);
 
@@ -601,7 +583,7 @@ export const HomeSettingsPanel: React.FC<HomeSettingsPanelProps> = ({ onClose, t
       window.ghostly.updateShortcuts(next).then((result) => {
         if (result.ok) setShortcuts(next);
         else setShortcutError(`"${formatAccelerator(accelerator)}" couldn't be registered (already in use by another app?)`);
-      });
+      }).catch(() => setShortcutError("Couldn't save that shortcut — try again."));
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
@@ -613,7 +595,7 @@ export const HomeSettingsPanel: React.FC<HomeSettingsPanelProps> = ({ onClose, t
       setShortcutError(null);
       setResetDone(true);
       window.setTimeout(() => setResetDone(false), 1800);
-    }));
+    })).catch(() => setShortcutError("Couldn't reset your shortcuts — try again."));
   };
 
   // Esc closes — except while a shortcut is being recorded (that handler owns
@@ -664,7 +646,6 @@ export const HomeSettingsPanel: React.FC<HomeSettingsPanelProps> = ({ onClose, t
           overflow: "hidden",
         }}
       >
-        {/* Header */}
         <div className="flex items-center justify-between px-5 pt-4 pb-3 shrink-0">
           <div className="flex items-center gap-2.5">
             <span className="w-8 h-8 rounded-[10px] flex items-center justify-center text-[15px]" style={{ background: PANEL_BG, border: `1px solid ${BORDER}` }}>⚙️</span>
@@ -684,7 +665,6 @@ export const HomeSettingsPanel: React.FC<HomeSettingsPanelProps> = ({ onClose, t
           </button>
         </div>
 
-        {/* Tabs */}
         <div className="px-5 pb-3 shrink-0">
           <div className="relative flex p-1 rounded-2xl" style={{ background: PANEL_BG, border: `1px solid ${BORDER}` }}>
             {tabs.map((t) => {
@@ -712,12 +692,10 @@ export const HomeSettingsPanel: React.FC<HomeSettingsPanelProps> = ({ onClose, t
           </div>
         </div>
 
-        {/* Body */}
         <div ref={bodyRef} className="px-5 pb-5 flex-1 min-h-0 overflow-y-auto" style={{ scrollbarWidth: "thin", overscrollBehavior: "contain" }}>
           <AnimatePresence mode="wait" initial={false}>
             {tab === "keys" ? (
               <motion.div key="keys" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.14 }} className="flex flex-col gap-4">
-                {/* Who is answering right now */}
                 {activeState === "active" && activeP ? (
                   <div className="rounded-2xl px-3.5 py-3 flex items-center gap-3" style={{ background: "linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%)", border: `1px solid ${GREEN_BORDER}` }}>
                     <span className="w-10 h-10 rounded-xl flex items-center justify-center text-[18px] shrink-0" style={{ background: "#fff", border: `1px solid ${GREEN_BORDER}` }}>{activeP.icon}</span>
@@ -742,14 +720,12 @@ export const HomeSettingsPanel: React.FC<HomeSettingsPanelProps> = ({ onClose, t
                   </div>
                 )}
 
-                {/* Pressing Test also saves the key to the user's account (lib/keySync.ts) — say so up front. */}
                 <p className="text-[10px] font-medium leading-snug px-0.5 -my-1" style={{ color: SUBTLE, userSelect: "text" }}>
                   🔒 When you press Test, the key is saved (encrypted) to your Ghotly AI account. Email{" "}
                   <button onClick={() => window.ghostly.openExternal("mailto:support@ghotlyai.in")} className="font-bold hover:underline" style={{ color: ACCENT }}>support@ghotlyai.in</button>{" "}
                   to have it deleted.
                 </p>
 
-                {/* Deepgram */}
                 <div className="flex flex-col gap-2">
                   <SectionLabel right={<button onClick={() => window.ghostly.openExternal("https://console.deepgram.com/signup")} className="text-[9.5px] font-bold hover:underline" style={{ color: ACCENT }}>Get key ↗</button>}>
                     🎙️ Deepgram · speech-to-text
@@ -791,9 +767,8 @@ export const HomeSettingsPanel: React.FC<HomeSettingsPanelProps> = ({ onClose, t
                   <ResultLine test={testStatus.deepgram || { status: "idle" }} />
                   <SyncNote badge={syncBadge.deepgram} />
                   {!deepgram.trim() && <p className="text-[9.5px] font-semibold px-0.5" style={{ color: AMBER }}>Required — live transcription can't start without it.</p>}
-                  {/* Interviewer mixing Hindi/another language with English? Deepgram's
-                      default only transcribes English well; this opts into another
-                      language or code-switching ("multi") without changing the default. */}
+                  {/* Interviewer mixing Hindi with English? Deepgram defaults to
+                      English; this opts into another language or "multi". */}
                   <input
                     type="text"
                     value={settings.deepgramLanguage || ""}
@@ -808,7 +783,6 @@ export const HomeSettingsPanel: React.FC<HomeSettingsPanelProps> = ({ onClose, t
                   </p>
                 </div>
 
-                {/* AI providers */}
                 <div className="flex flex-col gap-2">
                   <SectionLabel right={<span className="text-[9.5px] font-bold" style={{ color: addedCount ? GREEN : FAINT }}>{addedCount}/{AI_PROVIDERS.length} added</span>}>
                     🤖 AI providers
@@ -834,7 +808,6 @@ export const HomeSettingsPanel: React.FC<HomeSettingsPanelProps> = ({ onClose, t
                     />
                   ))}
 
-                  {/* Auto-switch: only ever uses providers that are Ready (Off ones are excluded). */}
                   <div className="rounded-2xl px-3.5 py-3 flex items-center gap-3 mt-1" style={{ background: PANEL_BG, border: `1px solid ${BORDER}` }}>
                     <div className="min-w-0 flex-1">
                       <p className="text-[11px] font-bold" style={{ color: INK }}>Auto-switch on rate limit</p>

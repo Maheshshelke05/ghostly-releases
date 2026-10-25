@@ -1,19 +1,154 @@
-import React, { useEffect } from "react";
+import React, { useCallback, useEffect, useRef, useState, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useStore } from "./store/useStore";
-import { HomePage } from "./pages/HomePage";
-import { LoginPage } from "./pages/LoginPage";
-import { InterviewSetupPage } from "./pages/InterviewSetupPage";
-import { ApiSetupPage, AI_PROVIDERS } from "./pages/ApiSetupPage";
-import { AudioSetupPage } from "./pages/AudioSetupPage";
-import { Home } from "./pages/Home";
+import { resetKeySyncCache } from "./lib/keySync";
+// Only ApiSetupPage's provider table is eager (it seeds the retired-model fix on
+// load); heavy pages stay lazy so the login screen doesn't pull the whole engine.
+import { AI_PROVIDERS, ApiSetupPage } from "./pages/ApiSetupPage";
 import { UpdateAnimation } from "./components/UpdateAnimation";
 import { SplashScreen } from "./components/SplashScreen";
 import "./styles/global.css";
 
+const HomePage       = React.lazy(() => import("./pages/HomePage").then((m) => ({ default: m.HomePage })));
+const LoginPage      = React.lazy(() => import("./pages/LoginPage").then((m) => ({ default: m.LoginPage })));
+const InterviewSetupPage = React.lazy(() => import("./pages/InterviewSetupPage").then((m) => ({ default: m.InterviewSetupPage })));
+const AudioSetupPage = React.lazy(() => import("./pages/AudioSetupPage").then((m) => ({ default: m.AudioSetupPage })));
+const Home           = React.lazy(() => import("./pages/Home").then((m) => ({ default: m.Home })));
+
+const SETUP_STEPS = [
+  { key: "interview-setup", label: "Session",  icon: "🎯" },
+  { key: "audio-setup",     label: "Audio",    icon: "🎙️" },
+] as const;
+
+// Module scope on purpose: inside App's body it got a new function identity each
+// render, remounting its whole subtree on every streamed chunk.
+const StepIndicator: React.FC<{ appScreen: string }> = ({ appScreen }) => {
+  const currentIdx = SETUP_STEPS.findIndex(s => s.key === appScreen);
+  return (
+    <div
+      className="fixed top-2 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-1 px-3 py-1.5 rounded-full"
+      style={{ background: "rgba(10,10,14,0.92)", border: "1px solid rgba(255,255,255,0.1)", backdropFilter: "blur(20px)", boxShadow: "0 4px 16px rgba(0,0,0,0.4)", pointerEvents: "none" }}
+    >
+      {SETUP_STEPS.map((step, i) => {
+        const isDone   = i < currentIdx;
+        const isActive = i === currentIdx;
+        return (
+          <React.Fragment key={step.key}>
+            <div className="flex items-center gap-1">
+              <div
+                className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black transition-all"
+                style={{
+                  background: isDone ? "#10b981" : isActive ? "rgba(235,146,69,0.9)" : "rgba(255,255,255,0.08)",
+                  border: `1px solid ${isDone ? "#059669" : isActive ? "#eb9245" : "rgba(255,255,255,0.12)"}`,
+                  color: isDone || isActive ? "#fff" : "rgba(255,255,255,0.3)",
+                }}
+              >
+                {isDone ? "✓" : step.icon}
+              </div>
+              <span className="text-[9px] font-bold" style={{ color: isActive ? "rgba(255,255,255,0.85)" : isDone ? "#10b981" : "rgba(255,255,255,0.25)" }}>
+                {step.label}
+              </span>
+            </div>
+            {i < SETUP_STEPS.length - 1 && <div className="w-4 h-px mx-0.5" style={{ background: isDone ? "#10b981" : "rgba(255,255,255,0.1)" }} />}
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+};
+
+const PageFallback: React.FC = () => (
+  <div className="h-screen w-full flex items-center justify-center" style={{ background: "#f2f3f6" }}>
+    <span
+      role="status"
+      aria-label="Loading"
+      className="w-5 h-5 rounded-full animate-spin"
+      style={{ border: "2px solid #c7c9f0", borderTopColor: "#6d6fb0" }}
+    />
+  </div>
+);
+
+// The account/login helpers live at module scope so nothing in them needs to be
+// a dependency of an effect — they only ever touch the store through getState().
+const applyAccountPayload = async (data: any) => {
+  const savedAds = await window.ghostly.getAds().catch(() => []);
+  const currentAds = useStore.getState().ads;
+  const latestAds = Array.isArray(data.ads)
+    ? data.ads
+    : currentAds.length > 0
+      ? currentAds
+      : Array.isArray(savedAds)
+        ? savedAds
+        : [];
+  useStore.getState().setAds(latestAds);
+  await window.ghostly.saveAds(latestAds);
+};
+
+const handleBlockedAuth = async () => {
+  await window.ghostly.logoutUser();
+  resetKeySyncCache();
+  useStore.getState().setUser(null);
+  useStore.getState().setAds([]);
+  useStore.getState().setAppScreen("login");
+};
+
+// Idempotent per token: the IPC listener and the pending-token buffer can both
+// deliver the same token; running twice meant duplicate fetches and saves.
+const authTokenInFlight = new Set<string>();
+
+const handleAuthToken = async ({ token, user }: { token: string; user: any }) => {
+  if (!token || authTokenInFlight.has(token)) return;
+  authTokenInFlight.add(token);
+  const { setLoginError, setUser, setAppScreen } = useStore.getState();
+  setLoginError(null);
+  try {
+    const res = await fetch(`${import.meta.env.VITE_API_URL}/subscription`, {
+      headers: { Authorization: `Bearer ${token}` },
+      // Bounded: a slow/unreachable backend otherwise left the user stuck on
+      // "Waiting for browser login..." even though OAuth had already succeeded.
+      signal: AbortSignal.timeout(10000),
+    });
+    if (res.status === 403) {
+      await handleBlockedAuth();
+      // Not alert(): the native OS dialog isn't covered by stealth
+      // (WDA_EXCLUDEFROMCAPTURE) and can appear in a screen-share. LoginPage shows this.
+      setLoginError("Your Ghotly AI account has been blocked. Please contact support if this is a mistake.");
+      return;
+    }
+    if (!res.ok) {
+      console.error(`[Ghostly] /subscription returned ${res.status} after login`);
+      setLoginError(`Server error (${res.status}) finishing login. Please try again in a moment.`);
+      return;
+    }
+    const data = await res.json();
+    const fullUser = { ...user, idToken: token };
+    setUser(fullUser);
+    await window.ghostly.saveUser(fullUser);
+    await applyAccountPayload(data);
+    setAppScreen("home");
+  } catch (err) {
+    console.error("[Ghostly] Failed to complete login:", err);
+    const isTimeout = err instanceof Error && err.name === "TimeoutError";
+    setLoginError(isTimeout
+      ? "Server took too long to respond. Check your connection and try again."
+      : "Something went wrong finishing login. Please try again.");
+  } finally {
+    // Released so a later retry with the same token can still run.
+    authTokenInFlight.delete(token);
+  }
+};
+
+const detectPlatform = (): string => {
+  const ua = (typeof navigator !== "undefined" ? navigator.userAgent : "").toLowerCase();
+  if (ua.includes("win")) return "windows";
+  if (ua.includes("mac")) return "macos";
+  if (ua.includes("linux")) return "linux";
+  return "windows";
+};
+
 type UpdateState = "idle" | "checking" | "available" | "downloading" | "installing" | "ready" | "error";
 
-// Mirrors REMAPPABLE_SHORTCUTS' labels in SettingsPanel.tsx — kept as a small
+// Mirrors REMAPPABLE_SHORTCUTS' labels in HomeSettingsPanel.tsx - kept as a small
 // local map here since that file isn't shared with App.tsx.
 const SHORTCUT_LABELS: Record<string, string> = {
   captureAndSolve: "Screenshot (Ctrl+E)",
@@ -27,7 +162,12 @@ const SHORTCUT_LABELS: Record<string, string> = {
 };
 
 const App: React.FC = () => {
-  const { appScreen, setAppScreen, setSettings, setHistory, setUser, setAds, user, loginError, setLoginError } = useStore();
+  // Per-field selectors, not useStore(): the whole store re-rendered the entire
+  // page tree on every mutation, ~20x/second while an answer streams.
+  const appScreen   = useStore((s) => s.appScreen);
+  const user        = useStore((s) => s.user);
+  const loginError  = useStore((s) => s.loginError);
+  const setLoginError = useStore((s) => s.setLoginError);
   const [updateState, setUpdateState] = React.useState<UpdateState>("idle");
   const [updateVersion, setUpdateVersion] = React.useState("");
   const [updatePercent, setUpdatePercent] = React.useState(0);
@@ -36,40 +176,23 @@ const App: React.FC = () => {
   const [showSplash, setShowSplash] = React.useState(true);
   const [appReady, setAppReady] = React.useState(false);
   const [hotkeyConflict, setHotkeyConflict] = React.useState<string[] | null>(null);
-  // loginError/setLoginError now live in the Zustand store (see useStore.ts)
-  // instead of local state — surfaced to LoginPage to distinguish a real
-  // failure (server error, auth server down, timeout, blocked account) from
-  // "still waiting for the browser." Shared via the store so HomePage.tsx's
-  // own forced-logout path can set it too, instead of falling back to a
-  // blocking native alert().
+  // loginError lives in the store (not local state) so HomePage's forced-logout
+  // path can set it too, instead of falling back to a blocking native alert().
 
-  const applyAccountPayload = async (data: any) => {
-    const savedAds = await window.ghostly.getAds().catch(() => []);
-    const currentAds = useStore.getState().ads;
-    const latestAds = Array.isArray(data.ads)
-      ? data.ads
-      : currentAds.length > 0
-        ? currentAds
-        : Array.isArray(savedAds)
-          ? savedAds
-          : [];
-    useStore.getState().setAds(latestAds);
-    await window.ghostly.saveAds(latestAds);
-  };
-
-  const handleBlockedAuth = async () => {
-    await window.ghostly.logoutUser();
-    useStore.getState().setUser(null);
-    useStore.getState().setAds([]);
-    useStore.getState().setAppScreen("login");
-  };
+  // Every setTimeout here is tracked so unmount can't leave one pending.
+  const timersRef = useRef<number[]>([]);
+  const later = useCallback((fn: () => void, ms: number) => {
+    const id = window.setTimeout(fn, ms);
+    timersRef.current.push(id);
+  }, []);
+  useEffect(() => () => { timersRef.current.forEach(window.clearTimeout); timersRef.current = []; }, []);
 
   useEffect(() => {
     const offAvailable  = window.ghostly.onUpdateAvailable((v) => { setUpdateVersion(v); setUpdateState("available"); });
     const offProgress   = window.ghostly.onUpdateProgress((p) => { setUpdatePercent(p); setUpdateState("downloading"); setShowFullScreenAnimation(true); });
     const offDownloaded = window.ghostly.onUpdateDownloaded(() => {
       setUpdateState("installing");
-      setTimeout(() => { setUpdateState("ready"); setTimeout(() => setShowFullScreenAnimation(false), 3000); }, 2000);
+      later(() => { setUpdateState("ready"); later(() => setShowFullScreenAnimation(false), 3000); }, 2000);
     });
     const offNotAvail = window.ghostly.onUpdateNotAvailable(() => setUpdateState("idle"));
     const offError    = window.ghostly.onUpdateError((msg) => {
@@ -78,10 +201,10 @@ const App: React.FC = () => {
       setUpdateError(safeMsg);
       setUpdateState("error");
       setShowFullScreenAnimation(true);
-      setTimeout(() => { setShowFullScreenAnimation(false); setUpdateState("idle"); }, 3000);
+      later(() => { setShowFullScreenAnimation(false); setUpdateState("idle"); }, 3000);
     });
     return () => { offAvailable(); offProgress(); offDownloaded(); offNotAvail(); offError(); };
-  }, []);
+  }, [later]);
 
   useEffect(() => {
     const loadData = async () => {
@@ -93,48 +216,32 @@ const App: React.FC = () => {
           window.ghostly.getAds(),
         ]);
         if (savedSettings) {
-          // Build-time VITE_*_API_KEY vars are meant only to seed a *first*
-          // install that has no saved key yet — env var used to take priority
-          // over the saved key even after a user explicitly cleared it in
-          // Settings (savedSettings.apiKeys.gemini === ""), silently
-          // resurrecting a key they'd removed, on every single launch. `??`
-          // (not `||`) matters here: an explicitly-cleared "" must NOT fall
-          // through — only a truly absent (undefined) saved key should.
-          const merged = {
-            ...savedSettings,
-            apiKeys: {
-              ...savedSettings.apiKeys,
-              gemini:    savedSettings.apiKeys?.gemini    ?? import.meta.env.VITE_GEMINI_API_KEY    ?? "",
-              groq:      savedSettings.apiKeys?.groq      ?? import.meta.env.VITE_GROQ_API_KEY      ?? "",
-              openai:    savedSettings.apiKeys?.openai    ?? import.meta.env.VITE_OPENAI_API_KEY    ?? "",
-              anthropic: savedSettings.apiKeys?.anthropic ?? import.meta.env.VITE_ANTHROPIC_API_KEY ?? "",
-            },
-            deepgramApiKey: savedSettings.deepgramApiKey ?? import.meta.env.VITE_DEEPGRAM_API_KEY ?? "",
-          };
-          // A provider can retire a model after a user already saved it as their active choice
-          // (e.g. NVIDIA's mixtral-8x7b-instruct-v0.1 was pulled from their catalog entirely) —
-          // every call then fails with that provider's own "model not found / end of life" error,
-          // with no in-app way to notice short of reopening Settings and reselecting one by hand.
-          // Falls back to that provider's current first-listed model, same safe default already
-          // used when ApiSetupPage/HomeSettingsPanel can't find the saved model in the live list.
+          // No VITE_*_API_KEY fallback: Vite inlines those into the bundle, shipping
+          // the maintainer's keys to every user (and "Test" uploads them). Warn loudly.
+          const leakedKeys = ["VITE_GEMINI_API_KEY", "VITE_GROQ_API_KEY", "VITE_OPENAI_API_KEY", "VITE_ANTHROPIC_API_KEY", "VITE_OPENROUTER_API_KEY", "VITE_DEEPGRAM_API_KEY"]
+            .filter((k) => !!(import.meta.env as Record<string, string>)[k]);
+          if (leakedKeys.length) {
+            console.error(
+              `[Ghostly] Build-time API keys in this bundle (${leakedKeys.join(", ")}). ` +
+              "They ship inside the app to every user and are now ignored. Remove them from the build environment."
+            );
+          }
+          // A provider can retire a saved model, failing every call with "model not
+          // found"; fall back to that provider's current first-listed model.
+          const merged = { ...savedSettings };
           const activeProviderCfg = AI_PROVIDERS.find((p) => p.id === merged.activeProvider);
           if (activeProviderCfg && !activeProviderCfg.models.includes(merged.activeModel)) {
             merged.activeModel = activeProviderCfg.models[0];
           }
-          setSettings(merged);
+          useStore.getState().setSettings(merged);
           window.ghostly.setOpacity(1);
         }
-        if (savedHistory) setHistory(savedHistory);
-        if (savedUser) setUser(savedUser);
-        if (savedAds) setAds(savedAds);
+        if (savedHistory) useStore.getState().setHistory(savedHistory);
+        if (savedUser) useStore.getState().setUser(savedUser);
+        if (savedAds) useStore.getState().setAds(savedAds);
       } catch (err) {
-        // Used to assume any failure here meant "first run" — a genuinely
-        // corrupted/unreadable electron-store file (e.g. an interrupted write
-        // during a crash) hits this exact path too, silently dropping a
-        // returning user's settings/history/login with zero indication their
-        // data failed to load rather than never having existed. Still
-        // proceeds with defaults either way (that's the only reasonable
-        // recovery), but now at least it's not silent.
+        // Also covers a corrupted store file, not just first run: defaults still
+        // load, but log it instead of silently dropping a returning user's data.
         console.error("[Ghostly] Failed to load saved app data:", err);
       }
       setAppReady(true);
@@ -149,80 +256,24 @@ const App: React.FC = () => {
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [appScreen]);
 
-  // Extracted out of the auth-token effect below (instead of being defined
-  // inline inside it) so the deep-link effect can also call it — a deep link
-  // arriving needs the exact same completion logic as the normal POST flow.
-  const handleAuthToken = async ({ token, user }: { token: string; user: any }) => {
-    setLoginError(null);
-    try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/subscription`, {
-        headers: { Authorization: `Bearer ${token}` },
-        // OAuth had already succeeded by the time this runs — an unbounded
-        // fetch here used to mean a slow/unreachable backend left the user
-        // stuck on "Waiting for browser login..." forever with no real
-        // diagnostic, even though login itself was fine.
-        signal: AbortSignal.timeout(10000),
-      });
-      if (res.status === 403) {
-        await handleBlockedAuth();
-        // Electron's alert() opens a native OS dialog — unlike the app's own
-        // window, that dialog is NOT covered by stealth (WDA_EXCLUDEFROMCAPTURE
-        // only applies to the BrowserWindow it's set on), so this could
-        // genuinely show up in a live screen-share, and it blocks the whole
-        // renderer thread until dismissed. handleBlockedAuth() already routes
-        // back to LoginPage, so reuse its own error banner instead.
-        setLoginError("Your Ghotly AI account has been blocked. Please contact support if this is a mistake.");
-        return;
-      }
-      if (!res.ok) {
-        console.error(`[Ghostly] /subscription returned ${res.status} after login`);
-        setLoginError(`Server error (${res.status}) finishing login. Please try again in a moment.`);
-        return;
-      }
-      const data = await res.json();
-      const fullUser = { ...user, idToken: token };
-      setUser(fullUser);
-      await window.ghostly.saveUser(fullUser);
-      await applyAccountPayload(data);
-      setAppScreen("home");
-    } catch (err) {
-      console.error("[Ghostly] Failed to complete login:", err);
-      const isTimeout = err instanceof Error && err.name === "TimeoutError";
-      setLoginError(isTimeout
-        ? "Server took too long to respond. Check your connection and try again."
-        : "Something went wrong finishing login. Please try again.");
-    }
-  };
-
   useEffect(() => {
-    // Covers the case where Google OAuth (completed in the system browser, via
-    // the website's AuthCallback page) posts the token to this app's local
-    // auth server before this listener has even mounted — that message would
-    // otherwise be lost and login would look permanently stuck.
-    window.ghostly.getPendingAuthToken().then((pending) => {
-      if (pending) handleAuthToken(pending);
-    });
-
+    // Listener before buffer: draining first let a token POSTing during setup be handled twice (two
+    // subscription/save fetches); handleAuthToken also de-dupes. Draining still covers pre-mount tokens.
     const offAuth = window.ghostly.onAuthToken(handleAuthToken);
+    window.ghostly.getPendingAuthToken()
+      .then((pending) => { if (pending) handleAuthToken(pending); })
+      .catch(() => {});
     return () => offAuth();
   }, []);
 
   useEffect(() => {
-    // The ghostly:// custom-protocol handoff (second-instance / macOS
-    // open-url) was fully wired in the main process but had no renderer
-    // listener at all — if that path were ever exercised instead of the
-    // localhost:7842 POST the app actually relies on, the event vanished
-    // silently and login would sit on "Waiting..." until its own timeout.
-    // No producer currently encodes an auth payload into this URL, so the
-    // safe thing to do here (without inventing an unverified format) is
-    // re-check the same pending-auth-token buffer the POST flow already
-    // uses — if a token did land around the same time, this picks it up
-    // instead of leaving the deep link a complete dead end.
+    // ghostly:// deep links had no renderer listener, so login could wait forever if that path were used.
+    // No producer sends an auth payload today, so re-check the pending-token buffer instead of inventing one.
     const offDeepLink = window.ghostly.onDeepLink((url) => {
       console.warn("[Ghostly] Received deep link (unexpected — no producer sends this today):", url);
-      window.ghostly.getPendingAuthToken().then((pending) => {
-        if (pending) handleAuthToken(pending);
-      });
+      window.ghostly.getPendingAuthToken()
+        .then((pending) => { if (pending) handleAuthToken(pending); })
+        .catch(() => {});
     });
     return () => offDeepLink();
   }, []);
@@ -230,7 +281,7 @@ const App: React.FC = () => {
   useEffect(() => {
     window.ghostly.getPendingHotkeyConflict().then((pending) => {
       if (pending && pending.length) setHotkeyConflict(pending);
-    });
+    }).catch(() => {});
     const offHotkeyConflict = window.ghostly.onHotkeyConflict((failed) => {
       if (failed && failed.length) setHotkeyConflict(failed);
     });
@@ -240,14 +291,14 @@ const App: React.FC = () => {
   useEffect(() => {
     window.ghostly.getPendingAuthServerError().then((pending) => {
       if (pending) setLoginError(pending);
-    });
+    }).catch(() => {});
     const offAuthServerError = window.ghostly.onAuthServerError((message) => setLoginError(message));
     return () => offAuthServerError();
   }, []);
 
   useEffect(() => {
     const offShow = window.ghostly.onShow(() => {
-      setTimeout(() => {
+      later(() => {
         if (useStore.getState().appScreen !== "interview") window.ghostly.enableMouse();
       }, 60);
       const { user: currentUser } = useStore.getState();
@@ -266,7 +317,7 @@ const App: React.FC = () => {
       }
     });
     return () => offShow();
-  }, []);
+  }, [later]);
 
   useEffect(() => {
     if (!appReady || !user?.idToken) return;
@@ -283,19 +334,21 @@ const App: React.FC = () => {
       .catch(() => {});
   }, [appReady, user?.idToken]);
 
-  // Periodic heartbeat every 60s to track user screen time and active status
   useEffect(() => {
     if (!user?.idToken) return;
     const appVersion = window.ghostly?.getVersion ? window.ghostly.getVersion() : "v3.4.0";
-    
+    const startedAt = Date.now();
+
     const sendHeartbeat = () => {
+      // Real elapsed time, not a hardcoded 60: short sessions reported a full minute.
+      const durationSeconds = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
       fetch(`${import.meta.env.VITE_API_URL}/heartbeat`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${user.idToken}`,
         },
-        body: JSON.stringify({ duration_seconds: 60, app_version: appVersion, platform: "windows" }),
+        body: JSON.stringify({ duration_seconds: durationSeconds, app_version: appVersion, platform: detectPlatform() }),
       }).catch(() => {});
     };
 
@@ -304,52 +357,17 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [user?.idToken]);
 
-  if (showSplash || !appReady) return <SplashScreen onComplete={() => setShowSplash(false)} />;
-  if (!user && appScreen !== "login") return <LoginPage externalError={loginError} onClearExternalError={() => setLoginError(null)} />;
+  const finishSplash = useCallback(() => setShowSplash(false), []);
+  const clearLoginError = useCallback(() => setLoginError(null), [setLoginError]);
 
-  const SETUP_STEPS = [
-    { key: "interview-setup", label: "Session",  icon: "🎯" },
-    { key: "audio-setup",     label: "Audio",    icon: "🎙️" },
-  ] as const;
+  if (showSplash || !appReady) return <SplashScreen onComplete={finishSplash} />;
+  if (!user && appScreen !== "login") {
+    return <Suspense fallback={<PageFallback />}><LoginPage externalError={loginError} onClearExternalError={clearLoginError} /></Suspense>;
+  }
 
-  const StepIndicator = () => {
-    const currentIdx = SETUP_STEPS.findIndex(s => s.key === appScreen);
-    return (
-      <div
-        className="fixed top-2 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-1 px-3 py-1.5 rounded-full"
-        style={{ background: "rgba(10,10,14,0.92)", border: "1px solid rgba(255,255,255,0.1)", backdropFilter: "blur(20px)", boxShadow: "0 4px 16px rgba(0,0,0,0.4)", pointerEvents: "none" }}
-      >
-        {SETUP_STEPS.map((step, i) => {
-          const isDone   = i < currentIdx;
-          const isActive = i === currentIdx;
-          return (
-            <React.Fragment key={step.key}>
-              <div className="flex items-center gap-1">
-                <div
-                  className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black transition-all"
-                  style={{
-                    background: isDone ? "#10b981" : isActive ? "rgba(235,146,69,0.9)" : "rgba(255,255,255,0.08)",
-                    border: `1px solid ${isDone ? "#059669" : isActive ? "#eb9245" : "rgba(255,255,255,0.12)"}`,
-                    color: isDone || isActive ? "#fff" : "rgba(255,255,255,0.3)",
-                  }}
-                >
-                  {isDone ? "✓" : step.icon}
-                </div>
-                <span className="text-[9px] font-bold" style={{ color: isActive ? "rgba(255,255,255,0.85)" : isDone ? "#10b981" : "rgba(255,255,255,0.25)" }}>
-                  {step.label}
-                </span>
-              </div>
-              {i < SETUP_STEPS.length - 1 && <div className="w-4 h-px mx-0.5" style={{ background: isDone ? "#10b981" : "rgba(255,255,255,0.1)" }} />}
-            </React.Fragment>
-          );
-        })}
-      </div>
-    );
-  };
-
-  if (appScreen === "interview-setup") return <>{showFullScreenAnimation && <UpdateAnimation status={updateState} progress={updatePercent} version={updateVersion} error={updateError} />}<StepIndicator /><InterviewSetupPage /></>;
-  if (appScreen === "api-setup")       return <>{showFullScreenAnimation && <UpdateAnimation status={updateState} progress={updatePercent} version={updateVersion} error={updateError} />}<StepIndicator /><ApiSetupPage /></>;
-  if (appScreen === "audio-setup")     return <>{showFullScreenAnimation && <UpdateAnimation status={updateState} progress={updatePercent} version={updateVersion} error={updateError} />}<StepIndicator /><AudioSetupPage /></>;
+  if (appScreen === "interview-setup") return <Suspense fallback={<PageFallback />}><>{showFullScreenAnimation && <UpdateAnimation status={updateState} progress={updatePercent} version={updateVersion} error={updateError} />}<StepIndicator appScreen={appScreen} /><InterviewSetupPage /></></Suspense>;
+  if (appScreen === "api-setup")       return <>{showFullScreenAnimation && <UpdateAnimation status={updateState} progress={updatePercent} version={updateVersion} error={updateError} />}<StepIndicator appScreen={appScreen} /><ApiSetupPage /></>;
+  if (appScreen === "audio-setup")     return <Suspense fallback={<PageFallback />}><>{showFullScreenAnimation && <UpdateAnimation status={updateState} progress={updatePercent} version={updateVersion} error={updateError} />}<StepIndicator appScreen={appScreen} /><AudioSetupPage /></></Suspense>;
 
   const updateBanner = (
     <AnimatePresence>
@@ -369,7 +387,6 @@ const App: React.FC = () => {
           }}
           onMouseEnter={() => window.ghostly.enableMouse()}
         >
-          {/* Animated Icon Container */}
           <div className="relative shrink-0">
             <motion.div
               animate={{ rotate: 360 }}
@@ -398,7 +415,6 @@ const App: React.FC = () => {
             </div>
           </div>
 
-          {/* Text & Progress Info */}
           <div className="flex-1 min-w-0 pr-1">
             {updateState === "available" && (
               <>
@@ -455,7 +471,6 @@ const App: React.FC = () => {
             )}
           </div>
 
-          {/* Action Buttons */}
           <div className="flex items-center gap-2 shrink-0">
             {updateState === "available" && (
               <motion.button

@@ -1,15 +1,7 @@
 import { useStore } from "../store/useStore";
 
-// Account backup of API keys.
-//
-// When a user presses "Test" on an API key (Settings, or the setup wizard), the key and the test
-// result are also saved — encrypted on the server — to their Ghotly AI account:
-//
-//   PUT {VITE_API_URL}/api-keys   Authorization: Bearer <Google idToken>
-//
-// This is strictly best-effort and runs in the background. It never delays or changes the Test
-// result, never throws, and never logs a key: the only things that may reach the console are the
-// provider id and an HTTP status.
+// Best-effort backup of tested API keys to the Ghotly account (PUT /api-keys). Runs only when the
+// user opted in (keySyncEnabled, default off); never delays the Test result, throws, or logs a key.
 
 export const KEY_SYNC_PROVIDERS = ["groq", "gemini", "openrouter", "nvidia", "openai", "anthropic", "grok", "deepgram"] as const;
 
@@ -25,11 +17,8 @@ export interface KeySyncInput {
 
 export interface KeySyncResult {
   state: "saved" | "skipped" | "failed";
-  /**
-   * skipped: no-user | empty-key | bad-key-format | bad-status | unsupported-provider | no-api-url | insecure-api-url | recently-saved
-   * failed:  auth (401) | blocked (403) | rejected (400) | not-found (404) | rate-limited (429) | server (5xx)
-   *          | network | timeout | bad-response | http-<status> | unexpected
-   */
+  /** skipped: not-opted-in | no-user | empty-key | bad-key-format | bad-status | unsupported-provider | no-api-url | insecure-api-url | recently-saved
+   *  failed: auth (401) | blocked (403) | rejected (400) | not-found (404) | rate-limited (429) | server (5xx) | network | timeout | bad-response | http-<status> | unexpected */
   reason?: string;
   /** Last four characters of the key — the only part of it that is ever echoed anywhere. */
   last4?: string;
@@ -50,11 +39,9 @@ const MESSAGE_MAX = 120;
 // Anything else is a paste accident, so it is not sent at all.
 const KEY_FORMAT = /^[\x21-\x7e]{8,512}$/;
 
-// ── In-memory only. Nothing here is ever persisted or logged. ───────────────────────────────────
-// What was last saved successfully per (user, provider): enough to tell "same key, same result,
-// pressed Test again" from a real change, without keeping the key itself around.
+// In-memory only, never persisted or logged: what was last saved per (user, provider), enough to tell
+// "same key, same result" from a real change without keeping the key. In-flight saves share one request.
 const recentlySaved = new Map<string, { fingerprint: string; status: string; at: number }>();
-// Identical saves that are still in flight share one request.
 const inFlight = new Map<string, Promise<KeySyncResult>>();
 
 /** Forgets what was synced (used by tests; also handy after logout). */
@@ -194,6 +181,9 @@ async function run(input: KeySyncInput, opts: KeySyncOptions): Promise<KeySyncRe
   const provider = String(input.provider || "").trim().toLowerCase();
   if (!(KEY_SYNC_PROVIDERS as readonly string[]).includes(provider)) return skip("unsupported-provider");
 
+  // Consent first: nothing leaves the machine for an account that never opted in.
+  if (!useStore.getState().settings.keySyncEnabled) return skip("not-opted-in");
+
   const apiKey = typeof input.apiKey === "string" ? input.apiKey.trim() : "";
   if (!apiKey) return skip("empty-key");
   if (!KEY_FORMAT.test(apiKey)) return skip("bad-key-format");
@@ -249,12 +239,8 @@ async function run(input: KeySyncInput, opts: KeySyncOptions): Promise<KeySyncRe
   }
 }
 
-/**
- * Saves a tested key to the signed-in user's account. Resolves — never rejects — with what happened:
- *  - "saved":   the server confirmed the save
- *  - "skipped": nothing was sent (not signed in, empty / malformed key, nothing changed since the last save…)
- *  - "failed":  it could not be saved right now (the next Test tries again)
- */
+/** Saves a tested key to the signed-in user's account; resolves, never rejects. "saved" = server confirmed,
+ *  "skipped" = nothing sent, "failed" = retry on the next Test. */
 export async function syncApiKey(input: KeySyncInput, opts: KeySyncOptions = {}): Promise<KeySyncResult> {
   try {
     return await run(input, opts);
@@ -263,7 +249,71 @@ export async function syncApiKey(input: KeySyncInput, opts: KeySyncOptions = {})
   }
 }
 
-// ── What the UI shows next to the Test result ───────────────────────────────────────────────────
+// Consent must be reversible: GET lists provider + last4 the server holds, DELETE removes them,
+// both on the same /api-keys collection the PUT writes to.
+
+export interface StoredKeySummary {
+  provider: string;
+  last4?: string;
+  status?: string;
+  updatedAt?: string;
+}
+
+function syncContext(): { url: string; idToken: string } | KeySyncResult {
+  const base = apiBase();
+  if (!base) return skip("no-api-url");
+  if (!isSecureBase(base)) return skip("insecure-api-url");
+  const idToken = useStore.getState().user?.idToken || "";
+  if (!idToken) return skip("no-user");
+  return { url: `${base}/api-keys`, idToken };
+}
+
+/** What the server has on file for this account. Resolves — never rejects. */
+export async function listStoredApiKeys(): Promise<StoredKeySummary[]> {
+  try {
+    const ctx = syncContext();
+    if (!("url" in ctx)) return [];
+    const res = await fetch(ctx.url, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${ctx.idToken}` },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+      redirect: "error",
+    });
+    if (!res.ok) return [];
+    const json: any = await res.json().catch(() => null);
+    const rows = Array.isArray(json) ? json : Array.isArray(json?.keys) ? json.keys : [];
+    return rows
+      .filter((r: any) => r && typeof r.provider === "string")
+      .map((r: any) => ({
+        provider: r.provider,
+        last4: typeof r.last4 === "string" ? r.last4.slice(0, 4) : undefined,
+        status: typeof r.status === "string" ? r.status : undefined,
+        updatedAt: typeof r.updatedAt === "string" ? r.updatedAt : undefined,
+      }));
+  } catch {
+    return [];
+  }
+}
+
+/** Deletes everything the server holds for this account. Resolves — never rejects. */
+export async function deleteStoredApiKeys(): Promise<{ ok: boolean; reason?: string }> {
+  try {
+    const ctx = syncContext();
+    if (!("url" in ctx)) return { ok: false, reason: (ctx as KeySyncResult).reason };
+    const res = await fetch(ctx.url, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${ctx.idToken}` },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+      redirect: "error",
+    });
+    if (!res.ok) return { ok: false, reason: `http-${res.status}` };
+    // The local fingerprints describe keys that no longer exist anywhere.
+    resetKeySyncCache();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.name : "unexpected" };
+  }
+}
 
 export interface KeySyncBadge {
   kind: "saved" | "failed";

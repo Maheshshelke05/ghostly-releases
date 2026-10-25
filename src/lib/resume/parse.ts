@@ -1,18 +1,8 @@
-// Turns whatever a language model answered into a clean CandidateProfile.
-//
-// Pure functions only (no DOM, no network) so they can be unit-tested in plain Node.
-//
-// Models are unreliable JSON writers: they wrap output in code fences, add prose
-// before/after, leave trailing commas, use smart quotes or single quotes, forget to
-// escape quotes inside text, return arrays/objects where a string was asked for,
-// invent keys, or get cut off mid-object. Instead of stacking regex "repairs", the
-// object is read with a small tolerant recursive-descent parser (below) that accepts
-// all of those and, crucially, KNOWS when the input simply ended too early (truncated).
+// Turns whatever a language model answered into a clean CandidateProfile. Pure functions only (no DOM, no network).
+// A tolerant recursive-descent reader accepts fences, prose, trailing commas, smart quotes and knows when input was cut off.
 import type { CandidateProfile, ProfileKey } from "./types";
 import { EMPTY_PROFILE, PROFILE_KEYS, ResumeError } from "./types";
 import { PROFILE_LIMITS } from "./limits";
-
-// ───────────────────────── tolerant JSON reader ─────────────────────────
 
 class LooseError extends Error {
   readonly atEnd: boolean;
@@ -27,10 +17,10 @@ const QUOTE_PAIRS: Record<string, string> = {
   '"': '"',
   "'": "'",
   "`": "`",
-  "“": "”", // “ ”
-  "‘": "’", // ‘ ’
-  "„": "”", // „ ”
-  "«": "»", // « »
+  "“": "”",
+  "‘": "’",
+  "„": "”",
+  "«": "»",
 };
 const CURLY_DOUBLE_OPEN = new Set(["“", "„", "«"]);
 
@@ -158,7 +148,7 @@ function parseLoose(src: string, start: number): Parsed {
   };
 
   const parseObject = (depth: number): Record<string, unknown> => {
-    i++; // {
+    i++;
     const obj: Record<string, unknown> = Object.create(null);
     for (;;) {
       skipWs();
@@ -187,7 +177,7 @@ function parseLoose(src: string, start: number): Parsed {
   };
 
   const parseArray = (depth: number): unknown[] => {
-    i++; // [
+    i++;
     const arr: unknown[] = [];
     for (;;) {
       skipWs();
@@ -209,16 +199,17 @@ function parseLoose(src: string, start: number): Parsed {
 const isPlainObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
 
-// ───────────────────────── key mapping ─────────────────────────
-
 const normKey = (k: string) => k.toLowerCase().replace(/[^a-z0-9]/g, "");
 
-const CANONICAL: Record<string, ProfileKey> = Object.fromEntries(
-  PROFILE_KEYS.map((k) => [normKey(k), k]),
-) as Record<string, ProfileKey>;
+// Object.create(null): a plain object inherits Object.prototype, so a model key of "constructor"/"toString" would read
+// as a known key and inflate knownKeyCount(), which decides which nested object unwrap() returns.
+const CANONICAL: Record<string, ProfileKey> = Object.assign(
+  Object.create(null) as Record<string, ProfileKey>,
+  Object.fromEntries(PROFILE_KEYS.map((k) => [normKey(k), k])),
+);
 
 // Only close variants of the 12 requested keys - anything else is an "unknown key" and ignored.
-const ALIASES: Record<string, ProfileKey> = {
+const ALIASES: Record<string, ProfileKey> = Object.assign(Object.create(null) as Record<string, ProfileKey>, {
   name: "fullName", candidatename: "fullName", yourname: "fullName",
   emailaddress: "email", mail: "email", emailid: "email",
   phonenumber: "phone", mobile: "phone", mobilenumber: "phone", contactnumber: "phone", telephone: "phone",
@@ -232,7 +223,7 @@ const ALIASES: Record<string, ProfileKey> = {
   certification: "certifications", certificates: "certifications", certs: "certifications", licenses: "certifications",
   linkedinurl: "linkedin", linkedinprofile: "linkedin", linkedinlink: "linkedin",
   githuburl: "github", githubprofile: "github", githublink: "github",
-};
+});
 
 function mapKeys(obj: Record<string, unknown>): Partial<Record<ProfileKey, unknown>> {
   const out: Partial<Record<ProfileKey, unknown>> = {};
@@ -266,8 +257,6 @@ function unwrap(obj: Record<string, unknown>): Record<string, unknown> {
   return obj;
 }
 
-// ───────────────────────── extracting the object from model text ─────────────────────────
-
 function cleanModelText(raw: string): string {
   return raw
     .replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, " ") // reasoning models
@@ -282,18 +271,14 @@ export interface ExtractedJson {
   emptyObject: boolean;
 }
 
-/**
- * Finds the first object in `raw` that parses and looks like a profile.
- * Handles fences, prose around it, trailing commas, smart/single quotes, unescaped inner
- * quotes, raw newlines in strings, `null`/`None`, and objects nested under a wrapper key.
- */
+/** Finds the first object in `raw` that parses and looks like a profile: handles fences, prose around it, trailing
+ * commas, smart/single quotes, unescaped inner quotes, `null`/`None` and objects nested under a wrapper key. */
 export function extractJsonObject(raw: string): ExtractedJson {
   const text = cleanModelText(raw);
   let truncated = false;
   let emptyObject = false;
-  // Once one candidate has failed to parse, the objects NESTED inside it (a project
-  // {"name": ...}, an experience entry) must not be mistaken for the profile itself,
-  // so they have to look like a real profile (3+ of the known keys).
+  // Once a candidate has failed to parse, the objects NESTED inside it must not be mistaken for the profile itself, so
+  // they have to look like a real profile (3+ of the known keys).
   let failed = false;
   let attempts = 0;
   for (let i = text.indexOf("{"); i !== -1 && attempts < 30; i = text.indexOf("{", i + 1)) {
@@ -312,8 +297,6 @@ export function extractJsonObject(raw: string): ExtractedJson {
   }
   return { obj: null, truncated, emptyObject };
 }
-
-// ───────────────────────── value coercion ─────────────────────────
 
 type FieldKind = "line" | "list" | "lines" | "text";
 
@@ -416,8 +399,6 @@ function toText(v: unknown, key: ProfileKey, depth = 0): string {
   if (isPlainObject(v)) return objectToText(v, key, depth);
   return "";
 }
-
-// ───────────────────────── per-field clean-up ─────────────────────────
 
 const BULLET_RE = /^\s*(?:[-*•·●▪◦►▶➢✓✔→–—]+|\d{1,2}[.)])\s+/;
 
@@ -556,8 +537,6 @@ function finalizeField(key: ProfileKey, text: string): string {
   return clampField(key, out);
 }
 
-// ───────────────────────── public API ─────────────────────────
-
 /** Any parsed value -> CandidateProfile with all 12 keys as clean, clamped strings. */
 export function normalizeProfile(input: unknown): CandidateProfile {
   const result: CandidateProfile = { ...EMPTY_PROFILE };
@@ -573,10 +552,8 @@ export function countFilled(p: CandidateProfile): number {
   return PROFILE_KEYS.filter((k) => !!p[k]?.trim()).length;
 }
 
-/**
- * Model answer text -> profile. Throws ResumeError("truncated" | "bad_json" | "no_details").
- * `retryable` is true for all three: running the same file again often fixes them.
- */
+/** Model answer text -> profile. Throws ResumeError("truncated" | "bad_json" | "no_details"); `retryable` is true for
+ * all three: running the same file again often fixes them. */
 export function parseResumeResponse(raw: string): CandidateProfile {
   const { obj, truncated, emptyObject } = extractJsonObject(raw ?? "");
   if (!obj) {
@@ -603,8 +580,6 @@ export function parseResumeResponse(raw: string): CandidateProfile {
   return profile;
 }
 
-// ───────────────────────── merging into the form ─────────────────────────
-
 export interface MergeResult {
   next: CandidateProfile;
   /** Keys whose value actually changed (for the highlight animation). */
@@ -613,12 +588,8 @@ export interface MergeResult {
   filled: ProfileKey[];
 }
 
-/**
- * Applies an imported profile on top of the current form values.
- *  - a field the resume provides overwrites the current value;
- *  - a field the resume does NOT provide keeps the user's manual value,
- *    unless it was filled by the PREVIOUS import and not edited since (stale -> cleared).
- */
+/** Applies an imported profile on top of the current form values: a field the resume provides overwrites; a field it
+ * does not keeps the user's value, unless the previous import filled it and it was not edited since (then cleared). */
 export function mergeImportedProfile(
   current: CandidateProfile,
   imported: CandidateProfile,

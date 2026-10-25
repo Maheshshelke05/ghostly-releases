@@ -9,23 +9,26 @@ export const SplashScreen: React.FC<{ onComplete: () => void }> = ({ onComplete 
     ? (window as any).ghostly.getVersion()
     : "3.3.5";
 
+  // Keep the updater pure: StrictMode double-invokes it, which would run setPhase/setTimeout twice and
+  // never clear the timer. The `done` effect owns that transition instead.
+  const done = progress >= 100;
   useEffect(() => {
+    if (done) return;
     const interval = setInterval(() => {
       setProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setPhase("ready");
-          setTimeout(onComplete, 700);
-          return 100;
-        }
-        // Speed varies: fast at start, slows near end
         const step = prev < 60 ? 3 : prev < 90 ? 1.5 : 0.8;
         return Math.min(prev + step, 100);
       });
     }, 28);
-
     return () => clearInterval(interval);
-  }, [onComplete]);
+  }, [done]);
+
+  useEffect(() => {
+    if (!done) return;
+    setPhase("ready");
+    const t = setTimeout(onComplete, 700);
+    return () => clearTimeout(t);
+  }, [done, onComplete]);
 
   const PHASES = ["Initializing core...", "Loading AI providers...", "Setting up stealth mode...", "Ready"];
   const phaseText = progress < 30 ? PHASES[0] : progress < 60 ? PHASES[1] : progress < 95 ? PHASES[2] : PHASES[3];
@@ -43,7 +46,6 @@ export const SplashScreen: React.FC<{ onComplete: () => void }> = ({ onComplete 
           pointerEvents: "auto",
         }}
       >
-        {/* ── Background ambient glows ── */}
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
@@ -57,7 +59,6 @@ export const SplashScreen: React.FC<{ onComplete: () => void }> = ({ onComplete 
           }}
         />
 
-        {/* ── Floating orbs ── */}
         {[
           { size: 3, x: "15%", y: "20%", delay: 0, color: "rgba(109,111,176,0.35)" },
           { size: 2, x: "80%", y: "15%", delay: 0.6, color: "rgba(109,111,176,0.3)" },
@@ -91,11 +92,8 @@ export const SplashScreen: React.FC<{ onComplete: () => void }> = ({ onComplete 
           />
         ))}
 
-        {/* ── Main content ── */}
         <div className="relative flex flex-col items-center gap-10 z-10">
-          {/* ── Logo ── */}
           <div className="relative flex flex-col items-center gap-6">
-            {/* Outer glow ring */}
             <motion.div
               className="absolute rounded-full pointer-events-none"
               style={{
@@ -108,7 +106,6 @@ export const SplashScreen: React.FC<{ onComplete: () => void }> = ({ onComplete 
               transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
             />
 
-            {/* Logo card */}
             <motion.div
               initial={{ scale: 0.6, opacity: 0, rotate: -10 }}
               animate={{ scale: 1, opacity: 1, rotate: 0 }}
@@ -122,7 +119,6 @@ export const SplashScreen: React.FC<{ onComplete: () => void }> = ({ onComplete 
             >
               <GhostMascot size={92} variant="hello" alt="" />
 
-              {/* Live status dot */}
               <motion.div
                 className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center"
                 style={{
@@ -137,7 +133,6 @@ export const SplashScreen: React.FC<{ onComplete: () => void }> = ({ onComplete 
               </motion.div>
             </motion.div>
 
-            {/* Title */}
             <motion.div
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
@@ -156,14 +151,12 @@ export const SplashScreen: React.FC<{ onComplete: () => void }> = ({ onComplete 
             </motion.div>
           </div>
 
-          {/* ── Progress ── */}
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.4, duration: 0.5 }}
             className="w-72 flex flex-col gap-3"
           >
-            {/* Progress bar track */}
             <div
               className="w-full h-1.5 rounded-full overflow-hidden relative"
               style={{ background: "#e8e8ee" }}
@@ -176,7 +169,6 @@ export const SplashScreen: React.FC<{ onComplete: () => void }> = ({ onComplete 
                   transition: "width 0.1s ease",
                 }}
               >
-                {/* Shimmer */}
                 <motion.div
                   className="absolute inset-0 w-1/2"
                   style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)" }}
@@ -186,7 +178,6 @@ export const SplashScreen: React.FC<{ onComplete: () => void }> = ({ onComplete 
               </motion.div>
             </div>
 
-            {/* Status text */}
             <div className="flex items-center justify-between">
               <motion.span
                 key={phaseText}
@@ -206,7 +197,6 @@ export const SplashScreen: React.FC<{ onComplete: () => void }> = ({ onComplete 
             </div>
           </motion.div>
 
-          {/* ── Version badge ── */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

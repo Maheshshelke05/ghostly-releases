@@ -104,12 +104,8 @@ export const TopBar: React.FC<TopBarProps> = ({
         style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
         onMouseEnter={() => window.ghostly.enableMouse()}
       >
-        {/* ── Main Bar ──
-            Fully opaque: CSS backdrop-filter can only blur content painted within
-            THIS same page — it cannot blur whatever real OS window is sitting
-            behind this transparent, frameless Electron window. Any alpha here
-            (even 0.93) exposes unblurred text/pixels from the app behind the
-            overlay, ghosting through this bar's own text. */}
+        {/* Fully opaque: backdrop-filter can only blur content in this same page, not
+            the real OS window behind this transparent overlay; any alpha ghosts text. */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -122,7 +118,6 @@ export const TopBar: React.FC<TopBarProps> = ({
             transition: "border-radius 0.25s ease",
           }}
         >
-          {/* ── Brand — click to minimize the whole overlay down to the logo ── */}
           <motion.button
             onClick={onMinimize}
             whileHover="hover"
@@ -146,11 +141,11 @@ export const TopBar: React.FC<TopBarProps> = ({
             </span>
           </motion.button>
 
-          {/* ── Divider ── */}
           <div className="w-px h-5 shrink-0" style={{ background: "rgba(255,255,255,0.1)" }} />
 
-          {/* ── Tabs — the highlight glides between them (shared layoutId) ── */}
           <div
+            role="tablist"
+            aria-label="Interview views"
             className="flex items-center gap-0.5 p-0.5 rounded-[11px] shrink-0"
             style={{ background: "rgba(255,255,255,0.035)", border: "1px solid rgba(255,255,255,0.06)" }}
           >
@@ -161,6 +156,12 @@ export const TopBar: React.FC<TopBarProps> = ({
               return (
                 <motion.button
                   key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  // The live bar hides the "Job Portal" label (icon-only), so the
+                  // name can't come from the button's own text there.
+                  aria-label={isStopBtn ? "Stop live transcription" : tab.label}
                   onClick={() => handleTabClick(tab.id)}
                   whileTap={{ scale: 0.95 }}
                   title={tab.label}
@@ -208,7 +209,6 @@ export const TopBar: React.FC<TopBarProps> = ({
             })}
           </div>
 
-          {/* ── Auto AI pill — only when live ── */}
           {isLiveActive && (
             <>
               <div className="w-px h-5 shrink-0" style={{ background: "rgba(255,255,255,0.08)" }} />
@@ -234,10 +234,8 @@ export const TopBar: React.FC<TopBarProps> = ({
             </>
           )}
 
-          {/* ── Spacer ── */}
           <div className="flex-1" />
 
-          {/* ── Timer ── */}
           <div
             className="flex items-center gap-1.5 px-2 h-7 rounded-[9px] shrink-0 transition-colors duration-300"
             style={{
@@ -256,7 +254,6 @@ export const TopBar: React.FC<TopBarProps> = ({
             <span className="text-[10px] font-mono tabular-nums transition-colors duration-300" style={{ color: isLiveActive ? "rgba(134,239,172,0.9)" : "rgba(255,255,255,0.4)" }}>{fmt(timer)}</span>
           </div>
 
-          {/* ── Settings ── */}
           <motion.button
             onClick={onOpenSettings}
             whileTap={{ scale: 0.92 }}
@@ -275,7 +272,6 @@ export const TopBar: React.FC<TopBarProps> = ({
             </span>
           </motion.button>
 
-          {/* ── End Session ── */}
           <motion.button
             onClick={onStop}
             whileTap={{ scale: 0.95 }}
@@ -285,7 +281,6 @@ export const TopBar: React.FC<TopBarProps> = ({
             End
           </motion.button>
 
-          {/* ── Close ── */}
           <motion.button
             onClick={() => window.ghostly.quit()}
             onMouseEnter={() => window.ghostly.enableMouse()}
@@ -299,7 +294,6 @@ export const TopBar: React.FC<TopBarProps> = ({
           </motion.button>
         </motion.div>
 
-        {/* ── Live Transcript Strip ── */}
         {isLiveActive && (
           <div
             className="flex items-center h-9 gap-2.5 px-3.5 rounded-b-2xl"
@@ -310,7 +304,6 @@ export const TopBar: React.FC<TopBarProps> = ({
               boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
             }}
           >
-            {/* Live indicator */}
             <div className="flex items-center gap-1.5 shrink-0">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inset-0 rounded-full bg-green-400 opacity-50" />
@@ -326,7 +319,6 @@ export const TopBar: React.FC<TopBarProps> = ({
 
             <div className="w-px h-3.5 shrink-0" style={{ background: "rgba(255,255,255,0.07)" }} />
 
-            {/* Transcript text */}
             <div
               ref={transcriptScrollRef}
               className="flex-1 min-w-0"
@@ -336,10 +328,8 @@ export const TopBar: React.FC<TopBarProps> = ({
                 <span className="text-[11.5px] font-sans whitespace-nowrap" style={{ color: "rgba(255,255,255,0.85)" }}>
                   {liveText.split(" ").map((word, i) => {
                     const clean = word.toLowerCase().replace(/[^a-z0-9()^.]/g, "");
-                    // Exact match, not substring — `.includes()` here used to highlight
-                    // ordinary words that merely *contain* a keyword ("interesting" has
-                    // "rest", "rapid"/"capital" have "api", "flaws"/"draws" have "aws"),
-                    // which made random conversational words light up as fake tech terms.
+                    // Exact match, not substring: `.includes()` highlighted ordinary words
+                    // that merely contain a keyword ("interesting" has "rest").
                     const isKey = ["array", "string", "tree", "binary", "graph", "hashmap", "queue", "stack", "heap", "dp", "recursion", "complexity", "o(n)", "o(1)", "o(log", "n)", "react", "python", "javascript", "typescript", "sql", "postgresql", "mongodb", "database", "api", "rest", "graphql", "docker", "redis", "kafka", "aws"].includes(clean);
                     return isKey ? (
                       <span key={i} className="px-1 py-0.5 rounded text-[11px] font-extrabold mx-0.5" style={{ color: "#fbbf24", background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.3)" }}>
@@ -357,7 +347,6 @@ export const TopBar: React.FC<TopBarProps> = ({
               )}
             </div>
 
-            {/* Action buttons */}
             <div className="flex items-center gap-1.5 shrink-0">
               {liveText && (
                 <button
