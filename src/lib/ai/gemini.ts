@@ -1,35 +1,37 @@
 import type { AIProvider, AIRequestOptions } from "./types";
-import { rateLimitError } from "./types";
+import { defaultSignal, httpError, readSSE, rateLimitError, requireApiKey } from "./types";
+import { modelIds } from "./catalog";
 
 // Gemini 3.x Flash models "think" by default: hundreds of hidden tokens are
 // generated before the first visible word. Measured on this app's own prompts
 // (screenshot -> short answer): ~370-520 thinking tokens per answer, i.e. 3-6s
-// before/while anything showed, versus ~2s with thinking off — and identical
-// correctness on Two Sum / Trapping Rain Water / Coin Change / Median of Two
-// Sorted Arrays / Minimum Window Substring (all passed, run against real tests).
-// This app wants short, glanceable answers fast, so thinking is switched off.
-// Pro models can't turn thinking off, so they keep their default.
-function thinkingConfigFor(model: string): { thinkingBudget: number } | undefined {
-  return /pro/i.test(model) ? undefined : { thinkingBudget: 0 };
+// before/while anything showed, versus ~2s with thinking down to minimal — and
+// identical correctness on Two Sum / Trapping Rain Water / Coin Change / Median
+// of Two Sorted Arrays / Minimum Window Substring (all passed, run against real
+// tests). This app wants short, glanceable answers fast, so thinking is turned
+// down. "minimal" is the lowest level the 3.x models accept: the old
+// `thinkingBudget: 0` was a Gemini 2.5-era field and the 3.x docs now specify
+// `thinking_level` (ai.google.dev/gemini-api/docs/thinking). Pro models can't
+// turn thinking down, so they keep their default.
+function thinkingConfigFor(model: string): { thinkingLevel: string } | undefined {
+  return /pro/i.test(model) ? undefined : { thinkingLevel: "minimal" };
 }
+
+// Hidden thinking tokens come out of maxOutputTokens on Gemini too (Google says
+// so explicitly: setting a low limit "can truncate responses"), so the visible
+// budget gets headroom for them.
+const THINKING_HEADROOM_TOKENS = 2048;
+
+// Models that rejected `thinkingConfig` once and never see it again. The old
+// code retried the whole request — including re-uploading the entire base64
+// screenshot — on every single call, which on a free tier is a guaranteed 429.
+const THINKING_REJECTED = new Set<string>();
 
 export class GeminiProvider implements AIProvider {
   name = "gemini";
 
   listModels(): string[] {
-    // gemini-3.5-flash and gemini-pro-latest were never real model IDs on Google's
-    // current catalog (checked against ai.google.dev/gemini-api/docs/models on
-    // 2026-10-17 — neither appears anywhere on the page, under any generation).
-    // Only gemini-3.1-flash-lite (also in this list) was actually real and live.
-    // Replaced with gemini-3.6-flash and gemini-3.8-flash, both confirmed present
-    // on that same page AND confirmed free-tier (ai.google.dev/gemini-api/docs/
-    // pricing lists "Free of charge" for both, unlike e.g. gemini-3.1-pro-preview
-    // which is paid-only) — matching this app's "FREE" badge on every option here.
-    return [
-      "gemini-3.6-flash",
-      "gemini-3.8-flash",
-      "gemini-3.1-flash-lite",
-    ];
+    return modelIds("gemini");
   }
 
   async *streamSolution(options: AIRequestOptions): AsyncGenerator<string> {
@@ -41,8 +43,8 @@ export class GeminiProvider implements AIProvider {
       model,
       apiKey,
       maxTokens = 4096,
-      signal,
     } = options;
+    const signal = defaultSignal(options.signal);
 
     // Clean model name
     model = model.trim().replace(/\s+/g, "");
@@ -65,7 +67,7 @@ export class GeminiProvider implements AIProvider {
     for (const msg of messages) {
       contents.push({
         role: msg.role === "assistant" ? "model" : "user",
-        parts: [{ text: msg.content }]
+        parts: [{ text: msg.content }],
       });
     }
 
@@ -81,96 +83,65 @@ export class GeminiProvider implements AIProvider {
     }
     parts.push({ text: prompt });
 
-    contents.push({
-      role: "user",
-      parts,
-    });
+    contents.push({ role: "user", parts });
 
-    const thinking = thinkingConfigFor(model);
-    const generationConfig: Record<string, unknown> = {
-      maxOutputTokens: maxTokens,
-      temperature: 0.4,
-      topP: 0.95,
-      topK: 40,
-      ...(thinking ? { thinkingConfig: thinking } : {}),
+    const headers = {
+      "Content-Type": "application/json",
+      "x-goog-api-key": requireApiKey(apiKey, "Gemini", "https://aistudio.google.com/app/apikey"),
     };
-    const body = { contents, generationConfig };
 
-    const send = () =>
+    // temperature / topP / topK are deprecated on Gemini 3.6+ and are no longer
+    // sent at all. What remains is the output ceiling plus, when supported, the
+    // thinking level.
+    const generationConfig: Record<string, unknown> = {
+      maxOutputTokens: maxTokens + THINKING_HEADROOM_TOKENS,
+    };
+    const thinking = THINKING_REJECTED.has(model) ? undefined : thinkingConfigFor(model);
+    if (thinking) generationConfig.thinkingConfig = thinking;
+
+    const send = (config: Record<string, unknown>) =>
       fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-        body: JSON.stringify(body),
+        headers,
+        body: JSON.stringify({ contents, generationConfig: config }),
         signal,
       });
 
-    let response = await send();
+    let response = await send(generationConfig);
 
     // A model variant that rejects thinkingConfig must not break the answer:
-    // drop it and retry once with Gemini's defaults.
+    // drop it, remember the answer for this model id, and retry once.
     if (response.status === 400 && thinking) {
       const detail = await response.clone().text().catch(() => "");
       if (/thinking/i.test(detail)) {
+        THINKING_REJECTED.add(model);
         delete generationConfig.thinkingConfig;
-        response = await send();
+        response = await send(generationConfig);
       }
     }
 
     if (!response.ok) {
-      const err = await response
-        .json()
-        .catch(() => ({ error: { message: response.statusText } }));
-      const rawMessage = err.error?.message || response.statusText;
+      const parsed = await response.json().catch(() => null);
+      const rawMessage = (parsed as any)?.error?.message || response.statusText;
       // 429 covers both a real per-day quota AND a much more common per-minute
       // rate limit on the free tier — Google's own message doesn't always make
       // that distinction obvious, and users were reading any 429 as "I'm out
       // for the day" even when it clears in under a minute. Surface which kind
       // this actually looks like instead of passing the raw text through as-is.
       if (response.status === 429) {
-        const isDaily = /per[\s-]?day|daily|PerDay/i.test(rawMessage);
+        const isDaily = /per[\s-]?day|daily limit|quota exceeded/i.test(rawMessage);
         throw rateLimitError(
           isDaily
             ? `Gemini free-tier DAILY quota reached for this key. It resets at midnight Pacific Time — switch to another provider in Settings to keep going today. (${rawMessage})`
             : `Gemini rate limit hit (too many requests in a short time — this is usually per-MINUTE, not per-day). Wait ~30-60s and try again, or switch provider in Settings. (${rawMessage})`,
         );
       }
-      throw new Error(`Gemini API error: ${rawMessage}`);
+      throw httpError("Gemini", response, parsed, rawMessage);
     }
 
-    const reader = response.body!.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-
-      for (const line of lines) {
-        if (line.startsWith("data: ")) {
-          try {
-            const data = JSON.parse(line.slice(6));
-            const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (text) yield text;
-          } catch {
-            /* skip malformed chunks */
-          }
-        }
-      }
-    }
-
-    // Process remaining buffer
-    if (buffer.startsWith("data: ")) {
-      try {
-        const data = JSON.parse(buffer.slice(6));
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (text) yield text;
-      } catch {
-        /* skip */
-      }
+    for await (const frame of readSSE(response)) {
+      const text = frame.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join("");
+      if (text) yield text;
     }
   }
 }

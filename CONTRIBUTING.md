@@ -8,7 +8,7 @@ Thank you for your interest in contributing to **Ghostly AI Desktop App**! Ghost
 
 Ghostly AI Desktop App is an Electron app built with:
 
-- **Framework**: Electron 34 + React 18 + Vite 5 + TypeScript
+- **Framework**: Electron 28 + React 18 + Vite 5 + TypeScript
 - **Styling**: TailwindCSS + Framer Motion
 - **Stealth Engine**: Windows Win32 `WDA_EXCLUDEFROMCAPTURE` API (`electron/stealth.ts`)
 - **Speech-to-Text**: Deepgram WebSocket API (`src/hooks/useInterviewAudio.ts`)
@@ -20,7 +20,7 @@ Ghostly AI Desktop App is an Electron app built with:
 
 ### Prerequisites
 
-- **Node.js**: v18.x or v20.x
+- **Node.js**: v20.x or newer
 - **npm**: v9+ or v10+
 - **OS**: Windows 10/11 (required for native `WDA_EXCLUDEFROMCAPTURE` stealth testing)
 
@@ -60,13 +60,13 @@ Ghostly AI Desktop App is an Electron app built with:
 - 🎤 **Local STT**: Integrating Whisper.cpp or Web Speech API for offline speech-to-text.
 - 🤖 **New LLM Connectors**: Supporting new providers (DeepSeek V3/R1, Claude 3.7, local Ollama models).
 - 🥷 **Cross-Platform Stealth**: Porting stealth overlay functionality to macOS / Linux.
-- 🎨 **UI Improvements**: Shortcut remapping UI, dark modes, response text readability.
+- 🎨 **UI Improvements**: Dark mode, response text readability, and layout polish.
 
 ---
 
 ## 📝 Pull Request Checklist
 
-1. Run TypeScript checks: `npx tsc --noEmit`
+1. Run the TypeScript checks for both projects: `npx tsc -p tsconfig.node.json --noEmit` and `npx tsc -p tsconfig.web.json --noEmit`. The root `tsconfig.json` is solution-style (`files: []`), so a bare `npx tsc --noEmit` checks nothing.
 2. Test keyboard hotkeys and stealth window behavior in dev mode.
 3. Ensure no hardcoded API keys or personal secrets are committed.
 

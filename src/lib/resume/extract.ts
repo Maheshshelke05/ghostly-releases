@@ -8,12 +8,15 @@
 // The file type is decided from the file's BYTES, not its name: a text file called ".pdf" still works,
 // a ".docx" that is really a PNG is read as an image, and an .exe renamed to .pdf is rejected.
 import {
-  IMAGE_JPEG_QUALITY, IMAGE_LONG_SIDE, MAX_IMAGE_PAGES, MAX_RESUME_BYTES, MAX_RESUME_CHARS, MAX_TEXT_PAGES, MIN_TEXT_CHARS,
+  IMAGE_JPEG_QUALITY, IMAGE_LONG_SIDE, MAX_DOCX_ENTRY_BYTES, MAX_DOCX_TOTAL_BYTES, MAX_IMAGE_PAGES,
+  MAX_IMAGE_PIXELS, MAX_RESUME_BYTES, MAX_RESUME_CHARS, MAX_TEXT_PAGES, MIN_TEXT_CHARS,
 } from "./limits";
 import type { ExtractedResume, SourceKind } from "./types";
 import { ResumeError } from "./types";
 
-const EXTRACT_TIMEOUT_MS = 40000;
+// A backstop, not the safety mechanism: pdf.js parses on a Web Worker (see loadPdfjs), so a
+// pathological file can no longer freeze the UI - it just gets cut off.
+const EXTRACT_TIMEOUT_MS = 20000;
 
 // ───────────────────────── errors ─────────────────────────
 
@@ -72,11 +75,22 @@ function capText(text: string): { text: string; truncated: boolean } {
   return { text: text.slice(0, MAX_RESUME_CHARS), truncated: true };
 }
 
+// Per-character tests in isReadableText: no /g, so there is no lastIndex state to reset.
+const WS_RE = /\s/u;
+const LETTER_OR_NUM_RE = /[\p{L}\p{N}]/u;
+
 /** Enough real letters/digits to be a resume rather than empty or garbage glyphs from a broken font map. */
 export function isReadableText(text: string): boolean {
-  const nonSpace = text.replace(/\s/g, "").length;
+  // One pass over the characters: `text.match(/[\p{L}\p{N}]/gu)` allocates an array with one entry
+  // per character, which on a text-layer bomb is the largest allocation in the whole extraction.
+  let nonSpace = 0;
+  let letters = 0;
+  for (const ch of text) {
+    if (WS_RE.test(ch)) continue;
+    nonSpace++;
+    if (LETTER_OR_NUM_RE.test(ch)) letters++;
+  }
   if (nonSpace < MIN_TEXT_CHARS) return false;
-  const letters = (text.match(/[\p{L}\p{N}]/gu) || []).length;
   if (letters < MIN_TEXT_CHARS || letters / nonSpace < 0.55) return false;
   const junk = (text.match(/[�-]/g) || []).length;
   return junk / nonSpace <= 0.1;
@@ -117,21 +131,46 @@ let pdfjsPromise: Promise<PdfJs> | null = null;
 /**
  * pdf.js is loaded lazily (it is ~1.5 MB; only users who upload a resume pay for it).
  *
- * The worker module is imported FIRST and as a side effect: evaluating it sets globalThis.pdfjsWorker,
- * which makes pdf.js run its parser in this thread ("fake worker") instead of constructing a Web Worker
- * from a URL. That is deliberate: the packaged app loads the renderer from file:// inside app.asar, and
- * worker-from-URL loading there is the fragile part. In-thread has no Worker/blob/CSP/asar failure mode
- * and costs tens of milliseconds for a resume (extraction is capped at MAX_TEXT_PAGES pages).
+ * Parsing runs on a REAL Web Worker: a hostile resume (a font bomb, a page with 50k text items)
+ * then cannot freeze the renderer thread, which during an interview is the overlay itself.
+ *
+ * The worker source is inlined as a string (`?raw`) and handed to pdf.js as a Blob URL rather than a
+ * file URL: the packaged renderer is loaded from file:// inside app.asar, where `new Worker("file://...")`
+ * is refused, while a blob is not. If a worker cannot be constructed at all (an origin that blocks
+ * them), pdf.js keeps its in-thread parser: importing the worker module sets globalThis.pdfjsWorker,
+ * which is exactly what pdf.js looks for to fall back to. That import must therefore happen only
+ * when no worker was attached - globalThis.pdfjsWorker short-circuits the real-worker path.
  */
-function loadPdfjs(): Promise<PdfJs> {
+async function loadPdfjs(): Promise<PdfJs> {
   if (!pdfjsPromise) {
     pdfjsPromise = (async () => {
-      await import("pdfjs-dist/legacy/build/pdf.worker.min.mjs");
-      return (await import("pdfjs-dist/legacy/build/pdf.mjs")) as PdfJs;
+      const pdfjs = (await import("pdfjs-dist/legacy/build/pdf.mjs")) as PdfJs;
+      if (!(await attachPdfWorker(pdfjs))) {
+        await import("pdfjs-dist/legacy/build/pdf.worker.min.mjs");
+      }
+      return pdfjs;
     })();
     pdfjsPromise.catch(() => { pdfjsPromise = null; }); // a failed lazy-load can be retried
   }
   return pdfjsPromise;
+}
+
+/** True when the worker is running pdf.js's parser; false when it fell back to parsing in this thread. */
+async function attachPdfWorker(pdfjs: PdfJs): Promise<boolean> {
+  try {
+    // Blob worker support is not guaranteed in every renderer; probe it before committing to it.
+    const probe = URL.createObjectURL(new Blob([""], { type: "text/javascript" }));
+    try {
+      new Worker(probe).terminate();
+    } finally {
+      URL.revokeObjectURL(probe);
+    }
+    const { default: source } = await import("pdfjs-dist/legacy/build/pdf.worker.min.mjs?raw");
+    pdfjs.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([source], { type: "text/javascript" }));
+    return true;
+  } catch {
+    return false; // Blob/Worker unavailable (or the worker chunk failed to load) -> in-thread parser
+  }
 }
 
 function mapPdfError(e: unknown): ResumeError {
@@ -144,8 +183,8 @@ function mapPdfError(e: unknown): ResumeError {
 
 interface PdfTextItem { str: string; transform: number[]; width: number; height: number; hasEOL?: boolean }
 
-/** Rebuild readable lines from pdf.js text items (content-stream order). */
-function pageItemsToText(items: unknown[]): string {
+/** Rebuild readable lines from pdf.js text items (content-stream order), stopping at `maxChars`. */
+function pageItemsToText(items: unknown[], maxChars: number): string {
   let out = "";
   let prev: PdfTextItem | null = null;
   for (const raw of items) {
@@ -171,6 +210,8 @@ function pageItemsToText(items: unknown[]): string {
       }
     }
     out += cur.str;
+    // One page of a text-layer bomb can be tens of MB; stop building the string past the budget.
+    if (out.length > maxChars) return out;
     if (cur.hasEOL) { out += "\n"; prev = null; } else prev = cur;
   }
   return out;
@@ -216,9 +257,12 @@ async function extractPdf(buf: ArrayBuffer, signal: AbortSignal): Promise<Extrac
     let text = "";
     for (let i = 1; i <= Math.min(total, MAX_TEXT_PAGES); i++) {
       throwIfAborted(signal);
+      // Stop as soon as the budget is blown: the text is capped anyway, so a bigger text layer cannot
+      // change the answer - it can only cost another multi-MB string.
+      if (text.length > MAX_RESUME_CHARS) break;
       const page = await doc.getPage(i);
       const content = await page.getTextContent();
-      text += pageItemsToText(content.items as unknown[]) + "\n\n";
+      text += pageItemsToText(content.items as unknown[], MAX_RESUME_CHARS) + "\n\n";
       page.cleanup();
     }
     text = cleanExtractedText(text);
@@ -246,10 +290,66 @@ async function extractPdf(buf: ArrayBuffer, signal: AbortSignal): Promise<Extrac
 
 // ───────────────────────── images ─────────────────────────
 
-async function imageBlobToJpegPages(blob: Blob): Promise<string[]> {
+const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+
+/**
+ * Pixel dimensions read from the file header (PNG / JPEG / WebP) - no decoding, no allocation.
+ * {0,0} when the header cannot be parsed; the caller then falls back to the decoded bitmap's own size.
+ */
+export function readImageSize(bytes: Uint8Array): { width: number; height: number } {
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const u16 = (o: number) => dv.getUint16(o, false);
+  const ascii = (o: number, n: number) => String.fromCharCode(...bytes.subarray(o, o + n));
+  // PNG: IHDR is always the first chunk, so width/height sit right behind the signature + chunk header.
+  if (bytes.length > 24 && PNG_SIGNATURE.every((v, i) => bytes[i] === v)) {
+    return { width: dv.getUint32(16, false), height: dv.getUint32(20, false) };
+  }
+  // JPEG: walk the marker segments up to the frame header (SOF0..SOF15, minus DHT/JPGA/DAC).
+  if (bytes.length > 4 && bytes[0] === 0xff && bytes[1] === 0xd8) {
+    let o = 2;
+    while (o + 9 < bytes.length) {
+      if (bytes[o] !== 0xff) { o++; continue; } // resync over padding between segments
+      const marker = bytes[o + 1];
+      if (marker === 0xff) { o++; continue; }
+      if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) { o += 2; continue; }
+      const len = u16(o + 2);
+      if (len < 2) break;
+      if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+        return { width: u16(o + 7), height: u16(o + 5) };
+      }
+      o += 2 + len;
+    }
+  }
+  // WebP: RIFF container; the dimensions live in the VP8 (lossy) / VP8L (lossless) / VP8X chunk.
+  if (bytes.length > 30 && ascii(0, 4) === "RIFF" && ascii(8, 4) === "WEBP") {
+    const chunk = ascii(12, 4);
+    if (chunk === "VP8 " && bytes[23] === 0x9d && bytes[24] === 0x01 && bytes[25] === 0x2a) {
+      return { width: u16(26) & 0x3fff, height: u16(28) & 0x3fff };
+    }
+    if (chunk === "VP8L" && bytes[20] === 0x2f) {
+      return { width: (bytes[21] | ((bytes[22] & 0x3f) << 8)) + 1, height: ((bytes[22] >> 6) | (bytes[23] << 2) | ((bytes[24] & 0x0f) << 10)) + 1 };
+    }
+    if (chunk === "VP8X") {
+      return { width: 1 + (bytes[24] | (bytes[25] << 8) | (bytes[26] << 16)), height: 1 + (bytes[27] | (bytes[28] << 8) | (bytes[29] << 16)) };
+    }
+  }
+  return { width: 0, height: 0 };
+}
+
+async function imageBlobToJpegPages(buf: ArrayBuffer, mime: string): Promise<string[]> {
+  // createImageBitmap decodes the WHOLE image before any of it can be measured, and its resize options
+  // only scale afterwards - a 3 MB PNG can be 100 MP and take the renderer down before the size checks
+  // below ever run. So the pixel count is taken from the file header first.
+  const header = readImageSize(new Uint8Array(buf));
+  if (header.width * header.height > MAX_IMAGE_PIXELS) {
+    throw new ResumeError(
+      "too_large",
+      `That image is too large to read (${header.width}x${header.height}px). Upload a smaller screenshot, or save your resume as a PDF.`,
+    );
+  }
   let bmp: ImageBitmap;
   try {
-    bmp = await createImageBitmap(blob);
+    bmp = await createImageBitmap(new Blob([buf], { type: mime }));
   } catch {
     throw new ResumeError("corrupt", MSG.badImage);
   }
@@ -320,12 +420,18 @@ async function docxSideText(buf: ArrayBuffer, bodyText: string): Promise<{ head:
   try {
     const JSZip = (await import("jszip")).default;
     const zip = await JSZip.loadAsync(buf);
-    const bodyNorm = norm(bodyText);
+    // Compare against body LINES, not the whole body string. A short header such
+    // as the candidate's name or "CV" is a substring of plenty of body text, so
+    // substring matching silently dropped it — the exact case this function
+    // exists to recover.
+    const bodyLines = new Set(
+      bodyText.split("\n").map((l) => norm(l.replace(/\s+/g, " ").trim())).filter(Boolean),
+    );
     const seen = new Set<string>();
     const consider = (line: string, into: string[]) => {
       const t = line.replace(/\s+/g, " ").trim();
       const key = norm(t);
-      if (!t || seen.has(key) || PAGE_NUMBER_LINE.test(t) || bodyNorm.includes(key)) return;
+      if (!t || seen.has(key) || PAGE_NUMBER_LINE.test(t) || bodyLines.has(key)) return;
       seen.add(key);
       into.push(t);
     };
@@ -486,7 +592,7 @@ export async function extractResume(file: File, opts: { signal?: AbortSignal } =
     return { kind: "text", text: capped.text, source: "txt", truncated: capped.truncated };
   }
   const mime = sniffed.type === "png" ? "image/png" : sniffed.type === "jpeg" ? "image/jpeg" : "image/webp";
-  const pages = await imageBlobToJpegPages(new Blob([buf], { type: mime }));
+  const pages = await imageBlobToJpegPages(buf, mime);
   throwIfAborted(signal);
   return { kind: "images", pages, source: "image", totalPages: pages.length };
 }

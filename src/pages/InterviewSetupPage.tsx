@@ -48,10 +48,10 @@ const LightInput: React.FC<{
   return (
     <div className="flex flex-col gap-1 min-w-0">
       {label && (
-        <label className="text-[8px] font-black uppercase tracking-[0.12em]" style={{ color: SUBTLE }}>{emoji} {label}</label>
+        <label htmlFor={id} className="text-[8px] font-black uppercase tracking-[0.12em]" style={{ color: SUBTLE }}>{emoji} {label}</label>
       )}
       <motion.input
-        data-testid={id ? `field-${id}` : undefined} animate={controls}
+        id={id} data-testid={id ? `field-${id}` : undefined} animate={controls}
         type={type} value={value} onChange={e => onChange(e.target.value)}
         onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
         placeholder={placeholder}
@@ -86,10 +86,10 @@ const LightTextarea: React.FC<{
   return (
     <div className="flex flex-col gap-1">
       {label && (
-        <label className="text-[8px] font-black uppercase tracking-[0.12em]" style={{ color: SUBTLE }}>{emoji} {label}</label>
+        <label htmlFor={id} className="text-[8px] font-black uppercase tracking-[0.12em]" style={{ color: SUBTLE }}>{emoji} {label}</label>
       )}
       <motion.textarea
-        ref={ref} data-testid={id ? `field-${id}` : undefined} animate={controls}
+        ref={ref} id={id} data-testid={id ? `field-${id}` : undefined} animate={controls}
         value={value} onChange={e => onChange(e.target.value)}
         onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
         placeholder={placeholder} rows={rows}
@@ -311,6 +311,9 @@ export const InterviewSetupPage: React.FC = () => {
                   <p className="text-[8.5px] font-medium mt-0.5" style={{ color: SUBTLE }}>Responds after silence detected</p>
                 </div>
                 <button
+                  role="switch"
+                  aria-checked={autoAI}
+                  aria-label="Auto AI Answer"
                   onClick={() => setAutoAI(!autoAI)}
                   style={{ width: "36px", height: "20px", background: autoAI ? INK : "#e0e1e6", borderRadius: "999px", border: "none", cursor: "pointer", position: "relative", transition: "all 0.2s" }}
                 >

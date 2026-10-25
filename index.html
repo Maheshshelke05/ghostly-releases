@@ -3,6 +3,34 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- There was no CSP at all here. This one is the minimum that still lets the
+         app work:
+           script-src blob:   useInterviewAudio builds its AudioWorklet from a
+                              blob: URL (URL.createObjectURL) — without it live
+                              transcription dies at addModule().
+           script-src https:  the support ad is a srcdoc iframe, so it inherits
+                              this policy and its remote loader needs https:.
+                              That frame is sandboxed WITHOUT allow-same-origin,
+                              so it cannot reach window.parent.ghostly, and the
+                              app renders no raw HTML anywhere (rehype-raw is
+                              gone, no dangerouslySetInnerHTML, no innerHTML).
+           worker-src blob:   same blob: module, for any future worker.
+           connect-src        https:/wss: for every AI vendor, the backend and
+                              Deepgram streaming; the two http://localhost entries
+                              are for the Ollama provider (src/lib/ai/ollama.ts),
+                              whose base URL is a plain-http loopback address.
+           frame-src 'self'   the support ad is a srcDoc iframe — it inherits this
+                              document's origin, so it needs 'self'; https: stays
+                              for any ad frame served from a real origin.
+           style-src/font-src the Google Fonts stylesheet + font files linked below.
+         Known gaps, by design of the app, not of this policy: `npm run dev`
+         (Vite's React-Refresh preamble is an inline script, and HMR needs
+         ws://localhost) and the third-party support ad script, whose origin is
+         decided at runtime by the backend so it can't be allowlisted here. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' blob: https:; object-src 'none'; base-uri 'self'; form-action 'none'; frame-src 'self' https:; frame-ancestors 'none'; img-src 'self' data: https: app:; connect-src 'self' https: wss: http://localhost:* http://127.0.0.1:*; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https:; worker-src 'self' blob:;"
+    />
     <!-- Window has no frame (so this title is never shown as UI chrome) but it IS what any
          window-title enumeration outside screen capture — e.g. an exam-proctoring tool that
          calls GetWindowText on every open window, independent of what's actually being

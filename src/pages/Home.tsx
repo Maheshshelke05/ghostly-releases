@@ -72,7 +72,12 @@ const SupportAdPlacement: React.FC<{ scriptUrl?: string; containerId?: string }>
     <iframe
       title="Sponsored support ad"
       srcDoc={srcDoc}
-      sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox allow-same-origin"
+      // allow-scripts WITHOUT allow-same-origin: those two together hand the
+      // framed ad a same-origin document, so the third-party script could read
+      // window.parent.ghostly — every API key the user saved. allow-popups-to-
+      // escape-sandbox came out with it for the same reason (it made the ad's
+      // opened window inherit this app's origin).
+      sandbox="allow-scripts allow-popups"
       className="w-full rounded-xl border-0 bg-white"
       style={{ height: "124px" }}
     />
@@ -163,12 +168,12 @@ const SupportPanel: React.FC<SupportPanelProps> = ({
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <label className="text-[9px] font-bold uppercase tracking-widest text-white/30">Your email</label>
-          <input value={email} readOnly className="mt-1 w-full rounded-xl px-3 py-2 text-[12px] font-semibold bg-white/[0.06] border border-white/[0.08] text-white/60 outline-none" />
+          <label htmlFor="support-email" className="text-[9px] font-bold uppercase tracking-widest text-white/30">Your email</label>
+          <input id="support-email" value={email} readOnly className="mt-1 w-full rounded-xl px-3 py-2 text-[12px] font-semibold bg-white/[0.06] border border-white/[0.08] text-white/60 outline-none" />
         </div>
         <div>
-          <label className="text-[9px] font-bold uppercase tracking-widest text-white/30">Category</label>
-          <select value={supportCategory} onChange={(e) => setSupportCategory(e.target.value)}
+          <label htmlFor="support-category" className="text-[9px] font-bold uppercase tracking-widest text-white/30">Category</label>
+          <select id="support-category" value={supportCategory} onChange={(e) => setSupportCategory(e.target.value)}
             className="mt-1 w-full rounded-xl px-3 py-2 text-[12px] font-semibold bg-white/[0.06] border border-white/[0.08] text-white/80 outline-none">
             <option>Bug report</option>
             <option>Feature not working</option>
@@ -181,15 +186,15 @@ const SupportPanel: React.FC<SupportPanelProps> = ({
       </div>
 
       <div className="mt-3">
-        <label className="text-[9px] font-bold uppercase tracking-widest text-white/30">Subject</label>
-        <input value={supportSubject} onChange={(e) => setSupportSubject(e.target.value)}
+        <label htmlFor="support-subject" className="text-[9px] font-bold uppercase tracking-widest text-white/30">Subject</label>
+        <input id="support-subject" value={supportSubject} onChange={(e) => setSupportSubject(e.target.value)}
           required maxLength={120} placeholder="Example: Screenshot capture is not working"
           className="mt-1 w-full rounded-xl px-3 py-2 text-[12px] font-semibold bg-white/[0.06] border border-white/[0.08] text-white/85 placeholder:text-white/20 outline-none focus:border-violet-400/40" />
       </div>
 
       <div className="mt-3">
-        <label className="text-[9px] font-bold uppercase tracking-widest text-white/30">Message</label>
-        <textarea value={supportMessage} onChange={(e) => setSupportMessage(e.target.value)}
+        <label htmlFor="support-message" className="text-[9px] font-bold uppercase tracking-widest text-white/30">Message</label>
+        <textarea id="support-message" value={supportMessage} onChange={(e) => setSupportMessage(e.target.value)}
           required minLength={10} maxLength={1200} placeholder="Tell what happened, what you clicked, and what you expected."
           className="mt-1 w-full h-28 rounded-xl px-3 py-2 text-[12px] font-semibold bg-white/[0.06] border border-white/[0.08] text-white/85 placeholder:text-white/20 outline-none resize-none focus:border-violet-400/40" />
       </div>
@@ -224,12 +229,28 @@ const SupportPanel: React.FC<SupportPanelProps> = ({
 );
 
 export const Home: React.FC = () => {
-  const {
-    currentSolution, isStreaming, screenshots, error, settings,
-    sessionMessages, addScreenshot, setCurrentSolution, appendToSolution,
-    setIsStreaming, setError, clearSolution, clearScreenshots, addToHistory, addSessionMessage, updateSettings, interviewSession,
-    user, ads,
-  } = useStore();
+  // Per-field selectors, not useStore(): a bare useStore() subscribes to every
+  // mutation in the store, so unrelated writes (mouseEnabled, history, ads…)
+  // re-rendered this whole screen — including while an answer streams.
+  const currentSolution = useStore((s) => s.currentSolution);
+  const isStreaming = useStore((s) => s.isStreaming);
+  const screenshots = useStore((s) => s.screenshots);
+  const error = useStore((s) => s.error);
+  const settings = useStore((s) => s.settings);
+  const sessionMessages = useStore((s) => s.sessionMessages);
+  const interviewSession = useStore((s) => s.interviewSession);
+  const user = useStore((s) => s.user);
+  const ads = useStore((s) => s.ads);
+  const addScreenshot = useStore((s) => s.addScreenshot);
+  const setCurrentSolution = useStore((s) => s.setCurrentSolution);
+  const appendToSolution = useStore((s) => s.appendToSolution);
+  const setIsStreaming = useStore((s) => s.setIsStreaming);
+  const setError = useStore((s) => s.setError);
+  const clearSolution = useStore((s) => s.clearSolution);
+  const clearScreenshots = useStore((s) => s.clearScreenshots);
+  const addSessionMessage = useStore((s) => s.addSessionMessage);
+  const addToHistory = useStore((s) => s.addToHistory);
+  const updateSettings = useStore((s) => s.updateSettings);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Minimized = the whole overlay collapsed to just the logo. Everything stays mounted
@@ -248,8 +269,11 @@ export const Home: React.FC = () => {
   const [chatFocused, setChatFocused] = useState(false);
   const [activeTab, setActiveTab] = useState<InterviewTab>("ai");
   const [liveActive, setLiveActive] = useState(false);
-  // Fix: load autoAI from saved settings instead of hardcoded true
-  const [autoAI, setAutoAI] = useState(() => settings.autoAI ?? true);
+  // Read straight from the store instead of a component-local copy seeded once:
+  // toggling Auto-AI mid-interview and navigating away reset it back, and the
+  // toggle itself was never saved (useStore's settings subscription persists
+  // every updateSettings now, which is what makes this write-through stick).
+  const autoAI = settings.autoAI ?? true;
   const [qaPages, setQaPages] = useState<{ question: string; answer: string }[]>([]);
   // Shown briefly whenever streamWithFallback actually switches provider —
   // this is the whole point of making the switch visible instead of silent.
@@ -267,8 +291,10 @@ export const Home: React.FC = () => {
   const [pageIndex, setPageIndex] = useState(0);
   const [userNavigated, setUserNavigated] = useState(false); // user manually changed page
   const [pendingTranscript, setPendingTranscript] = useState("");
-  // Chat state
-  const [chatMessages, setChatMessages] = useState<{ role: "user" | "assistant"; text: string }[]>([]);
+  // Chat state — every message carries an id so React keys the bubbles by
+  // identity: indexed keys made SolutionCard's own "Copied" state (and its
+  // scroll position) stick to whatever bubble ended up at that index next.
+  const [chatMessages, setChatMessages] = useState<{ id: string; role: "user" | "assistant"; text: string }[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatStreaming, setChatStreaming] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -280,7 +306,17 @@ export const Home: React.FC = () => {
   const answerEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { screenshotsRef.current = screenshots; }, [screenshots]);
-  useEffect(() => () => { abortControllerRef.current?.abort(); }, []);
+  // Guards the async hotkey handlers (screen capture → AI stream) against landing
+  // a setError/setState on a page that has already unmounted. Re-armed on mount
+  // because React 18 StrictMode mounts → unmounts → mounts in dev.
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      abortControllerRef.current?.abort();
+    };
+  }, []);
 
   // Auto scroll answer
   useEffect(() => {
@@ -437,7 +473,10 @@ export const Home: React.FC = () => {
         });
       }
 
-      addSessionMessage({ id: uuidv4(), role: "user", content: questionText, screenshotBase64: latestScreenshot });
+      // No screenshotBase64 here: nothing reads it, and a full base64 frame per
+      // transcript entry kept every capture of the interview alive in memory
+      // (sessionMessages is the only place they were stored).
+      addSessionMessage({ id: uuidv4(), role: "user", content: questionText });
       addSessionMessage({ id: uuidv4(), role: "assistant", content: fullSolution });
 
       // Clear the streaming buffer + used screenshots on completion, WITHOUT wiping
@@ -455,7 +494,14 @@ export const Home: React.FC = () => {
       if (signal.aborted) return;
       setError(err instanceof Error ? err.message : "AI streaming failed");
     } finally {
-      if (!signal.aborted) { setIsStreaming(false); }
+      // Cleared on the abort path too (and only by the stream that still owns the
+      // controller — a newer stream aborts this one, so the flag belongs to the
+      // newer run): an aborted stream used to leave isStreaming stuck true
+      // forever, which kept the send buttons disabled and the spinner pulsing.
+      if (abortControllerRef.current === ctrl) {
+        abortControllerRef.current = null;
+        setIsStreaming(false);
+      }
     }
   }, [settings, sessionMessages, interviewSession, setCurrentSolution, setError, setIsStreaming, appendToSolution, addToHistory, addSessionMessage, liveActive, clearScreenshots, setFallbackNotice]);
 
@@ -477,8 +523,17 @@ export const Home: React.FC = () => {
   const liveActiveRef = useRef(liveActive);
   useEffect(() => { liveActiveRef.current = liveActive; }, [liveActive]);
 
+  // Same idea for the stream/answer state the timer reads. Keeping these as
+  // effect deps is what broke auto-submit: `currentSolution` changes on every
+  // streamed chunk and `pendingTranscript` right after a send, so any change
+  // during the 800–2200 ms window ran the cleanup (killing the timer) and then
+  // the `text === lastLiveTextRef.current` guard refused to re-arm it — the
+  // question just spoken was silently dropped.
+  const liveStateRef = useRef({ isStreaming, pendingTranscript, currentSolution });
+  useEffect(() => { liveStateRef.current = { isStreaming, pendingTranscript, currentSolution }; });
+
   useEffect(() => {
-    if (!liveActive || !autoAI || isStreaming) return;
+    if (!liveActive || !autoAI) return;
     const text = audio.liveText.trim();
     if (!text || text === lastLiveTextRef.current) return;
     lastLiveTextRef.current = text;
@@ -487,29 +542,37 @@ export const Home: React.FC = () => {
     const endsWithQuestion = text.endsWith("?") || text.includes("?");
     const silenceDelay = endsWithQuestion ? 800 : 2200;
 
-    silenceTimerRef.current = setTimeout(() => {
+    const fire = () => {
       if (!liveActiveRef.current) return;
-      const current = audio.liveText.trim();
-      if (!current || isStreaming) return;
+      const { isStreaming: streaming, pendingTranscript: pending, currentSolution: solution } = liveStateRef.current;
+      // Someone spoke while the previous answer was still streaming: re-check
+      // shortly instead of dropping the question (nothing re-armed this timer
+      // before — isStreaming was a dep, so the effect re-ran with the same text
+      // and the guard above bailed out).
+      if (streaming) {
+        silenceTimerRef.current = setTimeout(fire, 500);
+        return;
+      }
 
       // Filter out short filler interjections (< 4 words unless ends with ?)
-      const words = current.split(/\s+/).filter(Boolean);
-      const isShortFiller = words.length < 4 && !current.endsWith("?");
+      const words = text.split(/\s+/).filter(Boolean);
+      const isShortFiller = words.length < 4 && !text.endsWith("?");
       if (isShortFiller) return;
 
       // Auto-save previous Q&A into QA History Pages before starting new question
-      if (pendingTranscript && currentSolution) {
-        setQaPages(prev => [...prev, { question: pendingTranscript, answer: currentSolution }]);
+      if (pending && solution) {
+        setQaPages(prev => [...prev, { question: pending, answer: solution }]);
         setPageIndex(prev => prev + 1);
       }
 
       audio.clearLiveText();
-      setPendingTranscript(current);
-      runAIStreamRef.current([], current);
-    }, silenceDelay);
+      setPendingTranscript(text);
+      runAIStreamRef.current([], text);
+    };
+    silenceTimerRef.current = setTimeout(fire, silenceDelay);
 
     return () => { if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current); };
-  }, [audio.liveText, liveActive, autoAI, isStreaming, pendingTranscript, currentSolution]);
+  }, [audio.liveText, liveActive, autoAI]);
 
   // ── Toggle Live Mode (AI Answer tab click) ──────────────────────────────────
   const handleToggleLive = useCallback(async () => {
@@ -586,15 +649,19 @@ export const Home: React.FC = () => {
       clearScreenshots();
       setError(null);
       const rawB64 = await window.ghostly.captureFullscreen();
+      if (!isMountedRef.current) return;
       const compressedB64 = await compressScreenshot(rawB64);
+      if (!isMountedRef.current) return;
       addScreenshot(compressedB64);
       // interviewSession carries the candidate's custom instructions / job
       // description / profile — this used to be omitted here, so Screen
       // Analysis silently ignored any custom instructions the user set in
       // Interview Setup (only the live "AI Answer" path included them).
       const screenPrompt = buildPrompt(interviewSession);
-      runAIStream([compressedB64], undefined, screenPrompt);
-    } catch { setError("Failed to capture screen."); }
+      // Awaited so a failure inside the stream is actually visible to this
+      // try/catch — fire-and-forget made the surrounding catch unreachable.
+      await runAIStream([compressedB64], undefined, screenPrompt);
+    } catch { if (isMountedRef.current) setError("Failed to capture screen."); }
   }, [runAIStream, setError, addScreenshot, liveActive, audio, setCurrentSolution, clearScreenshots, setIsStreaming, interviewSession]);
 
   // ── Tab change ──────────────────────────────────────────────────────────────
@@ -737,18 +804,17 @@ export const Home: React.FC = () => {
   const liveQuestion = pendingTranscript || audio.liveText;
   const liveAnswer = currentSolution;
 
-  // Auto jump to live page when new question arrives — only if user hasn't manually navigated.
-  // This only watched qaPages.length before, so a new Screen Analysis or AI-answer
-  // follow-up page (built from normalQaPairs/sessionMessages, not qaPages) never
-  // triggered the auto-jump — pageIndex would silently go stale after each new page.
+  // Auto jump to the newest page when a new question arrives — unless the user has
+  // navigated by hand. Two effects used to fight over pageIndex here: in normal
+  // mode `pages` is built from normalQaPairs, so both fired on the same change and
+  // one of them set pageIndex to pages.length — one past the end, only saved by the
+  // safePageIndex clamp. They're one effect now: live mode parks on the live page,
+  // normal mode on the last finished page.
   useEffect(() => {
-    if (!userNavigated) setPageIndex(livePageIndex);
-  }, [pages.length, livePageIndex]);
-
-  useEffect(() => {
-    if (normalQaPairs.length > 0 && !isStreaming && !liveActive)
-      setPageIndex(normalQaPairs.length - 1);
-  }, [normalQaPairs.length, isStreaming, liveActive]);
+    if (userNavigated) return;
+    setPageIndex(liveActive ? livePageIndex : Math.max(0, pages.length - 1));
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- userNavigated is read, not a trigger: re-running on it would undo a manual page click.
+  }, [liveActive, pages.length, livePageIndex]);
 
   // Reset userNavigated when a new answer starts streaming
   useEffect(() => {
@@ -799,8 +865,11 @@ export const Home: React.FC = () => {
     addToHistory(sessionEntry);
     try {
       const h = await window.ghostly.getHistory();
-      // Deduplicate: remove any existing entry with same session start timestamp
-      const filtered = h.filter((x: any) => x.timestamp !== sessionEntry.timestamp && x.id !== sessionEntry.id);
+      // Deduplicate: drop any existing entry with the same session start timestamp
+      // OR the same id. `&&` here kept an entry matching either one — the opposite
+      // of what the comment says (and with a fresh uuid per session, the id half
+      // was dead code, so only the timestamp compare ever did anything).
+      const filtered = h.filter((x: any) => x.timestamp !== sessionEntry.timestamp || x.id !== sessionEntry.id);
       await window.ghostly.saveHistory([sessionEntry, ...filtered]);
     } catch { /* best-effort */ }
     // Reset tracking for next session
@@ -830,7 +899,7 @@ export const Home: React.FC = () => {
   const handleChatSend = useCallback(async (text: string) => {
     if (!text.trim() || chatStreaming) return;
     featuresUsedRef.current.add("chat");
-    const userMsg = { role: "user" as const, text: text.trim() };
+    const userMsg = { id: uuidv4(), role: "user" as const, text: text.trim() };
     setChatMessages(prev => [...prev, userMsg]);
     setChatInput("");
     setChatStreaming(true);
@@ -838,6 +907,7 @@ export const Home: React.FC = () => {
     const activeKey = activeProviderKey(settings);
     if (!activeKey) {
       setChatMessages(prev => [...prev, {
+        id: uuidv4(),
         role: "assistant",
         text: isProviderDisabled(settings, settings.activeProvider)
           ? `${settings.activeProvider} is deactivated. Open Settings → API Keys and activate a provider.`
@@ -869,7 +939,8 @@ export const Home: React.FC = () => {
 
       let full = "";
       let lastChatFlush = Date.now();
-      setChatMessages(prev => [...prev, { role: "assistant", text: "" }]);
+      const assistantId = uuidv4();
+      setChatMessages(prev => [...prev, { id: assistantId, role: "assistant", text: "" }]);
       for await (const chunk of stream) {
         full += chunk;
         const now = Date.now();
@@ -877,19 +948,19 @@ export const Home: React.FC = () => {
           const currentText = full;
           setChatMessages(prev => [
             ...prev.slice(0, -1),
-            { role: "assistant", text: currentText },
+            { id: assistantId, role: "assistant", text: currentText },
           ]);
           lastChatFlush = now;
         }
       }
       setChatMessages(prev => [
         ...prev.slice(0, -1),
-        { role: "assistant", text: full },
+        { id: assistantId, role: "assistant", text: full },
       ]);
       // Save chat Q&A to session history
       sessionQARef.current.push({ question: text.trim(), answer: full, feature: "chat", timestamp: Date.now() });
     } catch (err) {
-      setChatMessages(prev => [...prev, { role: "assistant", text: `Error: ${err instanceof Error ? err.message : "AI failed"}` }]);
+      setChatMessages(prev => [...prev, { id: uuidv4(), role: "assistant", text: `Error: ${err instanceof Error ? err.message : "AI failed"}` }]);
     } finally {
       setChatStreaming(false);
     }
@@ -926,6 +997,18 @@ export const Home: React.FC = () => {
   // here for Ctrl+N/Ctrl+0/Ctrl+E/Ctrl+8/Ctrl+2, which only fired while this
   // (usually invisible) overlay window itself happened to have keyboard focus —
   // effectively never during a real interview.
+  // Everything the handlers below need, mirrored into a ref. The effect itself is
+  // registered once: it used to depend on runAIStream/currentSolution/isStreaming/
+  // pendingTranscript/audio.liveText/totalPages, several of which change ~20x per
+  // second while an answer streams (appendToSolution) and on every opacity-slider
+  // tick (updateSettings → settings → runAIStream), so all eight global IPC
+  // listeners were torn down and re-added at that rate — and a hotkey pressed
+  // inside the remove/add window was silently dropped.
+  const hotkeyRef = useRef({ liveActive, isStreaming, currentSolution, pendingTranscript, totalPages, interviewSession, handleManualSend, handleRestart, clearLiveText: audio.clearLiveText });
+  useEffect(() => {
+    hotkeyRef.current = { liveActive, isStreaming, currentSolution, pendingTranscript, totalPages, interviewSession, handleManualSend, handleRestart, clearLiveText: audio.clearLiveText };
+  });
+
   useEffect(() => {
     // Ctrl+E / Ctrl+Shift+S / Ctrl+Shift+Enter (main process) both funnel through
     // here. Same compression as handleScreenAnalysis (imageCompressor defaults) so
@@ -933,18 +1016,20 @@ export const Home: React.FC = () => {
     // sent uncompressed for the hotkey path only, several times larger).
     const offScreenshot = window.ghostly.onScreenshot(async (b64) => {
       const compressed = await compressScreenshot(b64);
+      if (!isMountedRef.current) return;
       addScreenshot(compressed);
     });
     // Ctrl+Enter — solve whatever's already captured/transcribed. If it's a
     // screenshot-driven solve, use the same adaptive prompt handleScreenAnalysis
     // builds instead of an empty one.
     const offSolve = window.ghostly.onSolve(async () => {
+      const { interviewSession: session } = hotkeyRef.current;
       const followUp = screenshotsRef.current.length > 0
-        ? buildPrompt(interviewSession)
+        ? buildPrompt(session)
         : undefined;
-      await runAIStream(screenshotsRef.current, undefined, followUp);
+      await runAIStreamRef.current(screenshotsRef.current, undefined, followUp);
     });
-    const offStartOver = window.ghostly.onStartOver(handleRestart);
+    const offStartOver = window.ghostly.onStartOver(() => hotkeyRef.current.handleRestart());
 
     // Ctrl+E capture failing (e.g. desktopCapturer erroring) used to only log
     // to the terminal — invisible in a packaged app, so it looked exactly
@@ -953,22 +1038,22 @@ export const Home: React.FC = () => {
 
     // Ctrl+N — Next Question (only meaningful while live-listening)
     const offNextQuestion = window.ghostly.onNextQuestion(() => {
-      if (!liveActive) return;
-      if (currentSolution && pendingTranscript) {
-        setQaPages(prev => [...prev, { question: pendingTranscript, answer: currentSolution }]);
+      const { liveActive: live, currentSolution: solution, pendingTranscript: pending, clearLiveText } = hotkeyRef.current;
+      if (!live) return;
+      if (solution && pending) {
+        setQaPages(prev => [...prev, { question: pending, answer: solution }]);
       }
       setPendingTranscript("");
       clearSolution();
-      audio.clearLiveText();
+      clearLiveText();
       lastLiveTextRef.current = "";
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
     });
 
     // Ctrl+0 — Manual Send (skip waiting for silence detection)
     const offManualSend = window.ghostly.onManualSend(() => {
-      if (liveActive && audio.liveText.trim() && !isStreaming) {
-        handleManualSend();
-      }
+      const { liveActive: live, isStreaming: streaming, handleManualSend: send } = hotkeyRef.current;
+      if (live && !streaming) send();
     });
 
     // Ctrl+8 — Previous Question page
@@ -980,7 +1065,7 @@ export const Home: React.FC = () => {
     // Ctrl+2 — Next Question page
     const offNextQuestionPage = window.ghostly.onNextQuestionPage(() => {
       setUserNavigated(true);
-      setPageIndex(p => Math.min(Math.max(0, totalPages - 1), p + 1));
+      setPageIndex(p => Math.min(Math.max(0, hotkeyRef.current.totalPages - 1), p + 1));
     });
 
     return () => {
@@ -993,7 +1078,9 @@ export const Home: React.FC = () => {
       offPrevQuestion();
       offNextQuestionPage();
     };
-  }, [runAIStream, addScreenshot, handleRestart, liveActive, isStreaming, currentSolution, pendingTranscript, handleManualSend, audio.liveText, totalPages, interviewSession]);
+    // Only stable references here (zustand actions + setState), so this runs once
+    // and once only: on unmount, to remove every listener.
+  }, [addScreenshot, setError, clearSolution]);
 
   const displayLiveText = audio.liveText || pendingTranscript;
 
@@ -1027,7 +1114,7 @@ export const Home: React.FC = () => {
           onTabChange={handleTabChange}
           onStop={() => { saveSessionToHistory(); handleRestart(); useStore.getState().setAppScreen("home"); setTimeout(() => window.ghostly.enableMouse(), 50); setTimeout(() => window.ghostly.enableMouse(), 300); }}
           autoAI={autoAI}
-          onToggleAutoAI={() => setAutoAI(v => !v)}
+          onToggleAutoAI={() => updateSettings({ autoAI: !autoAI })}
           onMinimize={handleMinimize}
         />
       </div>
@@ -1082,6 +1169,7 @@ export const Home: React.FC = () => {
                       <div className="flex items-center gap-1.5">
                         <span className="text-[9px] text-white/25 uppercase tracking-wider">Opacity</span>
                         <input type="range" min="20" max="100"
+                          aria-label="Overlay opacity"
                           value={Math.round((settings.opacity ?? 1) * 100)}
                           onChange={(e) => { const v = parseInt(e.target.value)/100; updateSettings({opacity:v}); window.ghostly.setOpacity(v); }}
                           className="w-14 h-1 accent-violet-400 cursor-pointer" />
@@ -1092,12 +1180,14 @@ export const Home: React.FC = () => {
                 <>
                   <div className="flex items-center gap-1.5" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
                     <button onClick={() => { setUserNavigated(true); setPageIndex(p => Math.max(0, p - 1)); }}
+                      aria-label="Previous question"
                       disabled={pageIndex === 0 || totalPages === 0}
                       className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-white/10 text-white/30 hover:text-white/70 disabled:opacity-20 transition-colors text-sm">‹</button>
                     <span className="text-[11px] text-white/30 font-mono tabular-nums min-w-[40px] text-center">
                       {totalPages === 0 ? "—" : `${Math.min(pageIndex + 1, totalPages)} / ${totalPages}`}
                     </span>
                     <button onClick={() => { setUserNavigated(true); setPageIndex(p => Math.min(Math.max(0, totalPages - 1), p + 1)); }}
+                      aria-label="Next question"
                       disabled={pageIndex >= totalPages - 1 || totalPages === 0}
                       className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-white/10 text-white/30 hover:text-white/70 disabled:opacity-20 transition-colors text-sm">›</button>
                   </div>
@@ -1107,6 +1197,8 @@ export const Home: React.FC = () => {
                     <div className="flex gap-1.5 items-center" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
                       {Array.from({ length: Math.min(totalPages, 10) }).map((_, i) => (
                         <button key={i} onClick={() => { setUserNavigated(true); setPageIndex(i); }}
+                          aria-label={`Question ${i + 1} of ${Math.min(totalPages, 10)}`}
+                          aria-current={i === pageIndex ? "page" : undefined}
                           className={`rounded-full transition-all ${
                             i === pageIndex ? "w-5 h-1.5 bg-violet-400" :
                             i === livePageIndex && liveActive ? "w-1.5 h-1.5 bg-green-400/70" :
@@ -1121,6 +1213,7 @@ export const Home: React.FC = () => {
                     <div className="flex items-center gap-1.5">
                       <span className="text-[9px] text-white/25 uppercase tracking-wider">Opacity</span>
                       <input type="range" min="20" max="100"
+                        aria-label="Overlay opacity"
                         value={Math.round((settings.opacity ?? 1) * 100)}
                         onChange={(e) => {
                           const v = parseInt(e.target.value) / 100;
@@ -1197,7 +1290,7 @@ export const Home: React.FC = () => {
                         </div>
                         <button
                           onClick={() => {
-                            navigator.clipboard.writeText("mahishelke0505@ybl");
+                            navigator.clipboard.writeText("mahishelke0505@ybl").catch(() => {});
                             setCopied(true);
                             setTimeout(() => setCopied(false), 2000);
                           }}
@@ -1229,7 +1322,7 @@ export const Home: React.FC = () => {
                     ) : (
                       <div className="flex flex-col gap-4 pb-2">
                         {chatMessages.map((msg, i) => (
-                          <div key={i} className={`flex flex-col gap-1.5 ${msg.role === "user" ? "items-end" : "items-start"}`}>
+                          <div key={msg.id} className={`flex flex-col gap-1.5 ${msg.role === "user" ? "items-end" : "items-start"}`}>
                             <span className={`text-[9px] font-bold uppercase tracking-widest ${
                               msg.role === "user" ? "text-violet-400/60" : "text-blue-400/60"
                             }`}>

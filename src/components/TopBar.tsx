@@ -151,6 +151,8 @@ export const TopBar: React.FC<TopBarProps> = ({
 
           {/* ── Tabs — the highlight glides between them (shared layoutId) ── */}
           <div
+            role="tablist"
+            aria-label="Interview views"
             className="flex items-center gap-0.5 p-0.5 rounded-[11px] shrink-0"
             style={{ background: "rgba(255,255,255,0.035)", border: "1px solid rgba(255,255,255,0.06)" }}
           >
@@ -161,6 +163,12 @@ export const TopBar: React.FC<TopBarProps> = ({
               return (
                 <motion.button
                   key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  // The live bar hides the "Job Portal" label (icon-only), so the
+                  // name can't come from the button's own text there.
+                  aria-label={isStopBtn ? "Stop live transcription" : tab.label}
                   onClick={() => handleTabClick(tab.id)}
                   whileTap={{ scale: 0.95 }}
                   title={tab.label}

@@ -1,14 +1,16 @@
-import { desktopCapturer, screen } from "electron";
+import { desktopCapturer, screen, type BrowserWindow } from "electron";
 
-export async function captureFullScreen(): Promise<string> {
-  // The screen the user is actually looking at, not necessarily Windows' designated
-  // "primary" monitor. This used to always capture getPrimaryDisplay() and always take
-  // sources[0] regardless of how many screens desktopCapturer returned — on any
-  // multi-monitor setup where the interview/assessment window was on a secondary
-  // display, every single screenshot silently captured the wrong (often blank or
-  // unrelated) screen, which the AI then correctly reports as "Nothing actionable -
-  // screenshot not visible" since there genuinely was no question on what it saw.
-  const activeDisplay = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+export async function captureFullScreen(win?: BrowserWindow | null): Promise<string> {
+  // The screen the overlay is actually on. This used to use
+  // getDisplayNearestPoint(getCursorScreenPoint()) — the cursor, not the window:
+  // drifting the mouse to another monitor (or the user starting the interview
+  // with the cursor parked elsewhere) captured a screen the user isn't looking
+  // at. The window is the authoritative "which display is this answer about"
+  // signal, so match on its bounds. Callers that have no window fall back to the
+  // primary display.
+  const activeDisplay = win && !win.isDestroyed()
+    ? screen.getDisplayMatching(win.getBounds())
+    : screen.getPrimaryDisplay();
   const { width, height } = activeDisplay.size;
 
   // 1600px is what the renderer sends to the AI (imageCompressor's default), so
@@ -38,6 +40,16 @@ export async function captureFullScreen(): Promise<string> {
   const source = match ?? sources[0];
 
   // 85% JPEG keeps code/text crisp for vision models at a much smaller payload.
+  // An empty thumbnail means Windows handed back no pixels — a locked screen, a
+  // protected/DRM display, or a session that switched desktops. That used to be
+  // encoded to a 0-byte "data:image/jpeg;base64," and shipped to the vision
+  // model anyway, which then confidently answered "Nothing actionable" about an
+  // image that was never captured.
+  if (source.thumbnail.isEmpty()) {
+    throw new Error(
+      "Screen capture came back empty — the screen is locked or protected. Unlock it and try again.",
+    );
+  }
   const jpegBuffer = source.thumbnail.toJPEG(85);
   return `data:image/jpeg;base64,${jpegBuffer.toString("base64")}`;
 }

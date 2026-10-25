@@ -1,100 +1,103 @@
 import type { AIProvider, AIRequestOptions } from "./types";
-import { rateLimitError, extractApiErrorMessage } from "./types";
+import {
+  defaultSignal,
+  extractApiErrorMessage,
+  ProviderError,
+  raceSignal,
+  rateLimitError,
+  requireApiKey,
+  retryOnServerError,
+} from "./types";
+import { modelIds } from "./catalog";
 
 export class AnthropicProvider implements AIProvider {
   name = "anthropic";
 
   listModels(): string[] {
-    // claude-sonnet-4-5-20250929 is deprecated (as of 2026-09-30) and fully retires
-    // 2026-11-30 (platform.claude.com/docs/en/about-claude/model-deprecations) — it
-    // still works today but would silently stop in a few weeks, the same way NVIDIA's
-    // models died with nobody noticing until users started filing tickets. Replaced
-    // with claude-sonnet-5-5, Anthropic's own listed replacement for it and the
-    // current flagship Sonnet. The other three below are all confirmed Active with no
-    // retirement date set.
-    return [
-      "claude-sonnet-5",
-      "claude-opus-5",
-      "claude-haiku-4-5-20251001",
-      "claude-sonnet-5-5",
-    ];
+    return modelIds("anthropic");
   }
 
   async *streamSolution(options: AIRequestOptions): AsyncGenerator<string> {
-    let {
-      base64Image,
-      mimeType = "image/png",
-      prompt,
-      messages = [],
-      model,
-      apiKey,
-      maxTokens = 4096,
-    } = options;
+    const { base64Image, mimeType = "image/png", prompt, messages = [], apiKey, maxTokens = 4096 } = options;
+    const signal = defaultSignal(options.signal);
+    let model = options.model;
+
+    // An empty key would otherwise spend a guaranteed 401 round trip in the proxy.
+    const anthropicKey = requireApiKey(apiKey, "Anthropic", "https://console.anthropic.com/settings/keys");
 
     // CRITICAL FIX: Clean model name - remove all whitespace
     model = model.trim().replace(/\s+/g, "");
 
-    try {
-      const imageData = base64Image?.includes(",")
-        ? base64Image.split(",")[1]
-        : base64Image;
+    const imageData = base64Image?.includes(",")
+      ? base64Image.split(",")[1]
+      : base64Image;
 
-      const apiMessages = messages.map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
+    const apiMessages = messages.map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
 
-      const currentContent: any[] = [];
-      if (imageData) {
-        currentContent.push({
-          type: "image",
-          source: {
-            type: "base64",
-            media_type: mimeType,
-            data: imageData,
-          },
-        });
-      }
-      currentContent.push({ type: "text", text: prompt });
-
-      apiMessages.push({
-        role: "user",
-        content: currentContent as any,
+    const currentContent: any[] = [];
+    if (imageData) {
+      currentContent.push({
+        type: "image",
+        source: { type: "base64", media_type: mimeType, data: imageData },
       });
+    }
+    currentContent.push({ type: "text", text: prompt });
+    apiMessages.push({ role: "user", content: currentContent as any });
 
-      const body = {
-        model,
-        max_tokens: maxTokens,
-        stream: false,
-        messages: apiMessages,
-        temperature: 0.7,
-      };
+    const body = {
+      model,
+      max_tokens: maxTokens,
+      // No temperature/top_p/top_k: Anthropic deprecated all three on Claude 4.7+
+      // and returns 400 for any non-default value
+      // (platform.claude.com/docs/en/about-claude/model-deprecations), which is
+      // every model this app offers. Behaviour is steered by the prompt instead.
+      stream: false,
+      messages: apiMessages,
+    };
 
-      console.log("[Anthropic] Calling via Electron proxy");
-      console.log("[Anthropic] Model:", model);
-
-      const result = await window.ghostly.anthropicApiCall(apiKey, body);
-
-      console.log("[Anthropic] Response status:", result.status);
-
+    const call = async () => {
+      const result = await raceSignal(
+        window.ghostly.anthropicApiCall(anthropicKey, body),
+        signal,
+      );
       if (!result.ok) {
-        console.error("[Anthropic] API error:", result.data);
         const message = extractApiErrorMessage(result.data, "Anthropic", result.status);
         if (result.status === 429) throw rateLimitError(message);
-        throw new Error(message);
+        // 529 (Anthropic's "overloaded") and 5xx are classified as retryable by
+        // ProviderError, so the fallback chain in lib/ai/index.ts actually fires
+        // for the two most common real-world Anthropic failures.
+        throw new ProviderError(message, result.status);
       }
+      return result;
+    };
 
-      const response = JSON.parse(result.data);
-      const content = response.content?.[0]?.text;
-      
-      if (content) {
-        yield content;
-      } else {
-        throw new Error("No content in Anthropic response");
-      }
-    } catch (error) {
-      console.error("[Anthropic] Provider error:", error);
-      throw error;
+    // The proxy has no abort channel, so raceSignal bounds the wait, and one
+    // jittered retry rides out the 5xx that Anthropic's gateway throws under load.
+    const result = await retryOnServerError(call, signal);
+
+    let response: any;
+    try {
+      response = JSON.parse(result.data);
+    } catch {
+      throw new ProviderError(
+        "Anthropic returned a non-JSON response — a network proxy or captive portal may be intercepting the request.",
+      );
+    }
+
+    // Thinking blocks come first when a model emits them, so joining every text
+    // block beats assuming content[0] is the answer.
+    const text = (Array.isArray(response.content) ? response.content : [])
+      .filter((b: any) => b?.type === "text" && typeof b.text === "string")
+      .map((b: any) => b.text)
+      .join("");
+
+    if (text) {
+      yield text;
+    } else {
+      throw new ProviderError("Anthropic returned no text content.");
     }
   }
 }

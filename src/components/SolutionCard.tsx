@@ -1,10 +1,47 @@
 import React, { useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import rehypeRaw from "rehype-raw";
 import { motion } from "framer-motion";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
+
+// Streaming caret. This used to be a raw <span> spliced into the markdown source,
+// which is the only reason rehype-raw was in the pipeline at all — and with it,
+// any raw HTML a model emitted became live DOM (event handlers, javascript: URLs,
+// the lot) inside a window that runs with a privileged preload. The caret is ours,
+// not the model's, so a sentinel + hast transform keeps the identical output
+// without ever re-enabling raw HTML parsing.
+// U+E000 (private-use area) — a character no model output will ever contain.
+const CARET_SENTINEL = String.fromCharCode(0xe000);
+const CARET_CLASS = "text-violet-400 animate-pulse ml-1 inline-block font-black";
+
+function rehypeStreamingCaret() {
+  return (tree: any) => {
+    const visit = (node: any): void => {
+      if (!Array.isArray(node?.children)) return;
+      for (let i = 0; i < node.children.length; i++) {
+        const child = node.children[i];
+        if (child.type === "text" && child.value.includes(CARET_SENTINEL)) {
+          const at = child.value.indexOf(CARET_SENTINEL);
+          const before = child.value.slice(0, at);
+          const after = child.value.slice(at + CARET_SENTINEL.length);
+          const caret = {
+            type: "element",
+            tagName: "span",
+            properties: { className: CARET_CLASS.split(" ") },
+            children: [{ type: "text", value: "▍" }],
+          };
+          child.value = before;
+          const tail = after ? [{ type: "text", value: after }] : [];
+          node.children.splice(i + 1, 0, caret, ...tail);
+        } else {
+          visit(child);
+        }
+      }
+    };
+    visit(tree);
+  };
+}
 
 interface SolutionCardProps {
   content: string;
@@ -196,10 +233,10 @@ export const SolutionCard: React.FC<SolutionCardProps> = ({
       <div className="prose prose-invert prose-sm max-w-none" style={{ userSelect: "text", WebkitUserSelect: "text" } as React.CSSProperties}>
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
-          rehypePlugins={[rehypeRaw]}
+          rehypePlugins={[rehypeStreamingCaret]}
           components={components as any}
         >
-          {content + (isStreaming ? " <span class=\"text-violet-400 animate-pulse ml-1 inline-block font-black\">▍</span>" : "")}
+          {content + (isStreaming ? CARET_SENTINEL : "")}
         </ReactMarkdown>
       </div>
 

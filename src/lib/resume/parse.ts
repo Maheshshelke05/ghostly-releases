@@ -213,12 +213,17 @@ const isPlainObject = (v: unknown): v is Record<string, unknown> =>
 
 const normKey = (k: string) => k.toLowerCase().replace(/[^a-z0-9]/g, "");
 
-const CANONICAL: Record<string, ProfileKey> = Object.fromEntries(
-  PROFILE_KEYS.map((k) => [normKey(k), k]),
-) as Record<string, ProfileKey>;
+// Object.create(null), not a plain literal: a normal object inherits
+// Object.prototype, so a model key of "constructor"/"toString" would read as a
+// *known* key and inflate knownKeyCount(), which decides which nested object
+// unwrap() returns.
+const CANONICAL: Record<string, ProfileKey> = Object.assign(
+  Object.create(null) as Record<string, ProfileKey>,
+  Object.fromEntries(PROFILE_KEYS.map((k) => [normKey(k), k])),
+);
 
 // Only close variants of the 12 requested keys - anything else is an "unknown key" and ignored.
-const ALIASES: Record<string, ProfileKey> = {
+const ALIASES: Record<string, ProfileKey> = Object.assign(Object.create(null) as Record<string, ProfileKey>, {
   name: "fullName", candidatename: "fullName", yourname: "fullName",
   emailaddress: "email", mail: "email", emailid: "email",
   phonenumber: "phone", mobile: "phone", mobilenumber: "phone", contactnumber: "phone", telephone: "phone",
@@ -232,7 +237,7 @@ const ALIASES: Record<string, ProfileKey> = {
   certification: "certifications", certificates: "certifications", certs: "certifications", licenses: "certifications",
   linkedinurl: "linkedin", linkedinprofile: "linkedin", linkedinlink: "linkedin",
   githuburl: "github", githubprofile: "github", githublink: "github",
-};
+});
 
 function mapKeys(obj: Record<string, unknown>): Partial<Record<ProfileKey, unknown>> {
   const out: Partial<Record<ProfileKey, unknown>> = {};

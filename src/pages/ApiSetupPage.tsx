@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { useStore } from "../store/useStore";
 import type { ProviderName } from "../lib/ai";
-import { NVIDIA_MODELS } from "../lib/ai/nvidia";
-import { OPENROUTER_FREE_MODELS } from "../lib/ai/openrouter";
+import { defaultModel, modelIds, modelLabels, MODEL_CATALOG } from "../lib/ai/catalog";
+import { openAiChat } from "../lib/ai/openai";
 import { withoutDisabled } from "../lib/providerState";
 import { syncApiKey, toSyncBadge, type KeySyncBadge, type KeySyncResult } from "../lib/keySync";
 
@@ -25,64 +25,56 @@ export interface AIProviderConfig {
 // `string`, which meant `setActiveProv(p.id)` calls below didn't actually
 // type-check against the store's ProviderName union (caught by `tsc`, not by
 // `vite build`, so it silently worked at runtime but wasn't real type safety).
+//
+// `models` and `modelLabels` now come from lib/ai/catalog.ts — the single
+// source of truth. They used to be a hand-maintained copy of each provider's
+// listModels(), and HAD drifted: this picker offered "gemini-3.1-flash-lite"
+// while electron/ipc.ts started every new install on "gemini-3.5-flash", which
+// this picker could not even select.
 export const AI_PROVIDERS: AIProviderConfig[] = [
   {
     id: "groq", label: "Groq", icon: "⚡", badge: "FAST", badgeColor: "rgba(139,92,246,0.15)", badgeBorder: "rgba(139,92,246,0.3)", badgeText: "#a78bfa",
     url: "https://console.groq.com/keys", ph: "gsk_…",
-    // Llama 4 Scout was removed from Groq's catalog (production and preview) and was
-    // erroring "model does not exist" for every user — do not re-add it. Groq has no
-    // vision model right now, so all options here are text-only.
-    // llama-3.3-70b-versatile / llama-3.1-8b-instant shut down 08/16/26 (Groq's
-    // own deprecation schedule) — removed rather than left in to start failing.
-    models: ["openai/gpt-oss-120b", "openai/gpt-oss-20b"],
-    modelLabels: { "openai/gpt-oss-120b": "GPT-OSS 120B — FREE", "openai/gpt-oss-20b": "GPT-OSS 20B — FREE + FAST" },
+    models: modelIds("groq"),
+    modelLabels: modelLabels("groq"),
   },
   {
     id: "gemini", label: "Gemini", icon: "🔵", badge: "FREE", badgeColor: "rgba(59,130,246,0.12)", badgeBorder: "rgba(59,130,246,0.3)", badgeText: "#60a5fa",
     url: "https://aistudio.google.com/app/apikey", ph: "AIza…",
-    // gemini-3.5-flash and gemini-pro-latest were never real Google model IDs — see
-    // the matching comment in lib/ai/gemini.ts for how that was confirmed and what
-    // replaced them. Keep this list in sync with that file's listModels().
-    models: ["gemini-3.6-flash", "gemini-3.8-flash", "gemini-3.1-flash-lite"],
-    modelLabels: { "gemini-3.6-flash": "Gemini 3.6 Flash — FREE · Fast & smart", "gemini-3.8-flash": "Gemini 3.8 Flash — FREE · Newest, deepest", "gemini-3.1-flash-lite": "Gemini 3.1 Lite — FREE · Fastest (~2s)" },
+    models: modelIds("gemini"),
+    modelLabels: modelLabels("gemini"),
   },
   {
-    // Was a hardcoded "16 FREE" string that drifted from reality: the real list below
-    // got trimmed from 16 models down to 6 (2 of which had gone dead) at some point
-    // without anyone updating this badge to match. Derived from the real list length
-    // now (minus 1 for "Auto", which isn't itself one of the free models being
-    // counted) so it can't silently go stale like that again.
-    id: "openrouter", label: "OpenRouter", icon: "🔀", badge: `${OPENROUTER_FREE_MODELS.length - 1} FREE`, badgeColor: "rgba(34,197,94,0.1)", badgeBorder: "rgba(34,197,94,0.28)", badgeText: "#4ade80",
+    // Counted from the catalog minus "openrouter/auto", which isn't a free
+    // model — it routes to whatever OpenRouter judges best, paid included.
+    id: "openrouter", label: "OpenRouter", icon: "🔀", badge: `${MODEL_CATALOG.openrouter.length - 1} FREE`, badgeColor: "rgba(34,197,94,0.1)", badgeBorder: "rgba(34,197,94,0.28)", badgeText: "#4ade80",
     url: "https://openrouter.ai/keys", ph: "sk-or-…",
-    models: OPENROUTER_FREE_MODELS.map(m => m.id),
-    modelLabels: Object.fromEntries(OPENROUTER_FREE_MODELS.map(m => [m.id, `${m.name} — FREE`])),
+    models: modelIds("openrouter"),
+    modelLabels: modelLabels("openrouter"),
   },
   {
     id: "nvidia", label: "NVIDIA", icon: "🟢", badge: "FREE", badgeColor: "rgba(34,197,94,0.1)", badgeBorder: "rgba(34,197,94,0.25)", badgeText: "#4ade80",
     url: "https://build.nvidia.com/", ph: "nvapi-…",
-    models: NVIDIA_MODELS.map(m => m.id),
-    modelLabels: Object.fromEntries(NVIDIA_MODELS.map(m => [m.id, `${m.name} — FREE`])),
+    models: modelIds("nvidia"),
+    modelLabels: modelLabels("nvidia"),
   },
   {
     id: "openai", label: "OpenAI", icon: "🟣", badge: "PAID", badgeColor: "rgba(168,85,247,0.12)", badgeBorder: "rgba(168,85,247,0.3)", badgeText: "#c084fc",
     url: "https://platform.openai.com/api-keys", ph: "sk-…",
-    models: ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-4o"],
-    modelLabels: { "gpt-5.6-sol": "GPT-5.6 Sol — Flagship", "gpt-5.6-terra": "GPT-5.6 Terra — Balanced", "gpt-5.6-luna": "GPT-5.6 Luna — Fast", "gpt-4o": "GPT-4o — Legacy" },
+    models: modelIds("openai"),
+    modelLabels: modelLabels("openai"),
   },
   {
     id: "anthropic", label: "Anthropic", icon: "🟠", badge: "PAID", badgeColor: "rgba(217,119,6,0.12)", badgeBorder: "rgba(217,119,6,0.3)", badgeText: "#f59e0b",
     url: "https://console.anthropic.com/settings/keys", ph: "sk-ant-…",
-    // claude-sonnet-4-5-20250929 is deprecated and retires 2026-11-30 — see the
-    // matching comment in lib/ai/anthropic.ts. Keep this list in sync with that
-    // file's listModels().
-    models: ["claude-sonnet-5", "claude-opus-5", "claude-haiku-4-5-20251001", "claude-sonnet-5-5"],
-    modelLabels: { "claude-sonnet-5": "Claude Sonnet 5 — Balanced", "claude-opus-5": "Claude Opus 5 — Most Capable", "claude-haiku-4-5-20251001": "Claude Haiku 4.5 — Fastest", "claude-sonnet-5-5": "Claude Sonnet 5.5 — Newest" },
+    models: modelIds("anthropic"),
+    modelLabels: modelLabels("anthropic"),
   },
   {
     id: "grok", label: "Grok (xAI)", icon: "⬛", badge: "PAID", badgeColor: "rgba(255,255,255,0.1)", badgeBorder: "rgba(255,255,255,0.25)", badgeText: "#e5e7eb",
     url: "https://console.x.ai/", ph: "xai-…",
-    models: ["grok-4.6", "grok-4.5", "grok-4.3"],
-    modelLabels: { "grok-4.6": "Grok 4.6 — Latest", "grok-4.5": "Grok 4.5", "grok-4.3": "Grok 4.3" },
+    models: modelIds("grok"),
+    modelLabels: modelLabels("grok"),
   },
 ];
 
@@ -114,6 +106,10 @@ export async function testApiKey(
 async function runKeyTest(providerId: string, apiKey: string, selectedModel?: string): Promise<TestKeyResult> {
   const key = apiKey.trim();
   if (!key) return { status: "invalid", message: "Enter an API key first" };
+  // Every default below used to be an inline literal, which is how the picker
+  // and the tests drifted apart four separate times. It comes from the same
+  // catalog the picker renders and the provider actually calls.
+  const catalogDefault = (p: ProviderName) => defaultModel(p);
 
   try {
     if (providerId === "deepgram") {
@@ -134,7 +130,7 @@ async function runKeyTest(providerId: string, apiKey: string, selectedModel?: st
         : { status: "invalid", message: `Invalid Key (HTTP ${res.status})` };
     }
     if (providerId === "gemini") {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${selectedModel || "gemini-3.5-flash"}:generateContent`, {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${selectedModel || catalogDefault("gemini")}:generateContent`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": key },
         body: JSON.stringify({ contents: [{ parts: [{ text: "hi" }] }] }),
@@ -149,7 +145,7 @@ async function runKeyTest(providerId: string, apiKey: string, selectedModel?: st
       const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: selectedModel || "openai/gpt-oss-120b", messages: [{ role: "user", content: "hi" }], max_tokens: 1 }),
+        body: JSON.stringify({ model: selectedModel || catalogDefault("groq"), messages: [{ role: "user", content: "hi" }], max_tokens: 1 }),
         signal: AbortSignal.timeout(10000),
       });
       return res.ok
@@ -175,20 +171,26 @@ async function runKeyTest(providerId: string, apiKey: string, selectedModel?: st
         : { status: "invalid", message: `Invalid Key (HTTP ${result.status})` };
     }
     if (providerId === "openai") {
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: selectedModel || "gpt-4o", messages: [{ role: "user", content: "hi" }], max_tokens: 1 }),
+      // Sent `max_tokens: 1`, which the gpt-5 reasoning family rejects outright
+      // ("Unsupported parameter: 'max_tokens'... Use 'max_completion_tokens'") —
+      // so pressing Test with a perfectly valid OpenAI key reported
+      // "Invalid Key (HTTP 400)". openAiChat is the exact same helper (and the
+      // same one-shot parameter correction) the real provider calls with.
+      await openAiChat({
+        model: selectedModel || catalogDefault("openai"),
+        apiKey: key,
+        messages: [{ role: "user", content: "hi" }],
+        maxTokens: 1,
         signal: AbortSignal.timeout(10000),
       });
-      return res.ok
-        ? { status: "valid", message: "OpenAI Key Valid! 🟣" }
-        : { status: "invalid", message: `Invalid Key (HTTP ${res.status})` };
+      return { status: "valid", message: "OpenAI Key Valid! 🟣" };
     }
     if (providerId === "anthropic") {
       // Anthropic blocks direct browser calls (no CORS) — same main-process proxy.
+      // No temperature/top_p: Anthropic deprecated both on Claude 4.7+ and 400s
+      // on a non-default value, which is every model in the catalog.
       const result = await window.ghostly.anthropicApiCall(key, {
-        model: selectedModel || "claude-haiku-4-5-20251001",
+        model: selectedModel || catalogDefault("anthropic"),
         max_tokens: 1,
         messages: [{ role: "user", content: "hi" }],
       });
@@ -200,7 +202,7 @@ async function runKeyTest(providerId: string, apiKey: string, selectedModel?: st
       const res = await fetch("https://api.x.ai/v1/chat/completions", {
         method: "POST",
         headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: selectedModel || "grok-4.6", messages: [{ role: "user", content: "hi" }], max_tokens: 1 }),
+        body: JSON.stringify({ model: selectedModel || catalogDefault("grok"), messages: [{ role: "user", content: "hi" }], max_tokens: 1 }),
         signal: AbortSignal.timeout(10000),
       });
       return res.ok

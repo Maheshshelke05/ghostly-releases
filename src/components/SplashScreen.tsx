@@ -9,23 +9,29 @@ export const SplashScreen: React.FC<{ onComplete: () => void }> = ({ onComplete 
     ? (window as any).ghostly.getVersion()
     : "3.3.5";
 
+  // The updater stays pure. setPhase/setTimeout used to live inside it, and React 18
+  // StrictMode double-invokes state updaters — so both fired twice, and the timeout was
+  // never cleared. Splitting the "finished" branch into its own effect makes it run once
+  // and clean its own timer up.
+  const done = progress >= 100;
   useEffect(() => {
+    if (done) return;
     const interval = setInterval(() => {
       setProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setPhase("ready");
-          setTimeout(onComplete, 700);
-          return 100;
-        }
         // Speed varies: fast at start, slows near end
         const step = prev < 60 ? 3 : prev < 90 ? 1.5 : 0.8;
         return Math.min(prev + step, 100);
       });
     }, 28);
-
     return () => clearInterval(interval);
-  }, [onComplete]);
+  }, [done]);
+
+  useEffect(() => {
+    if (!done) return;
+    setPhase("ready");
+    const t = setTimeout(onComplete, 700);
+    return () => clearTimeout(t);
+  }, [done, onComplete]);
 
   const PHASES = ["Initializing core...", "Loading AI providers...", "Setting up stealth mode...", "Ready"];
   const phaseText = progress < 30 ? PHASES[0] : progress < 60 ? PHASES[1] : progress < 95 ? PHASES[2] : PHASES[3];

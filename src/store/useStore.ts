@@ -113,6 +113,11 @@ export interface Settings {
   opacity?: number;
   autoAI?: boolean;
   autoScroll?: boolean;
+  // Opt-in for backing tested API keys up to the signed-in Ghotly AI account
+  // (src/lib/keySync.ts). Off unless the user turns it on: on an app whose whole
+  // pitch is "bring your own key", uploading one without asking is not a default
+  // anyone should get.
+  keySyncEnabled?: boolean;
 }
 
 interface GhostlyStore {
@@ -165,12 +170,10 @@ interface GhostlyStore {
   setLoginError: (err: string | null) => void;
 }
 
-const ENV = {
-  groq:        import.meta.env.VITE_GROQ_API_KEY        || "",
-  gemini:      import.meta.env.VITE_GEMINI_API_KEY       || "",
-  deepgram:    import.meta.env.VITE_DEEPGRAM_API_KEY     || "",
-  openrouter:  import.meta.env.VITE_OPENROUTER_API_KEY   || "",
-};
+/** Newest N captures kept in memory (see addScreenshot). */
+const MAX_SCREENSHOTS = 3;
+/** Newest N transcript messages kept in memory (see addSessionMessage). */
+const MAX_SESSION_MESSAGES = 40;
 
 export const useStore = create<GhostlyStore>((set) => ({
   appScreen: "home",
@@ -193,13 +196,19 @@ export const useStore = create<GhostlyStore>((set) => ({
     // llama-3.3-70b-versatile shuts down 08/16/26 (Groq's deprecation schedule)
     activeModel: "openai/gpt-oss-120b",
     apiKeys: {
-      groq: ENV.groq,
-      gemini: ENV.gemini,
-      openrouter: ENV.openrouter,
+      // No build-time VITE_*_API_KEY defaults here, on purpose. Vite inlines those
+      // into the renderer bundle, so a shipped build handed the maintainer's
+      // Gemini/Groq/OpenAI/Anthropic/OpenRouter/Deepgram key to every user who
+      // installed it — and because the merged value looked like the user's own saved
+      // key, pressing "Test" uploaded that build-time key to the backend against a
+      // random end-user account. Keys now only ever come from Settings.
+      groq: "",
+      gemini: "",
+      openrouter: "",
       nvidia: "",
     },
     disabledProviders: [],
-    deepgramApiKey: ENV.deepgram,
+    deepgramApiKey: "",
     customInstructions: "",
     autoSwitchProvider: true,
     micDeviceId: "default",
@@ -207,6 +216,7 @@ export const useStore = create<GhostlyStore>((set) => ({
     opacity: 1,
     autoAI: true,
     autoScroll: true,
+    keySyncEnabled: false,
   },
 
   setAppScreen: (appScreen) => set({ appScreen }),
@@ -217,7 +227,10 @@ export const useStore = create<GhostlyStore>((set) => ({
   appendToSolution: (chunk) => set((s) => ({ currentSolution: s.currentSolution + chunk })),
   setIsStreaming: (v) => set({ isStreaming: v }),
   setCurrentScreenshot: (b64) => set({ currentScreenshot: b64 }),
-  addScreenshot: (b64) => set((s) => ({ screenshots: [...s.screenshots, b64], currentScreenshot: b64 })),
+  // Only the newest captures are ever used (runAIStream reads the last one), so
+  // older base64 frames are dropped instead of piling up in memory for the whole
+  // interview — ten 1080p captures is tens of megabytes of dead weight.
+  addScreenshot: (b64) => set((s) => ({ screenshots: [...s.screenshots, b64].slice(-MAX_SCREENSHOTS), currentScreenshot: b64 })),
   clearScreenshots: () => set({ screenshots: [], currentScreenshot: null }),
   removeScreenshot: (index) => set((s) => {
     const next = s.screenshots.filter((_, i) => i !== index);
@@ -226,7 +239,12 @@ export const useStore = create<GhostlyStore>((set) => ({
   setError: (err) => set({ error: err }),
   clearSolution: () => set({ currentSolution: "", screenshots: [], currentScreenshot: null, error: null, sessionMessages: [] }),
   setMouseEnabled: (v) => set({ mouseEnabled: v }),
-  addSessionMessage: (msg) => set((state) => ({ sessionMessages: [...state.sessionMessages, msg] })),
+  addSessionMessage: (msg) => set((state) => ({
+    // The transcript is only ever used as prompt context (the last few messages) and
+    // for Q&A pagination, so a bounded window is enough — an unbounded array kept
+    // every base64 screenshot of a long interview alive for the whole session.
+    sessionMessages: [...state.sessionMessages, msg].slice(-MAX_SESSION_MESSAGES),
+  })),
   addToHistory: (s) => set((state) => ({ history: [s, ...state.history].slice(0, 30) })),
   removeFromHistory: (id) => set((state) => ({ history: state.history.filter((s) => s.id !== id) })),
   clearHistory: () => set({ history: [] }),
@@ -241,3 +259,23 @@ export const useStore = create<GhostlyStore>((set) => ({
   setAds: (ads) => set({ ads }),
   setLoginError: (loginError) => set({ loginError }),
 }));
+
+// ── Settings persistence ──────────────────────────────────────────────────────
+// Nothing in the app remembered to save them: only five call sites ever called
+// window.ghostly.saveSettings by hand, and the interview screen's opacity slider
+// and Auto-AI toggle weren't among them — so both were silently forgotten on every
+// restart. One debounced subscription covers every writer, including future ones.
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+const flushSettings = () => {
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+  try { window.ghostly?.saveSettings(useStore.getState().settings)?.catch(() => {}); } catch { /* not in Electron */ }
+};
+
+useStore.subscribe((state, prev) => {
+  if (state.settings === prev.settings) return;
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(flushSettings, 300);
+});
+
+// Quitting inside the debounce window would otherwise lose the last change.
+if (typeof window !== "undefined") window.addEventListener("beforeunload", flushSettings);

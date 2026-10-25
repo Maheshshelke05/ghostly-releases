@@ -93,8 +93,18 @@ const ToolTile: React.FC<{ icon: React.ReactNode; title: string; desc: string; e
 );
 
 export const HomePage: React.FC = () => {
-  const { setAppScreen, user, ads, setUser, setAds, setLoginError, settings } = useStore();
+  // Per-field selectors rather than a bare useStore(): subscribing to the whole
+  // store re-rendered this page on every unrelated mutation (streaming chunks,
+  // mouse capture, ads, history…).
+  const setAppScreen = useStore((s) => s.setAppScreen);
+  const user = useStore((s) => s.user);
+  const ads = useStore((s) => s.ads);
+  const setUser = useStore((s) => s.setUser);
+  const setAds = useStore((s) => s.setAds);
+  const setLoginError = useStore((s) => s.setLoginError);
+  const settings = useStore((s) => s.settings);
   const [startStatus, setStartStatus] = useState<"idle" | "syncing">("idle");
+  const [startError, setStartError] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyCount, setHistoryCount] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -154,13 +164,19 @@ export const HomePage: React.FC = () => {
   const handleStartInterview = async () => {
     if (startStatus === "syncing") return;
     setStartStatus("syncing");
+    setStartError("");
     try {
       const { latestAds } = await refreshAccount();
       const latestActiveAd = latestAds.find((a: any) => a.is_active) || null;
       if (!latestActiveAd) { setGateAd(null); setAppScreen("interview-setup"); return; }
       setGateAd(latestActiveAd); setAdGate(true); setAdClicked(false);
     } catch (error: any) {
-      setLoginError(error.message || "Please login again.");
+      // Was setLoginError-only, and this page never rendered it — the button just
+      // blinked back to idle with no explanation. Show it here too; the store copy
+      // is still what LoginPage reads when refreshAccount() forces a logout.
+      const message = error?.message || "Please login again.";
+      setLoginError(message);
+      setStartError(message);
     }
     finally { setStartStatus("idle"); }
   };
@@ -171,8 +187,14 @@ export const HomePage: React.FC = () => {
   useEffect(() => {
     window.ghostly.getHistory().then((h: any[]) => setHistoryCount(Array.isArray(h) ? h.length : 0)).catch(() => {});
   }, []);
+  // Re-read the count when the modal closes (entries can be deleted in there).
+  // This used to be a second effect with `[historyOpen]` as its dep, which also
+  // ran on mount with historyOpen === false — so every mount fetched history twice.
+  const historyWasOpenRef = useRef(false);
   useEffect(() => {
-    if (!historyOpen) window.ghostly.getHistory().then((h: any[]) => setHistoryCount(Array.isArray(h) ? h.length : 0)).catch(() => {});
+    const justClosed = historyWasOpenRef.current && !historyOpen;
+    historyWasOpenRef.current = historyOpen;
+    if (justClosed) window.ghostly.getHistory().then((h: any[]) => setHistoryCount(Array.isArray(h) ? h.length : 0)).catch(() => {});
   }, [historyOpen]);
 
   useEffect(() => { window.ghostly.enableMouse(); }, [historyOpen, settingsOpen, adGate, jobOpen, audioOpen]);
@@ -291,6 +313,11 @@ export const HomePage: React.FC = () => {
                 </>
               )}
             </motion.button>
+            {startError && (
+              <p role="alert" className="mt-2 text-center text-[10.5px] font-semibold leading-relaxed px-1" style={{ color: "#b91c1c" }}>
+                {startError}
+              </p>
+            )}
           </motion.div>
 
           {/* History + Job Portal */}

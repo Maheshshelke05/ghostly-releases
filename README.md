@@ -6,13 +6,28 @@ Ghostly AI is an ultra-fast, stealthy AI assistant engineered specifically for l
 
 ---
 
-## ✨ Coming in the next release
+## ✨ Highlights
 
 - **New logo, animated:** the glossy ghost replaces the old emoji everywhere — in the app, the tray, the installer and the website. It blinks, smiles and waves (and stays still if your system asks for reduced motion).
 - **Resume import:** in *Interview Setup → Profile*, upload a resume (PDF, DOCX, TXT or an image/scan). Once an AI key is set up, the AI reads it and fills in your profile, and answers in chat, follow-ups, live transcript and screen analysis are grounded in those facts. The resume is read on your device and sent only to the AI provider you chose.
 - **Key backup:** pressing **Test** on an AI provider or Deepgram key also saves it, encrypted, to your Ghotly AI account (see [SECURITY.md](SECURITY.md)).
 - **Interview language** is English only; the picker is gone.
 - **Job Portal tab** now shows live data from [job.ghotlyai.in](https://job.ghotlyai.in) instead of hand-written text.
+
+---
+
+## 🛡️ What's Fixed in Version 3.5.2
+
+A security and reliability pass over the desktop app.
+
+- **Renderer locked down:** the sponsored frame no longer runs with `allow-same-origin`, so it cannot reach the app's IPC bridge. Model answers are no longer rendered as raw HTML. The renderer runs under a Content Security Policy with the sandbox enabled, navigation to any foreign origin is blocked, and every IPC handler verifies the caller is the app's own top-level frame.
+- **Sign-in callback:** the local OAuth listener used to accept a token POST from any website. It now checks the request origin and requires a single-use nonce.
+- **Stored keys:** API keys are encrypted with the OS keychain instead of a fixed key that shipped inside the installer. Existing keys are migrated on first launch.
+- **Shortcuts:** defaults moved to `Ctrl+Alt+1` through `Ctrl+Alt+8` so they stop colliding with browsers and editors. `Ctrl+E`, `Ctrl+B`, `Ctrl+N` and the other old combinations still work as aliases. Combinations Electron cannot parse are now rejected in the remap dialog instead of silently taking every other shortcut down with them.
+- **AI providers:** model IDs come from a single catalog, which ends the recurring "model does not exist" reports. OpenAI reasoning models no longer fail on every request, and the fallback chain no longer sends OpenRouter's free tier to a paid route.
+- **Audio:** live transcription is sent at 16 kHz instead of 48 kHz, cutting Deepgram bandwidth and cost by roughly two thirds. The mic test no longer leaks an audio context on every press.
+- **Resume import:** parsing runs off the UI thread and is bounded by time, pixel count and archive size.
+- **App size:** the packaged payload dropped from 158 MB to 33 MB after removing four unused dependencies.
 
 ---
 
@@ -70,14 +85,16 @@ Use these keyboard shortcuts for 100% stealthy, hands-free operation during your
 
 | Shortcut | Action | Description |
 | :--- | :--- | :--- |
-| `Ctrl + N` | **Next Question** | Saves current Q&A to history, clears screen, and prepares for next question |
-| `Ctrl + 0` | **Manual Send** | Immediately sends current live transcript to AI without waiting for silence |
-| `Ctrl + E` | **Auto Screen Capture** | Captures full screen, compresses image, and runs AI solution |
-| `Left Arrow (←)` or `Ctrl + 8` | **Previous Question** | Instantly navigates back to previous question (`Q1`, `Q2`) |
-| `Right Arrow (→)` or `Ctrl + 2` | **Next Question Page** | Instantly navigates forward to next question page |
-| `Ctrl + Shift + S` | **Instant Screen Analysis** | Triggers instant screen capture from anywhere in system |
-| `Ctrl + Shift + H` | **Toggle Stealth Mode** | Hides/shows app window instantly from screen capture |
-| `Ctrl + G` | **Start Over** | Resets the current session — clears transcript, screenshots, and Q&A history |
+| `Ctrl + Alt + 1` | **Screenshot** | Captures the screen, compresses it, and runs the AI solution |
+| `Ctrl + Alt + 2` | **Ask AI** | Runs the AI on the current transcript without capturing the screen |
+| `Ctrl + Alt + 3` | **Show / Hide** | Hides or shows the overlay instantly |
+| `Ctrl + Alt + 4` | **Send to AI** | Sends the live transcript without waiting for silence |
+| `Ctrl + Alt + 5` | **Next Question** | Saves the current Q&A to history and prepares for the next one |
+| `Ctrl + Alt + 6` | **Start Over** | Resets the session |
+| `Ctrl + Alt + 7` | **Previous Question** | Goes back one saved Q&A page |
+| `Ctrl + Alt + 8` | **Next Question Page** | Goes forward one saved Q&A page |
+
+Every one of these can be remapped in **Settings → Shortcuts**. The old defaults (`Ctrl+E`, `Ctrl+B`, `Ctrl+N`, `Ctrl+G`, `Ctrl+0`, `Ctrl+8`, `Ctrl+2`, `Ctrl+Shift+S`, `Ctrl+Shift+H`) still work as aliases when another app has not claimed them.
 
 ---
 
@@ -91,7 +108,7 @@ Use these keyboard shortcuts for 100% stealthy, hands-free operation during your
 5. Use **`Left Arrow (←)` / `Right Arrow (→)`** to seamlessly cycle through previous Q&As (`Q1`, `Q2`, `Q3`).
 
 ### 2. 📸 Screen Analysis Mode
-1. Click **`Screen`** tab or press **`Ctrl + E`**.
+1. Click **`Screen`** tab or press **`Ctrl + Alt + 1`**.
 2. Ghostly AI captures your full screen, compresses it to 800px JPEG, and extracts code/DSA problems.
 3. Receives an ultra-fast, syntax-highlighted solution on a single clean page in **under 1 second**.
 

@@ -17,6 +17,9 @@ export const AudioSetupPage: React.FC = () => {
   const micDropRef  = useRef<HTMLDivElement>(null);
   const streamRef   = useRef<MediaStream | null>(null);
   const animRef     = useRef<number | null>(null);
+  const ctxRef      = useRef<AudioContext | null>(null);
+  const testTimerRef = useRef<number | null>(null);
+  const testingRef  = useRef(false);
 
   useEffect(() => {
     navigator.mediaDevices?.enumerateDevices()
@@ -35,12 +38,19 @@ export const AudioSetupPage: React.FC = () => {
 
   const stopStream = () => {
     if (animRef.current) cancelAnimationFrame(animRef.current);
+    if (testTimerRef.current !== null) { window.clearTimeout(testTimerRef.current); testTimerRef.current = null; }
     streamRef.current?.getTracks().forEach(t => t.stop());
     streamRef.current = null;
+    // Each Test press used to create an AudioContext that was never closed. Browsers
+    // cap how many can exist, after which the visualizer silently stops working.
+    ctxRef.current?.close().catch(() => {});
+    ctxRef.current = null;
   };
 
   const handleTest = async () => {
+    if (testingRef.current) return; // the disabled={testing} guard is state-based, so two clicks in one tick both got through
     stopStream();
+    testingRef.current = true;
     setTesting(true); setTestDone(false); setMicStatus("testing"); setMicError(null);
     setSysStatus("idle"); setMicLevel(0); setBars(Array(16).fill(0));
     try {
@@ -49,6 +59,7 @@ export const AudioSetupPage: React.FC = () => {
       });
       streamRef.current = stream;
       const ctx      = new AudioContext();
+      ctxRef.current = ctx;
       const source   = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 256;
@@ -66,7 +77,13 @@ export const AudioSetupPage: React.FC = () => {
         animRef.current = requestAnimationFrame(tick);
       };
       animRef.current = requestAnimationFrame(tick);
-      setTimeout(() => { setMicStatus("ok"); setSysStatus("ok"); setTestDone(true); setTesting(false); }, 3000);
+      // Tracked so Reset / Back / unmount can cancel it — it used to fire anyway and
+      // flip a torn-down panel to "Signal OK ✓".
+      testTimerRef.current = window.setTimeout(() => {
+        testTimerRef.current = null;
+        testingRef.current = false;
+        setMicStatus("ok"); setSysStatus("ok"); setTestDone(true); setTesting(false);
+      }, 3000);
     } catch (err) {
       // Surface *why* it failed instead of a bare "No Signal ✗" — the three DOMException
       // names below cover the real-world causes users hit: OS-level mic permission off,
@@ -81,12 +98,13 @@ export const AudioSetupPage: React.FC = () => {
             : name === "NotReadableError" || name === "TrackStartError"
               ? "Your microphone is being used by another app (Zoom, Teams, Discord, etc). Close it there and try again."
               : `Microphone test failed${name ? ` (${name})` : ""}. Try a different microphone from the list above.`;
-      setMicStatus("error"); setMicError(message); setTesting(false); stopStream();
+      setMicStatus("error"); setMicError(message); setTesting(false); testingRef.current = false; stopStream();
     }
   };
 
   const handleReset = () => {
     stopStream();
+    testingRef.current = false;
     setSelectedMic("default"); setMicLevel(0); setMicStatus("idle"); setMicError(null);
     setSysStatus("idle"); setTestDone(false); setTesting(false); setBars(Array(16).fill(0));
   };
@@ -94,10 +112,12 @@ export const AudioSetupPage: React.FC = () => {
   const handleActivate = () => {
     stopStream();
     updateSettings({ micDeviceId: selectedMic });
+    // Persist straight away. This was never saved, so the chosen mic silently
+    // reverted to "Default Microphone" on every restart.
+    void window.ghostly.saveSettings(useStore.getState().settings);
     window.ghostly.setOpacity(1);
     window.ghostly.show();
     window.ghostly.enableMouse();
-    sessionStorage.setItem("ghostly_autostart", "true");
     setAppScreen("interview");
   };
 
@@ -163,9 +183,13 @@ export const AudioSetupPage: React.FC = () => {
 
           {/* ── Mic Selector ── */}
           <div className="flex flex-col gap-1.5 relative" ref={micDropRef}>
-            <label className="text-[8px] font-black uppercase tracking-[0.12em]" style={{ color: SUBTLE }}>🎤 Microphone</label>
+            <label htmlFor="ghostly-mic-select" className="text-[8px] font-black uppercase tracking-[0.12em]" style={{ color: SUBTLE }}>🎤 Microphone</label>
             <button
+              id="ghostly-mic-select"
               onClick={() => setMicDropOpen(!micDropOpen)}
+              aria-haspopup="listbox"
+              aria-expanded={micDropOpen}
+              aria-label={`Microphone: ${selectedMicLabel}`}
               className="w-full px-3 py-2.5 rounded-xl flex items-center justify-between transition-all"
               style={{ background: PANEL_BG, border: micDropOpen ? `1px solid ${INK}` : `1px solid ${BORDER}`, color: INK }}
             >
@@ -192,7 +216,7 @@ export const AudioSetupPage: React.FC = () => {
                   className="absolute top-[calc(100%+4px)] left-0 right-0 rounded-[16px] overflow-hidden z-50"
                   style={{ background: "#ffffff", border: `1px solid ${BORDER}`, boxShadow: "0 16px 40px rgba(20,20,40,0.2)" }}
                 >
-                  <div className="max-h-32 overflow-y-auto" style={{ scrollbarWidth: "none" }}>
+                  <div role="listbox" aria-label="Available microphones" className="max-h-32 overflow-y-auto" style={{ scrollbarWidth: "none" }}>
                     {["default", ...microphones.map(m => m.deviceId)].map((id, idx) => {
                       const label = id === "default"
                         ? "Default Microphone"
@@ -201,6 +225,8 @@ export const AudioSetupPage: React.FC = () => {
                       return (
                         <button
                           key={id}
+                          role="option"
+                          aria-selected={isSel}
                           onClick={() => { setSelectedMic(id); handleReset(); setMicDropOpen(false); }}
                           className="w-full text-left px-3.5 py-2.5 flex items-center justify-between transition-all"
                           style={{ background: isSel ? "#f0f0fb" : "transparent", color: isSel ? INK : SUBTLE, borderBottom: idx < microphones.length ? `1px solid ${BORDER}` : "none" }}

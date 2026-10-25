@@ -5,10 +5,11 @@ import { NvidiaProvider } from "./nvidia";
 import { OpenAIProvider } from "./openai";
 import { AnthropicProvider } from "./anthropic";
 import { GrokProvider } from "./grok";
-import type { AIProvider, AIRequestOptions } from "./types";
-import { isRateLimitError } from "./types";
+import type { AIProvider, AIRequestOptions, ProviderName } from "./types";
+import { isFallbackWorthy } from "./types";
+import { resolveModel } from "./catalog";
 
-export type ProviderName = "groq" | "gemini" | "openrouter" | "nvidia" | "openai" | "anthropic" | "grok";
+export type { ProviderName };
 
 const providers: Record<ProviderName, AIProvider> = {
   groq:        new GroqProvider(),
@@ -26,10 +27,6 @@ export function getProvider(name: ProviderName): AIProvider {
     throw new Error(`Unknown AI provider "${name}" — no implementation is registered for it.`);
   }
   return provider;
-}
-
-export function getAllProviders(): Record<ProviderName, AIProvider> {
-  return providers;
 }
 
 // Fixed preference order for auto-fallback — free/generous-tier providers
@@ -69,9 +66,13 @@ export interface FallbackEvent {
  *    auto-switch-on-quota toggle below, since it isn't a quota workaround,
  *    it's the only way Screen Analysis can function at all with that provider.
  *
- * 2. QUOTA FALLBACK — only on an actual rate-limit/quota (429) response, never
- *    on any other kind of failure like an invalid key — retries the SAME
- *    request against the next already-configured provider.
+ * 2. QUOTA FALLBACK — whenever the provider could not serve the request right
+ *    now rather than because the request itself was wrong: a 429 quota
+ *    exhaustion, a 402 (OpenRouter has no credits on a free key), a 503
+ *    (Google overloaded), a 529 (Anthropic overloaded), or a transport-level
+ *    TypeError such as a TLS reset. Never on an invalid key, an unknown model
+ *    or any other 4xx — retrying those elsewhere only wastes quota and hides
+ *    the real problem.
  *
  * Neither ever touches settings.activeProvider: both are one-off substitutions
  * for this single answer only, so the next question still tries the user's
@@ -115,11 +116,12 @@ export async function* streamWithFallback(
     const provider = getProvider(name);
     // The primary keeps the user's chosen model; anyone else standing in for
     // it (vision rescue or quota fallback) has no "chosen" model for this
-    // session, so use its own first listed model — always a known-working
-    // default (see each provider's listModels()). Checked by NAME, not index
-    // 0, since a vision rescue can push the true primary to a later position.
+    // session, so it gets the catalog's default for that provider — always a
+    // model verified against the vendor's live catalog, and on a free key.
+    // Checked by NAME, not index 0 in `candidates`, since a vision rescue can
+    // push the true primary to a later position.
     const isPrimary = name === primaryName;
-    const model = isPrimary ? options.model : provider.listModels()[0];
+    const model = isPrimary ? resolveModel(name, options.model) : resolveModel(name, undefined);
     let yieldedAny = false;
     try {
       const stream = provider.streamSolution({ ...options, apiKey: apiKeys[name], model });
@@ -131,10 +133,10 @@ export async function* streamWithFallback(
       return;
     } catch (err) {
       const isLast = i === candidates.length - 1;
-      // A real (non-quota) error, or a quota error with nothing left to fall
-      // back to, or an error after output already started (would duplicate
-      // text if retried) — surface it instead of silently trying more.
-      if (yieldedAny || !isRateLimitError(err) || isLast) throw err;
+      // A fatal error, a fallback-worthy error with nothing left to fall back
+      // to, or an error after output already started (would duplicate text if
+      // retried) — surface it instead of silently trying more.
+      if (yieldedAny || !isFallbackWorthy(err) || isLast) throw err;
     }
   }
 }
@@ -156,7 +158,13 @@ const WARM_HOSTS: Record<ProviderName, string> = {
 export function warmProviderConnection(name: ProviderName): void {
   const url = WARM_HOSTS[name];
   if (!url || typeof fetch === "undefined") return;
-  fetch(url, { method: "HEAD", mode: "no-cors", cache: "no-store" }).catch(() => {});
+  // Fire-and-forget on purpose, but never unbounded: a tick that never settles
+  // (a captive portal holding the socket open, a network that blackholes the
+  // SYN) left a socket pending every 4 minutes forever, with nothing to reap it.
+  fetch(url, {
+    method: "HEAD",
+    mode: "no-cors",
+    cache: "no-store",
+    signal: AbortSignal.timeout(5000),
+  }).catch(() => {});
 }
-
-export { providers };

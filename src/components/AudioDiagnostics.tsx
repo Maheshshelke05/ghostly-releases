@@ -51,6 +51,10 @@ export const AudioDiagnostics: React.FC<AudioDiagnosticsProps> = ({ onClose }) =
   const rafRef = useRef<number | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const isMountedRef = useRef(true);
+  // The disabled={... === "running"} guards below are state-based, so two clicks in
+  // the same tick both get through and open a second stream/socket.
+  const captureBusyRef = useRef(false);
+  const deepgramBusyRef = useRef(false);
 
   const cleanupCapture = () => {
     if (rafRef.current !== null) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
@@ -88,6 +92,8 @@ export const AudioDiagnostics: React.FC<AudioDiagnosticsProps> = ({ onClose }) =
   }, []);
 
   const runCaptureTest = async () => {
+    if (captureBusyRef.current) return;
+    captureBusyRef.current = true;
     cleanupCapture();
     setCaptureStep({ status: "running" });
     try {
@@ -136,6 +142,8 @@ export const AudioDiagnostics: React.FC<AudioDiagnosticsProps> = ({ onClose }) =
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error";
       setCaptureStep({ status: "fail", message: msg });
+    } finally {
+      captureBusyRef.current = false;
     }
   };
 
@@ -151,12 +159,14 @@ export const AudioDiagnostics: React.FC<AudioDiagnosticsProps> = ({ onClose }) =
   };
 
   const runDeepgramTest = () => {
+    if (deepgramBusyRef.current) return;
     cleanupDeepgram();
     setSyncBadge(null);
     if (!deepgramApiKey) {
       setDeepgramStep({ status: "fail", message: "No Deepgram key set — add one in Settings first." });
       return;
     }
+    deepgramBusyRef.current = true;
     setDeepgramStep({ status: "running" });
 
     const params = new URLSearchParams({ model: "nova-2", encoding: "linear16", sample_rate: "16000", channels: "1" });
@@ -169,6 +179,7 @@ export const AudioDiagnostics: React.FC<AudioDiagnosticsProps> = ({ onClose }) =
     const timeout = setTimeout(() => {
       if (!settled) {
         settled = true;
+        deepgramBusyRef.current = false;
         setDeepgramStep({ status: "fail", message: "Timed out waiting for connection (10s) — check your network." });
         cleanupDeepgram();
       }
@@ -176,6 +187,7 @@ export const AudioDiagnostics: React.FC<AudioDiagnosticsProps> = ({ onClose }) =
 
     ws.onopen = () => {
       settled = true;
+      deepgramBusyRef.current = false;
       clearTimeout(timeout);
       setDeepgramStep({ status: "pass", message: "Connected to Deepgram successfully." });
       backUpKey("valid", "Connected to Deepgram successfully.");
@@ -184,6 +196,7 @@ export const AudioDiagnostics: React.FC<AudioDiagnosticsProps> = ({ onClose }) =
     ws.onerror = () => {
       if (settled) return;
       settled = true;
+      deepgramBusyRef.current = false;
       clearTimeout(timeout);
       setDeepgramStep({ status: "fail", message: "Connection error — the key was likely rejected." });
       backUpKey("invalid", "Connection error — the key was likely rejected.");
@@ -191,6 +204,7 @@ export const AudioDiagnostics: React.FC<AudioDiagnosticsProps> = ({ onClose }) =
     ws.onclose = (ev) => {
       if (settled) return;
       settled = true;
+      deepgramBusyRef.current = false;
       clearTimeout(timeout);
       const rejected = ev.code === 1008 || ev.code === 4001;
       setDeepgramStep({

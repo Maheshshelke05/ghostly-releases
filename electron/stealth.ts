@@ -71,6 +71,21 @@ function readHWND(hwndBuffer: Buffer): number {
 const appliedHWnds = new Set<number>();
 
 /**
+ * Record a HWND as already-stealthed, and forget it again when that window
+ * closes. Windows recycles HWNDs, so without this a closed window's entry would
+ * make applyStealthMode() short-circuit on an unrelated new window that happens
+ * to reuse the handle — the overlay would then render normally and be plainly
+ * visible to anyone on a screen share.
+ */
+function rememberHWnd(win: BrowserWindow, hwnd: number): void {
+  appliedHWnds.add(hwnd);
+  win.once("closed", () => {
+    appliedHWnds.delete(hwnd);
+    lastNudgeAt.delete(hwnd);
+  });
+}
+
+/**
  * Force Windows' DWM to recomposite this window right after its display-affinity flag
  * changes. SetWindowDisplayAffinity can leave the compositor holding a stale frame for
  * the HWND it was just applied to, which is what makes the window vanish from the
@@ -84,7 +99,14 @@ function nudgeRepaint(win: BrowserWindow): void {
     win.setOpacity(Math.max(0, opacity - 0.001));
     setTimeout(() => {
       try {
-        if (!win.isDestroyed()) win.setOpacity(opacity);
+        if (win.isDestroyed()) return;
+        // Re-read instead of restoring the value captured 30ms ago: hiding the
+        // overlay (Ctrl+B / ghostly:hide) inside that window set opacity to 0,
+        // and restoring the stale "visible" value popped the hidden overlay back
+        // onto a shared screen.
+        const current = win.getOpacity();
+        if (current <= 0.001) return;
+        win.setOpacity(Math.min(1, current));
       } catch {
         // Best-effort
       }
@@ -135,7 +157,7 @@ export function applyStealthMode(win: BrowserWindow): void {
     // Try strongest flag first — WDA_EXCLUDEFROMCAPTURE (Win10 2004+)
     let success = SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE);
     if (success) {
-      appliedHWnds.add(hwnd);
+      rememberHWnd(win, hwnd);
       console.log(
         "[Ghostly Stealth] ✅ WDA_EXCLUDEFROMCAPTURE applied — fully invisible to capture",
       );
@@ -146,7 +168,7 @@ export function applyStealthMode(win: BrowserWindow): void {
     // Fall back to WDA_MONITOR for older Windows builds
     success = SetWindowDisplayAffinity(hwnd, WDA_MONITOR);
     if (success) {
-      appliedHWnds.add(hwnd);
+      rememberHWnd(win, hwnd);
       console.log(
         "[Ghostly Stealth] ⚠️ WDA_MONITOR applied — standard stealth",
       );

@@ -1,27 +1,16 @@
 import type { AIProvider, AIRequestOptions } from "./types";
-import { rateLimitError } from "./types";
+import { defaultSignal, httpError, readSSE, requireApiKey } from "./types";
+import { modelIds } from "./catalog";
 
 export class GroqProvider implements AIProvider {
   name = "groq";
 
   listModels(): string[] {
-    // "meta-llama/llama-4-scout-17b-16e-instruct" was removed from Groq's catalog
-    // entirely (production and preview) — it now 400s with "model does not exist or
-    // you do not have access to it" for every user, which is what bug reports on
-    // v3.3.3/v3.3.4 were surfacing. Groq currently has no vision-capable model at all,
-    // so it's text-only until they ship a replacement.
-    //
-    // llama-3.3-70b-versatile and llama-3.1-8b-instant are BOTH being shut down by
-    // Groq on 08/16/26 (per console.groq.com/docs/deprecations) — removed entirely
-    // rather than left in as an option that's about to start failing for everyone.
-    return [
-      "openai/gpt-oss-120b",
-      "openai/gpt-oss-20b",
-    ];
+    return modelIds("groq");
   }
 
   async *streamSolution(options: AIRequestOptions): AsyncGenerator<string> {
-    const { base64Image, prompt, messages = [], model, apiKey, maxTokens = 4096, signal } = options;
+    const { base64Image, prompt, messages = [], model, apiKey, maxTokens = 4096 } = options;
 
     const apiMessages: any[] = messages.map((m) => ({
       role: m.role,
@@ -41,57 +30,29 @@ export class GroqProvider implements AIProvider {
       apiMessages.push({ role: "user", content: prompt });
     }
 
-    const response = await fetch(
-      "https://api.groq.com/openai/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model,
-          max_tokens: maxTokens,
-          temperature: 0.5,
-          stream: true,
-          messages: apiMessages,
-        }),
-        signal,
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${requireApiKey(apiKey, "Groq", "https://console.groq.com/keys")}`,
+        "Content-Type": "application/json",
       },
-    );
+      body: JSON.stringify({
+        model,
+        max_tokens: maxTokens,
+        temperature: 0.5,
+        stream: true,
+        messages: apiMessages,
+      }),
+      signal: defaultSignal(options.signal),
+    });
 
     if (!response.ok) {
-      const err = await response
-        .json()
-        .catch(() => ({ error: { message: response.statusText } }));
-      const message = `Groq API error: ${err.error?.message || response.statusText}`;
-      if (response.status === 429) throw rateLimitError(message);
-      throw new Error(message);
+      throw httpError("Groq", response, await response.json().catch(() => null));
     }
 
-    const reader = response.body!.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-
-      for (const line of lines) {
-        if (line.startsWith("data: ") && line !== "data: [DONE]") {
-          try {
-            const data = JSON.parse(line.slice(6));
-            const text = data.choices?.[0]?.delta?.content;
-            if (text) yield text;
-          } catch {
-            /* skip malformed chunks */
-          }
-        }
-      }
+    for await (const frame of readSSE(response)) {
+      const text = frame.choices?.[0]?.delta?.content;
+      if (text) yield text;
     }
   }
 }

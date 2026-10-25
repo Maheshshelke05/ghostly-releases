@@ -3,13 +3,17 @@ import { useStore } from "../store/useStore";
 // Account backup of API keys.
 //
 // When a user presses "Test" on an API key (Settings, or the setup wizard), the key and the test
-// result are also saved — encrypted on the server — to their Ghotly AI account:
+// result can also be saved — encrypted on the server — to their Ghotly AI account:
 //
 //   PUT {VITE_API_URL}/api-keys   Authorization: Bearer <Google idToken>
 //
 // This is strictly best-effort and runs in the background. It never delays or changes the Test
 // result, never throws, and never logs a key: the only things that may reach the console are the
 // provider id and an HTTP status.
+//
+// Nothing is sent at all unless the user has explicitly turned key backup ON
+// (settings.keySyncEnabled, default OFF). This app's whole pitch is "bring your own key", so
+// uploading one is never something a user should get as a side effect of pressing "Test".
 
 export const KEY_SYNC_PROVIDERS = ["groq", "gemini", "openrouter", "nvidia", "openai", "anthropic", "grok", "deepgram"] as const;
 
@@ -26,7 +30,7 @@ export interface KeySyncInput {
 export interface KeySyncResult {
   state: "saved" | "skipped" | "failed";
   /**
-   * skipped: no-user | empty-key | bad-key-format | bad-status | unsupported-provider | no-api-url | insecure-api-url | recently-saved
+   * skipped: not-opted-in | no-user | empty-key | bad-key-format | bad-status | unsupported-provider | no-api-url | insecure-api-url | recently-saved
    * failed:  auth (401) | blocked (403) | rejected (400) | not-found (404) | rate-limited (429) | server (5xx)
    *          | network | timeout | bad-response | http-<status> | unexpected
    */
@@ -194,6 +198,9 @@ async function run(input: KeySyncInput, opts: KeySyncOptions): Promise<KeySyncRe
   const provider = String(input.provider || "").trim().toLowerCase();
   if (!(KEY_SYNC_PROVIDERS as readonly string[]).includes(provider)) return skip("unsupported-provider");
 
+  // Consent first: nothing leaves the machine for an account that never opted in.
+  if (!useStore.getState().settings.keySyncEnabled) return skip("not-opted-in");
+
   const apiKey = typeof input.apiKey === "string" ? input.apiKey.trim() : "";
   if (!apiKey) return skip("empty-key");
   if (!KEY_FORMAT.test(apiKey)) return skip("bad-key-format");
@@ -260,6 +267,74 @@ export async function syncApiKey(input: KeySyncInput, opts: KeySyncOptions = {})
     return await run(input, opts);
   } catch {
     return fail("unexpected");
+  }
+}
+
+// ── Viewing / deleting what was stored ───────────────────────────────────────
+// A consent switch that can't be undone from the app isn't consent. Both call the
+// same /api-keys collection the PUT writes to: GET lists the provider + last4 the
+// server holds (never the key itself), DELETE removes them.
+
+export interface StoredKeySummary {
+  provider: string;
+  last4?: string;
+  status?: string;
+  updatedAt?: string;
+}
+
+function syncContext(): { url: string; idToken: string } | KeySyncResult {
+  const base = apiBase();
+  if (!base) return skip("no-api-url");
+  if (!isSecureBase(base)) return skip("insecure-api-url");
+  const idToken = useStore.getState().user?.idToken || "";
+  if (!idToken) return skip("no-user");
+  return { url: `${base}/api-keys`, idToken };
+}
+
+/** What the server has on file for this account. Resolves — never rejects. */
+export async function listStoredApiKeys(): Promise<StoredKeySummary[]> {
+  try {
+    const ctx = syncContext();
+    if (!("url" in ctx)) return [];
+    const res = await fetch(ctx.url, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${ctx.idToken}` },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+      redirect: "error",
+    });
+    if (!res.ok) return [];
+    const json: any = await res.json().catch(() => null);
+    const rows = Array.isArray(json) ? json : Array.isArray(json?.keys) ? json.keys : [];
+    return rows
+      .filter((r: any) => r && typeof r.provider === "string")
+      .map((r: any) => ({
+        provider: r.provider,
+        last4: typeof r.last4 === "string" ? r.last4.slice(0, 4) : undefined,
+        status: typeof r.status === "string" ? r.status : undefined,
+        updatedAt: typeof r.updatedAt === "string" ? r.updatedAt : undefined,
+      }));
+  } catch {
+    return [];
+  }
+}
+
+/** Deletes everything the server holds for this account. Resolves — never rejects. */
+export async function deleteStoredApiKeys(): Promise<{ ok: boolean; reason?: string }> {
+  try {
+    const ctx = syncContext();
+    if (!("url" in ctx)) return { ok: false, reason: (ctx as KeySyncResult).reason };
+    const res = await fetch(ctx.url, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${ctx.idToken}` },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+      redirect: "error",
+    });
+    if (!res.ok) return { ok: false, reason: `http-${res.status}` };
+    // The local fingerprints describe keys that no longer exist anywhere.
+    resetKeySyncCache();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.name : "unexpected" };
   }
 }
 

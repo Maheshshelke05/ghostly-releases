@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useStore, type Settings } from "../store/useStore";
 import { AI_PROVIDERS, testApiKey, type AIProviderConfig } from "../pages/ApiSetupPage";
 import { toSyncBadge, type KeySyncBadge } from "../lib/keySync";
-import { REMAPPABLE_SHORTCUTS, formatAccelerator, keyEventToAccelerator } from "../lib/shortcuts";
+import { REMAPPABLE_SHORTCUTS, formatAccelerator, keyEventToAccelerator, isUnsupportedKey } from "../lib/shortcuts";
 import { isProviderDisabled, withoutDisabled } from "../lib/providerState";
 import { AudioDiagnostics } from "./AudioDiagnostics";
 import GhostMascot from "./ghost/GhostMascot";
@@ -158,7 +158,7 @@ function Keycaps({ combo, dim }: { combo: string; dim?: boolean }) {
 function SectionLabel({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between px-0.5">
-      <span className="text-[9px] font-black uppercase tracking-[0.14em]" style={{ color: FAINT }}>{children}</span>
+      <span role="heading" aria-level={3} className="text-[9px] font-black uppercase tracking-[0.14em]" style={{ color: FAINT }}>{children}</span>
       {right}
     </div>
   );
@@ -578,7 +578,12 @@ export const HomeSettingsPanel: React.FC<HomeSettingsPanelProps> = ({ onClose, t
   const [shortcutError, setShortcutError] = useState<string | null>(null);
   const [resetDone, setResetDone] = useState(false);
 
-  useEffect(() => { window.ghostly.getShortcuts().then(setShortcuts); }, []);
+  useEffect(() => {
+    window.ghostly
+      .getShortcuts()
+      .then(setShortcuts)
+      .catch(() => setShortcutError("Couldn't read your shortcuts — reopen Settings to try again."));
+  }, []);
 
   useEffect(() => {
     if (!recordingAction) return;
@@ -586,7 +591,12 @@ export const HomeSettingsPanel: React.FC<HomeSettingsPanelProps> = ({ onClose, t
       e.preventDefault();
       if (e.key === "Escape") { setRecordingAction(null); return; }
       const accelerator = keyEventToAccelerator(e);
-      if (!accelerator) return;
+      if (!accelerator) {
+        // Modifier-only presses keep waiting silently; an unusable key needs an
+        // explanation or the recorder just looks broken.
+        if (isUnsupportedKey(e)) setShortcutError("That key can't be used — try a letter, number, F-key or arrow.");
+        return;
+      }
       const action = recordingAction;
       setRecordingAction(null);
 
@@ -601,7 +611,7 @@ export const HomeSettingsPanel: React.FC<HomeSettingsPanelProps> = ({ onClose, t
       window.ghostly.updateShortcuts(next).then((result) => {
         if (result.ok) setShortcuts(next);
         else setShortcutError(`"${formatAccelerator(accelerator)}" couldn't be registered (already in use by another app?)`);
-      });
+      }).catch(() => setShortcutError("Couldn't save that shortcut — try again."));
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
@@ -613,7 +623,7 @@ export const HomeSettingsPanel: React.FC<HomeSettingsPanelProps> = ({ onClose, t
       setShortcutError(null);
       setResetDone(true);
       window.setTimeout(() => setResetDone(false), 1800);
-    }));
+    })).catch(() => setShortcutError("Couldn't reset your shortcuts — try again."));
   };
 
   // Esc closes — except while a shortcut is being recorded (that handler owns

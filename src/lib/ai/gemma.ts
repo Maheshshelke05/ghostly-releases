@@ -1,4 +1,5 @@
 import type { AIProvider, AIRequestOptions } from "./types";
+import { defaultSignal, httpError, readSSE, requireApiKey } from "./types";
 
 export class GemmaProvider implements AIProvider {
   name = "gemma";
@@ -32,34 +33,18 @@ export class GemmaProvider implements AIProvider {
 
     const response = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-      body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: maxTokens, temperature: 0.1 } }),
+      headers: { "Content-Type": "application/json", "x-goog-api-key": requireApiKey(apiKey, "Gemma", "https://aistudio.google.com/app/apikey") },
+      body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: maxTokens } }),
+      signal: defaultSignal(options.signal),
     });
 
     if (!response.ok) {
-      const err = await response.json().catch(() => ({ error: { message: response.statusText } }));
-      throw new Error(`Gemma API error: ${err.error?.message || response.statusText}`);
+      throw httpError("Gemma", response, await response.json().catch(() => null));
     }
 
-    const reader = response.body!.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-      for (const line of lines) {
-        if (line.startsWith("data: ")) {
-          try {
-            const data = JSON.parse(line.slice(6));
-            const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (text) yield text;
-          } catch { /* skip */ }
-        }
-      }
+    for await (const frame of readSSE(response)) {
+      const text = frame.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join("");
+      if (text) yield text;
     }
   }
 }
